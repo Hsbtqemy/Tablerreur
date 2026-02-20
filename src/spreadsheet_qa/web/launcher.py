@@ -9,15 +9,24 @@ Usage :
 
 from __future__ import annotations
 
+import argparse
 import signal
 import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
 import webbrowser
 from subprocess import DEVNULL
+
+try:
+    import uvicorn
+    from spreadsheet_qa.web.app import app as _web_app
+    _UVICORN_AVAILABLE = True
+except ImportError:
+    _UVICORN_AVAILABLE = False
 
 
 def find_free_port(start: int = 8400, end: int = 8500) -> int:
@@ -47,30 +56,59 @@ def wait_for_health(url: str, timeout: float = 15.0) -> bool:
 
 
 def main() -> None:
-    port = find_free_port()
+    parser = argparse.ArgumentParser(description="Tablerreur — serveur web")
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=None,
+        help="Port TCP à utiliser (si absent, un port libre est choisi automatiquement)",
+    )
+    args = parser.parse_args()
+
+    # Sidecar mode: port is imposed by Tauri — skip browser open
+    sidecar_mode = args.port is not None
+    port = args.port if sidecar_mode else find_free_port()
+
     health_url = f"http://127.0.0.1:{port}/health"
     app_url = f"http://127.0.0.1:{port}"
 
     print(f"Tablerreur — Démarrage du serveur sur le port {port}…")
 
-    proc = subprocess.Popen(
-        [
-            sys.executable,
-            "-m",
-            "uvicorn",
-            "spreadsheet_qa.web.app:app",
-            "--port",
-            str(port),
-            "--host",
-            "127.0.0.1",
-        ],
-        stdout=DEVNULL,
-        # stderr laissé sur le terminal pour afficher les erreurs de démarrage
-    )
+    # In a PyInstaller frozen bundle, sys.executable is the frozen binary itself,
+    # not a Python interpreter — run uvicorn directly in a thread.
+    frozen = getattr(sys, "frozen", False)
+    proc = None
+
+    if frozen:
+        if not _UVICORN_AVAILABLE:
+            print("Erreur : uvicorn non disponible dans le bundle.", file=sys.stderr)
+            sys.exit(1)
+
+        def _serve() -> None:
+            uvicorn.run(_web_app, host="127.0.0.1", port=port, log_level="warning")
+
+        _thread = threading.Thread(target=_serve, daemon=True)
+        _thread.start()
+    else:
+        proc = subprocess.Popen(
+            [
+                sys.executable,
+                "-m",
+                "uvicorn",
+                "spreadsheet_qa.web.app:app",
+                "--port",
+                str(port),
+                "--host",
+                "127.0.0.1",
+            ],
+            stdout=DEVNULL,
+            # stderr laissé sur le terminal pour afficher les erreurs de démarrage
+        )
 
     def stop(signum=None, frame=None) -> None:
         print("\nArrêt du serveur Tablerreur…")
-        proc.terminate()
+        if proc is not None:
+            proc.terminate()
         sys.exit(0)
 
     signal.signal(signal.SIGINT, stop)
@@ -80,16 +118,28 @@ def main() -> None:
     ready = wait_for_health(health_url)
 
     if not ready:
-        if proc.poll() is not None:
+        if proc is not None and proc.poll() is not None:
             print("Erreur : le serveur s'est arrêté de manière inattendue.", file=sys.stderr)
         else:
             print("Erreur : le serveur n'a pas démarré dans les délais.", file=sys.stderr)
-            proc.terminate()
+            if proc is not None:
+                proc.terminate()
         sys.exit(1)
 
     print(f"Serveur prêt → {app_url}")
-    print("Ouverture du navigateur…")
-    webbrowser.open(app_url)
-    print("Fermez ce terminal (Ctrl+C) pour arrêter Tablerreur.")
+    if not sidecar_mode:
+        print("Ouverture du navigateur…")
+        webbrowser.open(app_url)
+        print("Fermez ce terminal (Ctrl+C) pour arrêter Tablerreur.")
+    else:
+        print("Mode sidecar — navigateur géré par Tauri.")
 
-    proc.wait()
+    if proc is not None:
+        proc.wait()
+    else:
+        # Frozen mode: block until a signal terminates the process
+        try:
+            while True:
+                time.sleep(1)
+        except (KeyboardInterrupt, SystemExit):
+            pass

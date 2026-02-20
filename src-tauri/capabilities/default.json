@@ -1,0 +1,11 @@
+{
+  "identifier": "default",
+  "description": "Permissions par défaut pour la fenêtre principale",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "shell:allow-spawn",
+    "shell:allow-kill",
+    "opener:allow-open-url"
+  ]
+}

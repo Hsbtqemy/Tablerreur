@@ -1,0 +1,34 @@
+{
+  "productName": "Tablerreur",
+  "identifier": "com.tablerreur.app",
+  "version": "0.1.0",
+  "build": {
+    "frontendDist": "../src/spreadsheet_qa/web/static"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Tablerreur",
+        "width": 1200,
+        "height": 800,
+        "url": "http://localhost:8400"
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/icon.png",
+      "icons/icon_32x32.png",
+      "icons/icon_128x128.png"
+    ],
+    "externalBin": [
+      "binaries/tablerreur-backend"
+    ]
+  }
+}
