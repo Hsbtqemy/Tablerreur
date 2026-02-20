@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 )
 
 from spreadsheet_qa.core.template_manager import TemplateInfo, TemplateManager
+from spreadsheet_qa.ui.i18n import t
 
 if TYPE_CHECKING:
     from spreadsheet_qa.ui.controllers.load_controller import LoadController
@@ -36,15 +37,7 @@ if TYPE_CHECKING:
 
 
 class TemplateLibraryDialog(QDialog):
-    """Template Library: lists all templates and provides management actions.
-
-    The dialog shows:
-    - A table of available templates (name / scope / type / path)
-    - Action buttons: Apply, New, Duplicate, Edit, Delete, Import, Export
-
-    "Apply" selects the highlighted generic template (and optional overlay)
-    as the active template and triggers revalidation.
-    """
+    """Template Library: lists all templates and provides management actions."""
 
     def __init__(
         self,
@@ -58,7 +51,7 @@ class TemplateLibraryDialog(QDialog):
         self._mgr = TemplateManager()
         self._templates: list[TemplateInfo] = []
 
-        self.setWindowTitle("Template Library")
+        self.setWindowTitle(t("tmpl_lib.title"))
         self.setMinimumSize(760, 480)
         self.resize(860, 540)
 
@@ -76,7 +69,12 @@ class TemplateLibraryDialog(QDialog):
         # -- Templates table --
         self._table = QTableWidget()
         self._table.setColumnCount(4)
-        self._table.setHorizontalHeaderLabels(["Name", "Scope", "Type", "Path"])
+        self._table.setHorizontalHeaderLabels([
+            t("tmpl_lib.col.name"),
+            t("tmpl_lib.col.scope"),
+            t("tmpl_lib.col.type"),
+            t("tmpl_lib.col.path"),
+        ])
         self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._table.horizontalHeader().setStretchLastSection(True)
@@ -86,18 +84,18 @@ class TemplateLibraryDialog(QDialog):
         layout.addWidget(self._table, stretch=1)
 
         # -- Apply section --
-        apply_group = QGroupBox("Apply template")
+        apply_group = QGroupBox(t("tmpl_lib.group.apply"))
         apply_layout = QVBoxLayout(apply_group)
 
         generic_row = QHBoxLayout()
-        generic_row.addWidget(QLabel("Base template:"))
+        generic_row.addWidget(QLabel(t("tmpl_lib.label.base")))
         self._combo_generic = QComboBox()
         self._combo_generic.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         generic_row.addWidget(self._combo_generic)
         apply_layout.addLayout(generic_row)
 
         overlay_row = QHBoxLayout()
-        self._chk_overlay = QCheckBox("Overlay:")
+        self._chk_overlay = QCheckBox(t("tmpl_lib.label.overlay"))
         self._chk_overlay.setChecked(False)
         self._chk_overlay.toggled.connect(lambda checked: self._combo_overlay.setEnabled(checked))
         overlay_row.addWidget(self._chk_overlay)
@@ -107,7 +105,7 @@ class TemplateLibraryDialog(QDialog):
         overlay_row.addWidget(self._combo_overlay)
         apply_layout.addLayout(overlay_row)
 
-        apply_btn = QPushButton("Apply && Validate")
+        apply_btn = QPushButton(t("tmpl_lib.btn.apply"))
         apply_btn.clicked.connect(self._on_apply)
         apply_layout.addWidget(apply_btn)
 
@@ -116,25 +114,25 @@ class TemplateLibraryDialog(QDialog):
         # -- Side buttons --
         btn_layout = QHBoxLayout()
 
-        self._btn_edit = QPushButton("Edit…")
+        self._btn_edit = QPushButton(t("tmpl_lib.btn.edit"))
         self._btn_edit.clicked.connect(self._on_edit)
         btn_layout.addWidget(self._btn_edit)
 
-        self._btn_duplicate = QPushButton("Duplicate")
+        self._btn_duplicate = QPushButton(t("tmpl_lib.btn.duplicate"))
         self._btn_duplicate.clicked.connect(self._on_duplicate)
         btn_layout.addWidget(self._btn_duplicate)
 
-        self._btn_delete = QPushButton("Delete")
+        self._btn_delete = QPushButton(t("tmpl_lib.btn.delete"))
         self._btn_delete.clicked.connect(self._on_delete)
         btn_layout.addWidget(self._btn_delete)
 
         btn_layout.addStretch()
 
-        self._btn_import = QPushButton("Import…")
+        self._btn_import = QPushButton(t("tmpl_lib.btn.import"))
         self._btn_import.clicked.connect(self._on_import)
         btn_layout.addWidget(self._btn_import)
 
-        self._btn_export = QPushButton("Export…")
+        self._btn_export = QPushButton(t("tmpl_lib.btn.export"))
         self._btn_export.clicked.connect(self._on_export)
         btn_layout.addWidget(self._btn_export)
 
@@ -153,16 +151,16 @@ class TemplateLibraryDialog(QDialog):
         self._templates = self._mgr.list_templates()
         self._table.setRowCount(len(self._templates))
 
-        generics = [t for t in self._templates if t.type == "generic"]
-        overlays = [t for t in self._templates if t.type == "overlay"]
+        generics = [t_ for t_ in self._templates if t_.type == "generic"]
+        overlays = [t_ for t_ in self._templates if t_.type == "overlay"]
 
         self._combo_generic.clear()
-        for t in generics:
-            self._combo_generic.addItem(f"{t.name} [{t.scope}]", userData=t.id)
+        for tmpl in generics:
+            self._combo_generic.addItem(f"{tmpl.name} [{tmpl.scope}]", userData=tmpl.id)
 
         self._combo_overlay.clear()
-        for t in overlays:
-            self._combo_overlay.addItem(f"{t.name} [{t.scope}]", userData=t.id)
+        for tmpl in overlays:
+            self._combo_overlay.addItem(f"{tmpl.name} [{tmpl.scope}]", userData=tmpl.id)
 
         # Set combos to current active template
         current_generic = self._load_ctrl.active_generic
@@ -190,7 +188,7 @@ class TemplateLibraryDialog(QDialog):
             for item in [name_item, scope_item, type_item, path_item]:
                 item.setBackground(QColor(color))
             if tmpl.readonly:
-                name_item.setToolTip("Built-in template (read-only). Duplicate to edit.")
+                name_item.setToolTip(t("tmpl_lib.tooltip.readonly"))
 
             self._table.setItem(row, 0, name_item)
             self._table.setItem(row, 1, scope_item)
@@ -215,24 +213,26 @@ class TemplateLibraryDialog(QDialog):
         generic_id = self._combo_generic.currentData()
         overlay_id = self._combo_overlay.currentData() if self._chk_overlay.isChecked() else None
         if not generic_id:
-            QMessageBox.warning(self, "No template", "Please select a base template.")
+            QMessageBox.warning(self, t("tmpl_lib.msg.no_template"), t("tmpl_lib.msg.select_base"))
             return
         self._load_ctrl.set_active_template(generic_id, overlay_id)
+        overlay_label = f" + {overlay_id}" if overlay_id else ""
         self._signals.status_message.emit(
-            f"Template applied: {generic_id}"
-            + (f" + {overlay_id}" if overlay_id else "")
+            t("tmpl_lib.msg.applied", id=generic_id, overlay=overlay_label)
         )
 
     def _on_edit(self) -> None:
         tmpl = self._selected_template()
         if tmpl is None:
-            QMessageBox.information(self, "No selection", "Please select a template to edit.")
+            QMessageBox.information(
+                self, t("tmpl_lib.msg.no_selection"), t("tmpl_lib.msg.select_to_edit")
+            )
             return
         if tmpl.readonly:
             reply = QMessageBox.question(
                 self,
-                "Read-only template",
-                "Built-in templates cannot be edited directly.\n\nDuplicate it first?",
+                t("tmpl_lib.msg.readonly_title"),
+                t("tmpl_lib.msg.readonly_body"),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             )
             if reply == QMessageBox.StandardButton.Yes:
@@ -249,40 +249,39 @@ class TemplateLibraryDialog(QDialog):
     def _on_duplicate(self) -> None:
         tmpl = self._selected_template()
         if tmpl is None:
-            QMessageBox.information(self, "No selection", "Please select a template to duplicate.")
+            QMessageBox.information(
+                self, t("tmpl_lib.msg.no_selection"), t("tmpl_lib.msg.select_to_dup")
+            )
             return
 
         user_dir = self._mgr.get_user_templates_dir()
         user_dir.mkdir(parents=True, exist_ok=True)
 
-        # Generate a unique name
         stem = tmpl.id
-        dest = user_dir / f"{stem}_copy.yml"
+        dest = user_dir / f"{stem}_copie.yml"
         counter = 1
         while dest.exists():
-            dest = user_dir / f"{stem}_copy{counter}.yml"
+            dest = user_dir / f"{stem}_copie{counter}.yml"
             counter += 1
 
         try:
             import shutil
             shutil.copy2(tmpl.path, dest)
-            # Patch the id and scope in the copy
             import yaml
             data = yaml.safe_load(dest.read_text(encoding="utf-8")) or {}
             data["id"] = dest.stem
-            data["name"] = f"{tmpl.name} (copy)"
+            data["name"] = tmpl.name + t("tmpl_lib.copy_suffix")
             data["scope"] = "user"
             dest.write_text(yaml.dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
         except Exception as exc:
-            QMessageBox.critical(self, "Duplicate error", str(exc))
+            QMessageBox.critical(self, t("tmpl_lib.msg.dup_error"), str(exc))
             return
 
         self._refresh_table()
-        # Select and open the new template
-        for row, t in enumerate(self._templates):
-            if t.path == dest:
+        for row, tmpl_ in enumerate(self._templates):
+            if tmpl_.path == dest:
                 self._table.setCurrentCell(row, 0)
-                self._open_editor(t)
+                self._open_editor(tmpl_)
                 break
 
     def _on_delete(self) -> None:
@@ -290,12 +289,14 @@ class TemplateLibraryDialog(QDialog):
         if tmpl is None:
             return
         if tmpl.readonly:
-            QMessageBox.warning(self, "Cannot delete", "Built-in templates cannot be deleted.")
+            QMessageBox.warning(
+                self, t("tmpl_lib.msg.cannot_delete"), t("tmpl_lib.msg.builtin_nodelete")
+            )
             return
         reply = QMessageBox.question(
             self,
-            "Delete template",
-            f"Delete template '{tmpl.name}'?\nThis will remove:\n{tmpl.path}",
+            t("tmpl_lib.msg.delete_title"),
+            t("tmpl_lib.msg.delete_body", name=tmpl.name, path=tmpl.path),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply != QMessageBox.StandardButton.Yes:
@@ -303,13 +304,16 @@ class TemplateLibraryDialog(QDialog):
         try:
             tmpl.path.unlink()
         except Exception as exc:
-            QMessageBox.critical(self, "Delete error", str(exc))
+            QMessageBox.critical(self, t("tmpl_lib.msg.delete_error"), str(exc))
             return
         self._refresh_table()
 
     def _on_import(self) -> None:
         path_str, _ = QFileDialog.getOpenFileName(
-            self, "Import Template", str(Path.home()), "YAML files (*.yml *.yaml)"
+            self,
+            t("tmpl_lib.dialog.import"),
+            str(Path.home()),
+            "YAML files (*.yml *.yaml)",
         )
         if not path_str:
             return
@@ -320,8 +324,8 @@ class TemplateLibraryDialog(QDialog):
         if dest.exists():
             reply = QMessageBox.question(
                 self,
-                "File exists",
-                f"{dest.name} already exists in user templates. Overwrite?",
+                t("tmpl_lib.msg.file_exists"),
+                t("tmpl_lib.msg.overwrite", name=dest.name),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             )
             if reply != QMessageBox.StandardButton.Yes:
@@ -330,17 +334,22 @@ class TemplateLibraryDialog(QDialog):
             import shutil
             shutil.copy2(src, dest)
         except Exception as exc:
-            QMessageBox.critical(self, "Import error", str(exc))
+            QMessageBox.critical(self, t("tmpl_lib.msg.import_error"), str(exc))
             return
         self._refresh_table()
 
     def _on_export(self) -> None:
         tmpl = self._selected_template()
         if tmpl is None:
-            QMessageBox.information(self, "No selection", "Please select a template to export.")
+            QMessageBox.information(
+                self, t("tmpl_lib.msg.no_selection"), t("tmpl_lib.msg.select_to_export")
+            )
             return
         dest_str, _ = QFileDialog.getSaveFileName(
-            self, "Export Template", str(Path.home() / tmpl.path.name), "YAML files (*.yml)"
+            self,
+            t("tmpl_lib.dialog.export"),
+            str(Path.home() / tmpl.path.name),
+            "YAML files (*.yml)",
         )
         if not dest_str:
             return
@@ -348,4 +357,4 @@ class TemplateLibraryDialog(QDialog):
             import shutil
             shutil.copy2(tmpl.path, Path(dest_str))
         except Exception as exc:
-            QMessageBox.critical(self, "Export error", str(exc))
+            QMessageBox.critical(self, t("tmpl_lib.msg.export_error"), str(exc))

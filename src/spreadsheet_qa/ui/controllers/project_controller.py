@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from PySide6.QtWidgets import QFileDialog, QMessageBox, QWidget
 
 from spreadsheet_qa.core.project import ProjectManager
+from spreadsheet_qa.ui.i18n import t
 
 if TYPE_CHECKING:
     from spreadsheet_qa.core.issue_store import IssueStore
@@ -17,11 +18,7 @@ if TYPE_CHECKING:
 
 
 class ProjectController:
-    """Manage open-project and save-project flows.
-
-    This controller reads/writes ``project.yml`` and restores application state
-    (file path, header row, templates) when opening an existing project.
-    """
+    """Manage open-project and save-project flows."""
 
     def __init__(
         self,
@@ -44,7 +41,7 @@ class ProjectController:
         """Prompt user to select a project folder, then open it."""
         folder_str = QFileDialog.getExistingDirectory(
             self._parent,
-            "Open Project Folder",
+            t("project.open_dialog"),
             str(Path.home()),
         )
         if not folder_str:
@@ -52,20 +49,13 @@ class ProjectController:
         self.open_project(Path(folder_str))
 
     def open_project(self, folder: Path) -> bool:
-        """Open an existing project from *folder*.
-
-        Reads ``project.yml``, loads the source file, restores templates and
-        header row, then triggers validation.
-
-        Returns:
-            True on success, False if the project could not be opened.
-        """
+        """Open an existing project from *folder*."""
         yml_path = folder / "project.yml"
         if not yml_path.exists():
             QMessageBox.warning(
                 self._parent,
-                "Not a project folder",
-                f"No project.yml found in:\n{folder}",
+                t("project.not_a_project"),
+                t("project.no_yml", folder=folder),
             )
             return False
 
@@ -75,14 +65,13 @@ class ProjectController:
         except Exception as exc:
             QMessageBox.critical(
                 self._parent,
-                "Project error",
-                f"Could not read project:\n{exc}",
+                t("project.error_title"),
+                t("project.error_body", exc=exc),
             )
             return False
 
         source_file = yml.get("source_file")
         if not source_file or not Path(source_file).exists():
-            # Try looking inside the project's input/ directory
             name = Path(source_file).name if source_file else None
             fallback = (folder / "input" / name) if name else None
             if fallback and fallback.exists():
@@ -90,22 +79,19 @@ class ProjectController:
             else:
                 QMessageBox.warning(
                     self._parent,
-                    "Missing source file",
-                    f"Source file not found:\n{source_file}",
+                    t("project.missing_file"),
+                    t("project.missing_file_body", path=source_file),
                 )
                 return False
 
-        # header_row in project.yml is 1-based; LoadController uses 0-based
         header_row = max(0, int(yml.get("header_row", 1)) - 1)
         sheet_name = yml.get("sheet_name") or None
         encoding = yml.get("encoding") or None
         delimiter = yml.get("delimiter") or None
 
-        # Restore template selection before loading (so config is ready)
         generic_id = yml.get("active_generic_template", "generic_default")
         overlay_id = yml.get("active_overlay_template") or None
 
-        # Update load controller template state without triggering revalidation yet
         self._load_ctrl._active_generic = generic_id
         self._load_ctrl._active_overlay = overlay_id
 
@@ -121,16 +107,13 @@ class ProjectController:
 
         self._project_manager = pm
 
-        # Restore EXCEPTED/IGNORED statuses from exceptions.yml (after validation ran)
         if self._issue_store is not None:
             pm.apply_exceptions_to_store(self._issue_store)
             self._signals.issues_updated.emit()
 
-        # Notify listeners of the restored template selection
         self._signals.template_changed.emit(generic_id, overlay_id or "")
-
         self._signals.project_saved.emit(str(folder))
-        self._signals.status_message.emit(f"Project opened: {folder.name}")
+        self._signals.status_message.emit(t("status.project_opened", name=folder.name))
         return True
 
     # ------------------------------------------------------------------
@@ -143,14 +126,14 @@ class ProjectController:
         if meta is None:
             QMessageBox.information(
                 self._parent,
-                "No file loaded",
-                "Open a file first before saving a project.",
+                t("project.no_file_title"),
+                t("project.no_file_body"),
             )
             return
 
         folder_str = QFileDialog.getExistingDirectory(
             self._parent,
-            "Save Project As — Choose Folder",
+            t("project.save_dialog"),
             str(Path.home()),
         )
         if not folder_str:
@@ -158,21 +141,13 @@ class ProjectController:
         self.save_project_as(Path(folder_str))
 
     def save_project_as(self, folder: Path) -> bool:
-        """Save current state as a project in *folder*.
-
-        Creates the project structure, copies the source file to ``input/``,
-        and writes ``project.yml``.
-
-        Returns:
-            True on success, False on error.
-        """
+        """Save current state as a project in *folder*."""
         meta = self._load_ctrl.current_meta
         if meta is None:
             return False
 
         try:
             pm = ProjectManager(folder)
-            # Copy source file into project
             src_path = Path(meta.file_path)
             if src_path.exists():
                 pm.copy_input_file(src_path)
@@ -185,14 +160,14 @@ class ProjectController:
         except Exception as exc:
             QMessageBox.critical(
                 self._parent,
-                "Save error",
-                f"Could not save project:\n{exc}",
+                t("project.save_error"),
+                t("project.save_error_body", exc=exc),
             )
             return False
 
         self._project_manager = pm
         self._signals.project_saved.emit(str(folder))
-        self._signals.status_message.emit(f"Project saved: {folder}")
+        self._signals.status_message.emit(t("status.project_saved", path=folder))
         return True
 
     # ------------------------------------------------------------------

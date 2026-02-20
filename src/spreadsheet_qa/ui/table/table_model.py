@@ -49,11 +49,29 @@ class SpreadsheetTableModel(QAbstractTableModel):
     def columnCount(self, parent: QModelIndex = QModelIndex()) -> int:
         return 0 if parent.isValid() else len(self._df.columns)
 
+    def index(self, row: int, column: int, parent: QModelIndex = QModelIndex()) -> QModelIndex:
+        """Return invalid index for out-of-bounds (avoids Qt accessibility crashes)."""
+        if parent.isValid():
+            return QModelIndex()
+        if not self._is_valid_cell(row, column):
+            return QModelIndex()
+        return super().index(row, column, parent)
+
+    def _is_valid_cell(self, row: int, col_idx: int) -> bool:
+        """Return False if (row, col_idx) is out of bounds (avoids Qt accessibility crashes)."""
+        if row < 0 or col_idx < 0:
+            return False
+        if row >= len(self._df) or col_idx >= len(self._df.columns):
+            return False
+        return True
+
     def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole) -> Any:
         if not index.isValid():
             return None
 
         row, col_idx = index.row(), index.column()
+        if not self._is_valid_cell(row, col_idx):
+            return None
 
         if role == Qt.ItemDataRole.DisplayRole or role == Qt.ItemDataRole.EditRole:
             val = self._df.iloc[row, col_idx]
@@ -84,11 +102,17 @@ class SpreadsheetTableModel(QAbstractTableModel):
         if role != Qt.ItemDataRole.DisplayRole:
             return None
         if orientation == Qt.Orientation.Horizontal:
+            if section < 0 or section >= len(self._df.columns):
+                return None
             return self._df.columns[section]
+        if section < 0 or section >= len(self._df):
+            return None
         return str(section + 1)  # 1-based row numbers
 
     def flags(self, index: QModelIndex) -> Qt.ItemFlag:
         if not index.isValid():
+            return Qt.ItemFlag.NoItemFlags
+        if not self._is_valid_cell(index.row(), index.column()):
             return Qt.ItemFlag.NoItemFlags
         return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEditable
 
@@ -96,8 +120,10 @@ class SpreadsheetTableModel(QAbstractTableModel):
         """Route edit requests through the FixController via signal."""
         if not index.isValid() or role != Qt.ItemDataRole.EditRole:
             return False
-        row = index.row()
-        col_name = self._df.columns[index.column()]
+        row, col_idx = index.row(), index.column()
+        if not self._is_valid_cell(row, col_idx):
+            return False
+        col_name = self._df.columns[col_idx]
         # Emit signal to FixController — do NOT mutate df here
         self._signals.cell_edit_requested.emit(row, col_name, value)
         return False  # Qt should not set data directly

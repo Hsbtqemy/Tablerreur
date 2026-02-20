@@ -22,8 +22,13 @@ _DATE_RE = re.compile(
 )
 
 
-def _dominant_type(values: list[str]) -> str | None:
-    """Return the dominant scalar type if ≥95% of values match it."""
+def _dominant_type(values: list[str], threshold: float = 0.95) -> str | None:
+    """Return the dominant scalar type if enough values match it.
+
+    Args:
+        values: Non-empty stripped string values to inspect.
+        threshold: Minimum fraction of values that must match to declare a dominant type.
+    """
     if not values:
         return None
     checks = {
@@ -32,7 +37,6 @@ def _dominant_type(values: list[str]) -> str | None:
         "date": lambda v: bool(_DATE_RE.match(v)),
     }
     n = len(values)
-    threshold = 0.95
     for type_name, fn in checks.items():
         matches = sum(1 for v in values if fn(v))
         if matches / n >= threshold:
@@ -60,7 +64,7 @@ class SoftTypingRule(Rule):
         if len(non_empty) < min_count:
             return []
 
-        dom_type = _dominant_type(non_empty)
+        dom_type = _dominant_type(non_empty, threshold)
         if dom_type is None:
             return []
 

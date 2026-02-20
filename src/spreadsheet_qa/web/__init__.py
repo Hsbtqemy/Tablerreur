@@ -1,0 +1,1 @@
+"""Tablerreur web application (FastAPI)."""

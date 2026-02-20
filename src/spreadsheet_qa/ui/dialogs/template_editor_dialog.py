@@ -39,6 +39,21 @@ from PySide6.QtWidgets import (
 )
 
 from spreadsheet_qa.core.template_manager import TemplateInfo
+from spreadsheet_qa.ui.i18n import kind_label, preset_label, t
+
+# Internal preset values (used in YAML) → display in combo
+_PRESETS = [
+    "(none)",
+    "w3c_dtf_date",
+    "uri",
+    "email",
+    "orcid",
+    "creator_name",
+    "custom_regex",
+]
+
+# Internal kind values
+_KINDS = ["free_text_short", "free_text_long", "controlled", "structured", "list"]
 
 
 class TemplateEditorDialog(QDialog):
@@ -59,7 +74,7 @@ class TemplateEditorDialog(QDialog):
         self._data: dict = {}
         self._current_col: str | None = None
 
-        self.setWindowTitle(f"Edit Template — {tmpl.name}")
+        self.setWindowTitle(t("tmpl_edit.title", name=tmpl.name))
         self.setMinimumSize(900, 600)
         self.resize(1050, 680)
 
@@ -75,11 +90,14 @@ class TemplateEditorDialog(QDialog):
         try:
             self._data = yaml.safe_load(self._tmpl.path.read_text(encoding="utf-8")) or {}
         except Exception as exc:
-            QMessageBox.critical(self, "Load error", f"Could not load template:\n{exc}")
+            QMessageBox.critical(
+                self,
+                t("tmpl_edit.msg.load_error"),
+                t("tmpl_edit.msg.load_body", exc=exc),
+            )
             self._data = {}
 
     def _save_data(self) -> None:
-        # Flush current column edits before saving
         self._flush_current_column()
         try:
             self._tmpl.path.write_text(
@@ -87,7 +105,11 @@ class TemplateEditorDialog(QDialog):
                 encoding="utf-8",
             )
         except Exception as exc:
-            QMessageBox.critical(self, "Save error", f"Could not save template:\n{exc}")
+            QMessageBox.critical(
+                self,
+                t("tmpl_edit.msg.save_error"),
+                t("tmpl_edit.msg.save_body", exc=exc),
+            )
 
     # ------------------------------------------------------------------
     # UI construction
@@ -109,11 +131,9 @@ class TemplateEditorDialog(QDialog):
         # 3-pane splitter
         splitter = QSplitter(Qt.Orientation.Horizontal)
 
-        # Left: column list
         left = self._build_left_pane()
         splitter.addWidget(left)
 
-        # Middle: column editor
         self._mid_widget = self._build_middle_pane()
         splitter.addWidget(self._mid_widget)
 
@@ -126,7 +146,7 @@ class TemplateEditorDialog(QDialog):
 
         # Dialog buttons
         btn_box = QDialogButtonBox()
-        btn_save = btn_box.addButton("Save Template", QDialogButtonBox.ButtonRole.AcceptRole)
+        btn_save = btn_box.addButton(t("tmpl_edit.btn.save"), QDialogButtonBox.ButtonRole.AcceptRole)
         btn_cancel = btn_box.addButton(QDialogButtonBox.StandardButton.Cancel)
         btn_save.clicked.connect(self._on_save)
         btn_cancel.clicked.connect(self.reject)
@@ -137,10 +157,10 @@ class TemplateEditorDialog(QDialog):
         layout = QVBoxLayout(w)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        layout.addWidget(QLabel("Columns / Groups"))
+        layout.addWidget(QLabel(t("tmpl_edit.pane.left.title")))
 
         self._col_search = QLineEdit()
-        self._col_search.setPlaceholderText("Filter…")
+        self._col_search.setPlaceholderText(t("tmpl_edit.pane.left.filter"))
         self._col_search.textChanged.connect(self._filter_columns)
         layout.addWidget(self._col_search)
 
@@ -155,76 +175,67 @@ class TemplateEditorDialog(QDialog):
         self._mid_layout = QVBoxLayout(w)
         self._mid_layout.setContentsMargins(4, 0, 4, 0)
 
-        self._col_header = QLabel("<i>Select a column to edit</i>")
+        self._col_header = QLabel(f"<i>{t('tmpl_edit.pane.mid.placeholder')}</i>")
         self._mid_layout.addWidget(self._col_header)
 
-        form_group = QGroupBox("Column profile")
+        form_group = QGroupBox(t("tmpl_edit.group.profile"))
         form = QFormLayout(form_group)
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
 
         self._combo_kind = QComboBox()
-        for kind in ["free_text_short", "free_text_long", "controlled", "structured", "list"]:
-            self._combo_kind.addItem(kind)
-        form.addRow("Kind:", self._combo_kind)
+        for kind in _KINDS:
+            self._combo_kind.addItem(kind_label(kind), userData=kind)
+        form.addRow(t("tmpl_edit.label.kind"), self._combo_kind)
 
         self._chk_required = QCheckBox()
-        form.addRow("Required:", self._chk_required)
+        form.addRow(t("tmpl_edit.label.required"), self._chk_required)
 
         self._chk_unique = QCheckBox()
-        form.addRow("Unique:", self._chk_unique)
+        form.addRow(t("tmpl_edit.label.unique"), self._chk_unique)
 
         self._chk_multiline = QCheckBox()
-        form.addRow("Allow multiline:", self._chk_multiline)
+        form.addRow(t("tmpl_edit.label.multiline"), self._chk_multiline)
 
         self._combo_preset = QComboBox()
-        for preset in ["(none)", "w3c_dtf_date", "uri", "email", "orcid", "creator_name", "custom_regex"]:
-            self._combo_preset.addItem(preset)
-        self._combo_preset.currentTextChanged.connect(self._on_preset_changed)
-        form.addRow("Preset:", self._combo_preset)
+        for preset in _PRESETS:
+            self._combo_preset.addItem(preset_label(preset), userData=preset)
+        self._combo_preset.currentIndexChanged.connect(self._on_preset_changed)
+        form.addRow(t("tmpl_edit.label.preset"), self._combo_preset)
 
         self._edit_regex = QLineEdit()
-        self._edit_regex.setPlaceholderText("Custom regex pattern (when preset=custom_regex)")
-        form.addRow("Regex:", self._edit_regex)
+        self._edit_regex.setPlaceholderText(t("preset.regex.placeholder"))
+        form.addRow(t("tmpl_edit.label.regex"), self._edit_regex)
 
         self._edit_list_sep = QLineEdit()
         self._edit_list_sep.setPlaceholderText("|")
         self._edit_list_sep.setMaximumWidth(40)
-        form.addRow("List separator:", self._edit_list_sep)
+        form.addRow(t("tmpl_edit.label.list_sep"), self._edit_list_sep)
 
         self._mid_layout.addWidget(form_group)
 
         # Rule overrides
-        override_group = QGroupBox("Rule overrides for this column")
+        override_group = QGroupBox(t("tmpl_edit.group.overrides"))
         override_layout = QVBoxLayout(override_group)
-        override_layout.addWidget(QLabel(
-            "One rule override per line: <code>rule_id: enabled=true/false severity=ERROR</code>"
-        ))
+        override_layout.addWidget(QLabel(t("tmpl_edit.overrides.help")))
         self._edit_overrides = QTextEdit()
-        self._edit_overrides.setPlaceholderText(
-            "generic.pseudo_missing: enabled=false\n"
-            "generic.soft_typing: severity=ERROR"
-        )
+        self._edit_overrides.setPlaceholderText(t("tmpl_edit.overrides.placeholder"))
         self._edit_overrides.setMaximumHeight(100)
         override_layout.addWidget(self._edit_overrides)
         self._mid_layout.addWidget(override_group)
 
         self._mid_layout.addStretch()
 
-        # Enable/disable form based on selection
         self._set_form_enabled(False)
 
         return w
 
     def _build_rules_section(self) -> QWidget:
-        group = QGroupBox("Template-level rules (global)")
+        group = QGroupBox(t("tmpl_edit.group.global_rules"))
         layout = QVBoxLayout(group)
-        layout.addWidget(QLabel(
-            "Edit the YAML file directly to configure global rule settings. "
-            "Column-specific overrides are set via the column editor above."
-        ))
+        layout.addWidget(QLabel(t("tmpl_edit.global_rules.help")))
         rules = self._data.get("rules", {})
-        rules_str = ", ".join(sorted(rules.keys())) if rules else "(none)"
-        layout.addWidget(QLabel(f"Active rules: {rules_str}"))
+        rules_str = ", ".join(sorted(rules.keys())) if rules else t("tmpl_edit.active_rules.none")
+        layout.addWidget(QLabel(t("tmpl_edit.active_rules", rules=rules_str)))
         return group
 
     # ------------------------------------------------------------------
@@ -233,18 +244,14 @@ class TemplateEditorDialog(QDialog):
 
     def _populate_columns(self) -> None:
         self._col_list.clear()
-        # Collect column names from columns config (excluding wildcard)
         column_groups = self._data.get("column_groups", {})
         columns = self._data.get("columns", {})
 
         items: list[str] = []
-        # Add wildcard first
         if "*" in columns:
-            items.append("* (all columns)")
-        # Add column groups
+            items.append(t("tmpl_edit.wildcard"))
         for pattern in column_groups:
-            items.append(f"[group] {pattern}")
-        # Add explicit columns
+            items.append(f"{t('tmpl_edit.group_prefix')} {pattern}")
         for col in columns:
             if col != "*":
                 items.append(col)
@@ -262,7 +269,6 @@ class TemplateEditorDialog(QDialog):
     # ------------------------------------------------------------------
 
     def _on_column_selected(self, row: int) -> None:
-        # Flush changes for previous column
         self._flush_current_column()
 
         if row < 0:
@@ -277,12 +283,14 @@ class TemplateEditorDialog(QDialog):
         label = item.text()
         self._set_form_enabled(True)
 
-        # Resolve actual key
-        if label == "* (all columns)":
+        wildcard_label = t("tmpl_edit.wildcard")
+        group_prefix = t("tmpl_edit.group_prefix") + " "
+
+        if label == wildcard_label:
             key = "*"
             source = "columns"
-        elif label.startswith("[group] "):
-            key = label[len("[group] "):]
+        elif label.startswith(group_prefix):
+            key = label[len(group_prefix):]
             source = "column_groups"
         else:
             key = label
@@ -300,22 +308,27 @@ class TemplateEditorDialog(QDialog):
         self._load_col_cfg(cfg)
 
     def _load_col_cfg(self, cfg: dict) -> None:
+        # Kind: find combo index by stored internal value
         kind = cfg.get("kind", "free_text_short")
-        idx = self._combo_kind.findText(kind)
-        self._combo_kind.setCurrentIndex(max(0, idx))
+        for i in range(self._combo_kind.count()):
+            if self._combo_kind.itemData(i) == kind:
+                self._combo_kind.setCurrentIndex(i)
+                break
 
         self._chk_required.setChecked(bool(cfg.get("required", False)))
         self._chk_unique.setChecked(bool(cfg.get("unique", False)))
         self._chk_multiline.setChecked(bool(cfg.get("multiline_ok", False)))
 
+        # Preset: find combo index by stored internal value
         preset = cfg.get("preset", "(none)")
-        pidx = self._combo_preset.findText(preset)
-        self._combo_preset.setCurrentIndex(max(0, pidx))
+        for i in range(self._combo_preset.count()):
+            if self._combo_preset.itemData(i) == preset:
+                self._combo_preset.setCurrentIndex(i)
+                break
 
         self._edit_regex.setText(cfg.get("regex", ""))
         self._edit_list_sep.setText(cfg.get("list_separator", ""))
 
-        # Render rule_overrides as simple text
         overrides = cfg.get("rule_overrides", {})
         lines: list[str] = []
         for rule_id, ov in overrides.items():
@@ -335,7 +348,8 @@ class TemplateEditorDialog(QDialog):
         source, key = self._current_col.split("::", 1)
 
         cfg: dict = {}
-        kind = self._combo_kind.currentText()
+        # Kind: retrieve internal value from combo userData
+        kind = self._combo_kind.currentData()
         if kind:
             cfg["kind"] = kind
         if self._chk_required.isChecked():
@@ -344,7 +358,7 @@ class TemplateEditorDialog(QDialog):
             cfg["unique"] = True
         if self._chk_multiline.isChecked():
             cfg["multiline_ok"] = True
-        preset = self._combo_preset.currentText()
+        preset = self._combo_preset.currentData()
         if preset and preset != "(none)":
             cfg["preset"] = preset
         regex = self._edit_regex.text().strip()
@@ -354,7 +368,6 @@ class TemplateEditorDialog(QDialog):
         if sep:
             cfg["list_separator"] = sep
 
-        # Parse rule_overrides
         overrides: dict = {}
         for line in self._edit_overrides.toPlainText().splitlines():
             line = line.strip()
@@ -394,8 +407,16 @@ class TemplateEditorDialog(QDialog):
         ]:
             widget.setEnabled(enabled)
 
-    def _on_preset_changed(self, text: str) -> None:
-        self._edit_regex.setEnabled(text == "custom_regex")
+    def _on_preset_changed(self, idx: int) -> None:
+        preset = self._combo_preset.itemData(idx)
+        self._edit_regex.setEnabled(preset == "custom_regex")
+
+    def select_column(self, col_name: str) -> None:
+        """Pre-select a specific column in the list (called from main window)."""
+        for i in range(self._col_list.count()):
+            if self._col_list.item(i).text() == col_name:
+                self._col_list.setCurrentRow(i)
+                return
 
     # ------------------------------------------------------------------
     # Actions

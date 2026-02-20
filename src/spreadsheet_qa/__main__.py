@@ -15,6 +15,8 @@ def _apply_platform_fixes() -> None:
         # Note: on macOS PySide6 typically only provides cocoa, minimal, offscreen
         # (no "software" plugin). Do not set QT_QPA_PLATFORM here.
         os.environ.setdefault("QT_MAC_WANTS_LAYER", "1")
+        # Avoid qt.accessibility.table asking for out-of-bounds cells (row 18 on empty table → segfault).
+        os.environ.setdefault("QT_ACCESSIBILITY", "0")
 
 
 def _print_diagnostics() -> None:

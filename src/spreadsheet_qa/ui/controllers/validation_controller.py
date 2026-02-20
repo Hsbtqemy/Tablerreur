@@ -8,6 +8,7 @@ from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal, Slot
 
 from spreadsheet_qa.core.engine import ValidationEngine
 from spreadsheet_qa.core.models import Issue
+from spreadsheet_qa.ui.i18n import t
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -48,7 +49,6 @@ class ValidationController:
         self._config: dict = {}
         self._thread_pool = QThreadPool.globalInstance()
 
-        # Connect to dataset_loaded to auto-validate
         self._signals.dataset_loaded.connect(self._on_dataset_loaded)
 
     def set_config(self, config: dict) -> None:
@@ -57,7 +57,7 @@ class ValidationController:
     def set_column_override(self, col: str, overrides: dict) -> None:
         """Merge *overrides* into the in-memory column config and re-validate that column."""
         columns_cfg = self._config.setdefault("columns", {})
-        col_cfg = dict(columns_cfg.get(col, {}))  # shallow copy
+        col_cfg = dict(columns_cfg.get(col, {}))
         col_cfg.update(overrides)
         columns_cfg[col] = col_cfg
         self.run_partial([col])
@@ -95,9 +95,12 @@ class ValidationController:
         self._signals.issues_updated.emit()
         self._table_model.refresh_all()
         self._signals.validation_finished.emit(len(self._issue_store))
+
         counts = self._issue_store.count_by_severity()
         from spreadsheet_qa.core.models import Severity
         e = counts.get(Severity.ERROR, 0)
         w = counts.get(Severity.WARNING, 0)
         s = counts.get(Severity.SUSPICION, 0)
-        self._signals.status_message.emit(f"Validation: {e} errors, {w} warnings, {s} suspicions")
+        self._signals.status_message.emit(
+            t("status.validation_done", e=e, w=w, s=s)
+        )

@@ -1,0 +1,89 @@
+# .cursorrules — Tablerreur
+
+## Contexte projet
+
+Tu travailles sur **Tablerreur** (`spreadsheet_qa`), un vérificateur de tableurs CSV/XLSX.
+Lis `CLAUDE.md` à la racine pour le contexte complet (architecture, migration, conventions).
+
+## Règles impératives
+
+### Architecture
+- **`core/`** = Python pur. JAMAIS d'import PySide6, Qt, FastAPI, Flask, ou tout framework UI/web.
+- **`web/`** = FastAPI. Importe `core/`. C'est l'interface active (online + Tauri).
+- **`ui/`** = PySide6 legacy. **Ne rien y ajouter.** Ne pas y toucher sauf bugfix critique.
+- Toute nouvelle fonctionnalité métier va dans `core/`, toute nouvelle route dans `web/`.
+
+### Langue
+- Code (variables, fonctions, classes, docstrings) : **anglais**
+- Texte visible par l'utilisateur (UI web, messages d'erreur affichés, exports, rapports) : **français**
+- Utiliser le glossaire `i18n.py` / `t(key)` pour toute chaîne affichée
+- Pas de chaîne anglaise dans l'interface
+
+### Style Python
+- Python 3.11+
+- Type hints sur les signatures publiques
+- Dataclasses pour les modèles (pas de Pydantic dans `core/`)
+- Pydantic OK dans `web/` pour les schémas API
+- `pytest` pour les tests, fixtures dans `conftest.py`
+- Pas d'ORM, pas de base de données — fichiers uniquement (YAML, JSON, JSONL)
+
+### Données
+- DataFrame pandas, dtype `str` pour les cellules
+- CSV : délimiteur `;`, quote `"`, UTF-8
+- IDs d'issues : sha256 court, déterministes (même input → même id)
+
+## Migration Qt → Tauri — contexte
+
+On abandonne PySide6 (segfaults, packaging). Le plan :
+1. **Launcher standalone** : `python -m spreadsheet_qa.web` (port auto, ouvre navigateur)
+2. **Tauri** : app desktop avec sidecar Python (le serveur web packagé)
+3. **Online** : même FastAPI déployé sur serveur
+
+L'UI web (dans `web/`) sert les deux modes (Tauri webview + navigateur online).
+Le core ne change pas. Seul `web/` évolue.
+
+## Quand tu crées du code
+
+1. Vérifie que tu ne casses pas les tests : `pytest` doit passer
+2. Si tu touches à `web/app.py`, vérifie que `/health` existe (ou crée-le)
+3. Si tu crées un nouveau endpoint, documente-le dans la docstring
+4. Si tu ajoutes du texte visible utilisateur, utilise le français et le glossaire
+5. Si tu n'es pas sûr d'une convention, regarde le code existant dans le même module
+
+## Structure des fichiers Tauri (à créer)
+
+```
+Tablerreur/
+├── src-tauri/              # Rust/Tauri (à initialiser)
+│   ├── tauri.conf.json     # Config fenêtre, sidecar, menu
+│   ├── src/main.rs         # Lance sidecar, attend /health, charge webview
+│   ├── Cargo.toml
+│   └── icons/
+├── src/spreadsheet_qa/
+│   ├── core/               # NE PAS MODIFIER pour Tauri
+│   ├── web/                # Le backend (sidecar quand packagé)
+│   │   ├── app.py          # FastAPI + /health + static
+│   │   ├── jobs.py         # Jobs temporaires
+│   │   ├── launcher.py     # NOUVEAU : port auto + open browser + signal ready
+│   │   └── static/         # UI web (HTML/CSS/JS)
+│   └── ui/                 # Legacy Qt — NE PAS TOUCHER
+```
+
+## Prompts par tâche
+
+Si on te demande une tâche spécifique, voici les priorités :
+
+### "Crée le launcher standalone"
+→ `web/launcher.py` : find_free_port(), start uvicorn, open browser, print message FR, handle SIGINT
+
+### "Ajoute /health"
+→ `web/app.py` : `GET /health` → `{"status": "ok", "version": "..."}`
+
+### "Initialise Tauri"
+→ `npm create tauri-app`, configurer sidecar dans `tauri.conf.json`, écrire `main.rs` minimal
+
+### "Package le sidecar"
+→ PyInstaller ou Nuitka pour `python -m spreadsheet_qa.web` → exécutable, config dans `tauri.conf.json` externalBin
+
+### "Vérifie la parité web"
+→ Comparer les fonctionnalités de `ui/` avec `web/` : templates, correctifs, aperçu, exports

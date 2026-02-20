@@ -1,0 +1,9 @@
+# Dépendances supplémentaires pour l'application web Tablerreur
+# Installer avec : pip install -r requirements-web.txt
+
+fastapi>=0.111
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
+
+# Ces dépendances sont déjà dans pyproject.toml :
+# pandas, openpyxl, pyyaml, rapidfuzz, chardet, httpx

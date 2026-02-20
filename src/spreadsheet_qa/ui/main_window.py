@@ -27,6 +27,7 @@ from spreadsheet_qa.ui.controllers.fix_controller import FixController
 from spreadsheet_qa.ui.controllers.load_controller import LoadController
 from spreadsheet_qa.ui.controllers.project_controller import ProjectController
 from spreadsheet_qa.ui.controllers.validation_controller import ValidationController
+from spreadsheet_qa.ui.i18n import t
 from spreadsheet_qa.ui.panels.find_fix_drawer import FindFixDrawer
 from spreadsheet_qa.ui.panels.issues_panel import IssuesPanel
 from spreadsheet_qa.ui.signals import AppSignals
@@ -40,7 +41,7 @@ class MainWindow(QMainWindow):
     def __init__(self, signals: AppSignals) -> None:
         super().__init__()
         self._signals = signals
-        self.setWindowTitle("Tablerreur — Spreadsheet QA")
+        self.setWindowTitle(t("app.title"))
         self.setMinimumSize(1100, 700)
         self.resize(1400, 850)
 
@@ -92,7 +93,7 @@ class MainWindow(QMainWindow):
 
         # Issues dock (right)
         self._issues_panel = IssuesPanel(self._issue_store, self._signals, self)
-        issues_dock = QDockWidget("Issues", self)
+        issues_dock = QDockWidget(t("dock.issues"), self)
         issues_dock.setObjectName("IssuesDock")
         issues_dock.setWidget(self._issues_panel)
         issues_dock.setAllowedAreas(
@@ -104,7 +105,7 @@ class MainWindow(QMainWindow):
         # Find & Fix dock (bottom)
         self._find_fix_drawer = FindFixDrawer(self._issue_store, self._signals, self)
         self._find_fix_drawer.set_fix_controller(self._fix_ctrl)
-        ff_dock = QDockWidget("Find && Fix", self)
+        ff_dock = QDockWidget(t("dock.findfix"), self)
         ff_dock.setObjectName("FindFixDock")
         ff_dock.setWidget(self._find_fix_drawer)
         ff_dock.setAllowedAreas(
@@ -118,7 +119,7 @@ class MainWindow(QMainWindow):
 
         # Status bar
         self._status_bar = QStatusBar()
-        self._status_label = QLabel("Ready. Open a file to begin.")
+        self._status_label = QLabel(t("app.ready"))
         self._status_bar.addWidget(self._status_label, 1)
         self.setStatusBar(self._status_bar)
 
@@ -130,38 +131,38 @@ class MainWindow(QMainWindow):
         self.addToolBar(tb)
 
         # Open
-        self._act_open = QAction("Open…", self)
+        self._act_open = QAction(t("action.open"), self)
         self._act_open.setShortcut(QKeySequence.StandardKey.Open)
-        self._act_open.setToolTip("Open a CSV or XLSX file")
+        self._act_open.setToolTip(t("action.open.tooltip"))
         self._act_open.triggered.connect(self._load_ctrl.open_file_dialog)
         tb.addAction(self._act_open)
 
         tb.addSeparator()
 
         # Validate
-        self._act_validate = QAction("Validate", self)
+        self._act_validate = QAction(t("action.validate"), self)
         self._act_validate.setShortcut(QKeySequence("Ctrl+Shift+V"))
-        self._act_validate.setToolTip("Run all validation rules")
+        self._act_validate.setToolTip(t("action.validate.tooltip"))
         self._act_validate.triggered.connect(self._validation_ctrl.run_full)
         tb.addAction(self._act_validate)
 
         # Toggle Find & Fix
-        self._act_findfix = QAction("Find && Fix", self)
+        self._act_findfix = QAction(t("action.findfix"), self)
         self._act_findfix.setShortcut(QKeySequence("Ctrl+F"))
-        self._act_findfix.setToolTip("Open Find & Fix drawer")
+        self._act_findfix.setToolTip(t("action.findfix.tooltip"))
         self._act_findfix.triggered.connect(self._toggle_findfix)
         tb.addAction(self._act_findfix)
 
         tb.addSeparator()
 
         # Undo / Redo
-        self._act_undo = QAction("Undo", self)
+        self._act_undo = QAction(t("action.undo"), self)
         self._act_undo.setShortcut(QKeySequence.StandardKey.Undo)
         self._act_undo.setEnabled(False)
         self._act_undo.triggered.connect(self._fix_ctrl.undo)
         tb.addAction(self._act_undo)
 
-        self._act_redo = QAction("Redo", self)
+        self._act_redo = QAction(t("action.redo"), self)
         self._act_redo.setShortcut(QKeySequence.StandardKey.Redo)
         self._act_redo.setEnabled(False)
         self._act_redo.triggered.connect(self._fix_ctrl.redo)
@@ -170,20 +171,20 @@ class MainWindow(QMainWindow):
         tb.addSeparator()
 
         # Templates
-        self._act_templates = QAction("Templates…", self)
-        self._act_templates.setToolTip("Open the Template Library")
+        self._act_templates = QAction(t("action.templates"), self)
+        self._act_templates.setToolTip(t("action.templates.tooltip"))
         self._act_templates.triggered.connect(self._on_open_templates)
         tb.addAction(self._act_templates)
 
         # Export
-        self._act_export = QAction("Export…", self)
+        self._act_export = QAction(t("action.export"), self)
         self._act_export.setShortcut(QKeySequence("Ctrl+E"))
-        self._act_export.setToolTip("Export cleaned file and reports")
+        self._act_export.setToolTip(t("action.export.tooltip"))
         self._act_export.triggered.connect(self._on_export)
         tb.addAction(self._act_export)
 
         # Toggle issues
-        self._act_issues = QAction("Issues panel", self)
+        self._act_issues = QAction(t("action.issues_panel"), self)
         self._act_issues.setShortcut(QKeySequence("Ctrl+I"))
         self._act_issues.triggered.connect(lambda: self._issues_dock.setVisible(
             not self._issues_dock.isVisible()
@@ -193,39 +194,39 @@ class MainWindow(QMainWindow):
         # Build menu bar
         menubar = self.menuBar()
 
-        file_menu = menubar.addMenu("&File")
+        file_menu = menubar.addMenu(t("menu.file"))
         file_menu.addAction(self._act_open)
 
-        act_open_project = QAction("Open Project…", self)
+        act_open_project = QAction(t("menu.file.open_project"), self)
         act_open_project.triggered.connect(self._project_ctrl.open_project_dialog)
         file_menu.addAction(act_open_project)
 
-        act_save_project = QAction("Save Project As…", self)
+        act_save_project = QAction(t("menu.file.save_project"), self)
         act_save_project.triggered.connect(self._project_ctrl.save_project_as_dialog)
         file_menu.addAction(act_save_project)
 
         file_menu.addSeparator()
         file_menu.addAction(self._act_export)
         file_menu.addSeparator()
-        quit_act = QAction("Quit", self)
+        quit_act = QAction(t("menu.file.quit"), self)
         quit_act.setShortcut(QKeySequence.StandardKey.Quit)
         quit_act.triggered.connect(self.close)
         file_menu.addAction(quit_act)
 
-        edit_menu = menubar.addMenu("&Edit")
+        edit_menu = menubar.addMenu(t("menu.edit"))
         edit_menu.addAction(self._act_undo)
         edit_menu.addAction(self._act_redo)
         edit_menu.addSeparator()
         edit_menu.addAction(self._act_findfix)
 
-        view_menu = menubar.addMenu("&View")
+        view_menu = menubar.addMenu(t("menu.view"))
         view_menu.addAction(self._act_issues)
         view_menu.addAction(self._act_findfix)
 
-        validate_menu = menubar.addMenu("&Validate")
+        validate_menu = menubar.addMenu(t("menu.validate"))
         validate_menu.addAction(self._act_validate)
 
-        tools_menu = menubar.addMenu("&Tools")
+        tools_menu = menubar.addMenu(t("menu.tools"))
         tools_menu.addAction(self._act_templates)
 
     # ------------------------------------------------------------------
@@ -238,7 +239,7 @@ class MainWindow(QMainWindow):
         self._signals.dataset_loaded.connect(self._on_dataset_loaded)
         self._signals.issue_selected.connect(self._on_issue_selected)
         self._signals.validation_started.connect(
-            lambda: self._status_label.setText("Validating…")
+            lambda: self._status_label.setText(t("status.validating"))
         )
         self._signals.template_changed.connect(self._on_template_changed)
         self._signals.issue_status_changed.connect(self._on_issue_status_changed)
@@ -252,16 +253,17 @@ class MainWindow(QMainWindow):
         self._act_undo.setEnabled(can_undo)
         self._act_redo.setEnabled(can_redo)
         if can_undo:
-            self._act_undo.setToolTip(f"Undo: {self._fix_ctrl._history.undo_description}")
+            self._act_undo.setToolTip(
+                t("action.undo.tooltip", desc=self._fix_ctrl._history.undo_description)
+            )
         if can_redo:
-            self._act_redo.setToolTip(f"Redo: {self._fix_ctrl._history.redo_description}")
+            self._act_redo.setToolTip(
+                t("action.redo.tooltip", desc=self._fix_ctrl._history.redo_description)
+            )
 
     def _on_dataset_loaded(self, meta) -> None:
-        # Make the Find&Fix drawer aware of the new DataFrame
         self._find_fix_drawer.set_dataframe(self._table_model.df)
-        self.setWindowTitle(
-            f"Tablerreur — {Path(meta.file_path).name}"
-        )
+        self.setWindowTitle(f"Tablerreur — {Path(meta.file_path).name}")
 
     def _on_issue_selected(self, issue) -> None:
         """Scroll table view to the issue's cell."""
@@ -292,57 +294,65 @@ class MainWindow(QMainWindow):
         col_cfg = self._validation_ctrl._config.get("columns", {}).get(col_name, {})
 
         menu = QMenu(self)
-        menu.setTitle(f"Column: {col_name}")
+        menu.setTitle(t("col_menu.title", name=col_name))
 
         # Set kind submenu
-        kind_menu = menu.addMenu("Set kind")
+        kind_menu = menu.addMenu(t("col_menu.set_kind"))
         for kind in ("free_text_short", "free_text_long", "controlled", "structured", "list"):
-            act = kind_menu.addAction(kind)
+            from spreadsheet_qa.ui.i18n import kind_label
+            act = kind_menu.addAction(kind_label(kind))
             act.setCheckable(True)
             act.setChecked(col_cfg.get("kind") == kind)
             act.triggered.connect(
-                lambda checked, k=kind: self._validation_ctrl.set_column_override(col_name, {"kind": k})
+                lambda checked, k=kind: self._validation_ctrl.set_column_override(
+                    col_name, {"kind": k}
+                )
             )
 
         menu.addSeparator()
 
         # Toggle Required
-        req_act = menu.addAction("Required")
+        req_act = menu.addAction(t("col_menu.required"))
         req_act.setCheckable(True)
         req_act.setChecked(bool(col_cfg.get("required", False)))
         req_act.triggered.connect(
-            lambda checked: self._validation_ctrl.set_column_override(col_name, {"required": checked})
+            lambda checked: self._validation_ctrl.set_column_override(
+                col_name, {"required": checked}
+            )
         )
 
         # Toggle Unique
-        uniq_act = menu.addAction("Unique")
+        uniq_act = menu.addAction(t("col_menu.unique"))
         uniq_act.setCheckable(True)
         uniq_act.setChecked(bool(col_cfg.get("unique", False)))
         uniq_act.triggered.connect(
-            lambda checked: self._validation_ctrl.set_column_override(col_name, {"unique": checked})
+            lambda checked: self._validation_ctrl.set_column_override(
+                col_name, {"unique": checked}
+            )
         )
 
         # Toggle Multiline
-        ml_act = menu.addAction("Allow multiline")
+        ml_act = menu.addAction(t("col_menu.multiline"))
         ml_act.setCheckable(True)
         ml_act.setChecked(bool(col_cfg.get("multiline_ok", False)))
         ml_act.triggered.connect(
-            lambda checked: self._validation_ctrl.set_column_override(col_name, {"multiline_ok": checked})
+            lambda checked: self._validation_ctrl.set_column_override(
+                col_name, {"multiline_ok": checked}
+            )
         )
 
         menu.addSeparator()
 
-        edit_act = menu.addAction("Edit in Template Editor…")
+        edit_act = menu.addAction(t("col_menu.edit_template"))
         edit_act.triggered.connect(lambda: self._open_template_editor_for_column(col_name))
 
-        # Show at cursor position
         from PySide6.QtGui import QCursor
         menu.exec(QCursor.pos())
 
     def _on_template_changed(self, generic_id: str, overlay_id: str) -> None:
         overlay_label = f" + {overlay_id}" if overlay_id else ""
         self._signals.status_message.emit(
-            f"Template: {generic_id}{overlay_label}"
+            t("status.template_changed", id=generic_id, overlay=overlay_label)
         )
 
     def _open_template_editor_for_column(self, col_name: str) -> None:
@@ -353,7 +363,6 @@ class MainWindow(QMainWindow):
             signals=self._signals,
             parent=self,
         )
-        # Pre-select the column if the editor supports it
         if hasattr(dialog, "select_column"):
             dialog.select_column(col_name)
         dialog.exec()
@@ -393,32 +402,32 @@ class MainWindow(QMainWindow):
         if dialog.export_xlsx:
             try:
                 from spreadsheet_qa.core.exporters import XLSXExporter
-                XLSXExporter().export(df, out / f"cleaned_{stamp}.xlsx")
+                XLSXExporter().export(df, out / f"nettoyé_{stamp}.xlsx")
             except Exception as exc:
                 errors.append(str(exc))
 
         if dialog.export_csv:
             try:
                 from spreadsheet_qa.core.exporters import CSVExporter
-                CSVExporter().export(df, out / f"cleaned_{stamp}.csv", bom=dialog.csv_bom)
+                CSVExporter().export(df, out / f"nettoyé_{stamp}.csv", bom=dialog.csv_bom)
             except Exception as exc:
                 errors.append(str(exc))
 
         if dialog.export_report:
             try:
                 from spreadsheet_qa.core.exporters import TXTReporter
-                TXTReporter().export(issues, out / f"report_{stamp}.txt", meta=meta)
+                TXTReporter().export(issues, out / f"rapport_{stamp}.txt", meta=meta)
             except Exception as exc:
                 errors.append(str(exc))
 
         if dialog.export_issues_csv:
             try:
                 from spreadsheet_qa.core.exporters import IssuesCSVExporter
-                IssuesCSVExporter().export(issues, out / f"issues_{stamp}.csv", meta=meta)
+                IssuesCSVExporter().export(issues, out / f"problèmes_{stamp}.csv", meta=meta)
             except Exception as exc:
                 errors.append(str(exc))
 
         if errors:
-            QMessageBox.warning(self, "Export errors", "\n".join(errors))
+            QMessageBox.warning(self, t("export.error_title"), "\n".join(errors))
         else:
-            self._signals.status_message.emit(f"Export complete → {out}")
+            self._signals.status_message.emit(t("status.export_done", path=out))

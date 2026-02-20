@@ -97,10 +97,10 @@ class TestIssuesCSVExporter:
         content = path.read_text(encoding="utf-8")
         reader = csv.reader(io.StringIO(content), delimiter=";")
         rows = list(reader)
-        # First row = header
-        assert "issue_id" in rows[0]
-        assert "severity" in rows[0]
-        assert "column" in rows[0]
+        # First row = French headers
+        assert "identifiant" in rows[0]
+        assert "sévérité" in rows[0]
+        assert "colonne" in rows[0]
 
     def test_row_is_1_based(self, sample_issues, tmp_path):
         path = tmp_path / "issues.csv"
@@ -108,7 +108,7 @@ class TestIssuesCSVExporter:
         content = path.read_text(encoding="utf-8")
         reader = csv.DictReader(io.StringIO(content), delimiter=";")
         rows = list(reader)
-        assert rows[0]["row"] == "1"  # 0 → 1 in export
+        assert rows[0]["ligne"] == "1"  # French header; 0 → 1 in export
 
 
 class TestTXTReporter:
@@ -121,7 +121,8 @@ class TestTXTReporter:
         path = tmp_path / "report.txt"
         TXTReporter().export(sample_issues, path)
         content = path.read_text(encoding="utf-8")
-        assert "WARNING" in content
+        # Report uses French severity labels
+        assert "Avertissement" in content
 
     def test_report_contains_column_name(self, sample_issues, tmp_path):
         path = tmp_path / "report.txt"

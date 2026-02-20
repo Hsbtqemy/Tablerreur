@@ -78,7 +78,17 @@ class ColumnMeta:
     multiline_ok: bool = False
     allowed_values: list[str] = field(default_factory=list)
     regex: str | None = None
-    list_separator: str = "|"
+    min_length: int | None = None
+    max_length: int | None = None
+    content_type: str | None = None  # "integer" | "decimal" | "date" | "email" | "url"
+    forbidden_chars: str | None = None  # string of individually forbidden characters
+    expected_case: str | None = None  # "upper" | "lower" | "title"
+    list_separator: str | None = None  # separator char for multi-value cells; None = single value
+    list_trim: bool = True             # trim each item after split
+    list_min_items: int | None = None
+    list_max_items: int | None = None
+    list_unique: bool = False          # items must be unique within the cell
+    list_no_empty: bool = True         # reject empty items after split+trim
     violation_severity: Severity = Severity.WARNING
     nakala_field: str | None = None  # e.g. "nakala:type"
 

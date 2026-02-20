@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from spreadsheet_qa.core.models import Issue, IssueStatus, Severity
+from spreadsheet_qa.ui.i18n import severity_label, status_label, t
 
 if TYPE_CHECKING:
     from spreadsheet_qa.core.issue_store import IssueStore
@@ -81,24 +82,34 @@ class IssuesPanel(QWidget):
         filter_bar.setSpacing(6)
 
         self._sev_combo = QComboBox()
-        self._sev_combo.addItems(["All severities", "ERROR", "WARNING", "SUSPICION"])
+        self._sev_combo.addItems([
+            t("severity.all"),
+            severity_label("ERROR"),
+            severity_label("WARNING"),
+            severity_label("SUSPICION"),
+        ])
         self._sev_combo.currentIndexChanged.connect(self._apply_filters)
 
         self._status_combo = QComboBox()
-        self._status_combo.addItems(["Open only", "All statuses", "FIXED", "IGNORED"])
+        self._status_combo.addItems([
+            t("status.open_only"),
+            t("status.all"),
+            status_label("FIXED"),
+            status_label("IGNORED"),
+        ])
         self._status_combo.currentIndexChanged.connect(self._apply_filters)
 
         self._col_combo = QComboBox()
-        self._col_combo.addItem("All columns")
+        self._col_combo.addItem(t("issues.filter.all_cols"))
         self._col_combo.currentIndexChanged.connect(self._apply_filters)
 
-        self._count_label = QLabel("0 issues")
+        self._count_label = QLabel(t("issues.count", n=0))
 
-        filter_bar.addWidget(QLabel("Severity:"))
+        filter_bar.addWidget(QLabel(t("issues.filter.severity")))
         filter_bar.addWidget(self._sev_combo)
-        filter_bar.addWidget(QLabel("Status:"))
+        filter_bar.addWidget(QLabel(t("issues.filter.status")))
         filter_bar.addWidget(self._status_combo)
-        filter_bar.addWidget(QLabel("Column:"))
+        filter_bar.addWidget(QLabel(t("issues.filter.column")))
         filter_bar.addWidget(self._col_combo)
         filter_bar.addStretch()
         filter_bar.addWidget(self._count_label)
@@ -116,16 +127,21 @@ class IssuesPanel(QWidget):
         self._tree.customContextMenuRequested.connect(self._show_context_menu)
 
         # Setup columns
-        self._source_model.setHorizontalHeaderLabels(
-            ["Sev.", "Status", "Column", "Row", "Message", "Suggestion"]
-        )
+        self._source_model.setHorizontalHeaderLabels([
+            t("issues.col.severity"),
+            t("issues.col.status"),
+            t("issues.col.column"),
+            t("issues.col.row"),
+            t("issues.col.message"),
+            t("issues.col.suggestion"),
+        ])
         header = self._tree.header()
         header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         header.setStretchLastSection(False)
         header.resizeSection(0, 60)
-        header.resizeSection(1, 70)
+        header.resizeSection(1, 80)
         header.resizeSection(2, 120)
-        header.resizeSection(3, 50)
+        header.resizeSection(3, 55)
         header.resizeSection(4, 300)
         header.resizeSection(5, 200)
         self._tree.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
@@ -152,10 +168,9 @@ class IssuesPanel(QWidget):
         current_col = self._col_combo.currentText()
         self._col_combo.blockSignals(True)
         self._col_combo.clear()
-        self._col_combo.addItem("All columns")
+        self._col_combo.addItem(t("issues.filter.all_cols"))
         for col in cols:
             self._col_combo.addItem(col)
-        # Restore previous selection if still valid
         idx = self._col_combo.findText(current_col)
         if idx >= 0:
             self._col_combo.setCurrentIndex(idx)
@@ -163,9 +178,9 @@ class IssuesPanel(QWidget):
 
         for issue in all_issues:
             row_items = [
-                QStandardItem(issue.severity.value),
-                QStandardItem(issue.status.value),
-                QStandardItem(issue.col if issue.col != "__row__" else "(row)"),
+                QStandardItem(severity_label(issue.severity.value)),
+                QStandardItem(status_label(issue.status.value)),
+                QStandardItem(issue.col if issue.col != "__row__" else t("issues.row_label")),
                 QStandardItem(str(issue.row + 1)),
                 QStandardItem(issue.message),
                 QStandardItem(str(issue.suggestion) if issue.suggestion is not None else ""),
@@ -176,6 +191,9 @@ class IssuesPanel(QWidget):
 
             # Store issue id for retrieval
             row_items[0].setData(issue.id, Qt.ItemDataRole.UserRole)
+            # Store original severity/status values for filtering
+            row_items[0].setData(issue.severity.value, Qt.ItemDataRole.UserRole + 1)
+            row_items[1].setData(issue.status.value, Qt.ItemDataRole.UserRole + 1)
 
             self._source_model.appendRow(row_items)
 
@@ -186,34 +204,42 @@ class IssuesPanel(QWidget):
         status_text = self._status_combo.currentText()
         col_text = self._col_combo.currentText()
 
+        all_sevs_label = t("severity.all")
+        all_status_label = t("status.all")
+        open_only_label = t("status.open_only")
+        all_cols_label = t("issues.filter.all_cols")
+        open_internal = "OPEN"
+
         visible = 0
         for row in range(self._source_model.rowCount()):
             sev_item = self._source_model.item(row, _COL_SEVERITY)
             status_item = self._source_model.item(row, _COL_STATUS)
             col_item = self._source_model.item(row, _COL_COLUMN)
 
-            sev_val = sev_item.text() if sev_item else ""
-            status_val = status_item.text() if status_item else ""
+            # Use original enum values stored as UserRole+1 for reliable filtering
+            sev_val = sev_item.data(Qt.ItemDataRole.UserRole + 1) if sev_item else ""
+            status_val = status_item.data(Qt.ItemDataRole.UserRole + 1) if status_item else ""
             col_val = col_item.text() if col_item else ""
 
             show = True
-            if sev_text != "All severities" and sev_val != sev_text:
+            if sev_text != all_sevs_label and severity_label(sev_val) != sev_text:
                 show = False
-            if status_text == "Open only" and status_val != "OPEN":
+            if status_text == open_only_label and status_val != open_internal:
                 show = False
-            elif status_text not in ("Open only", "All statuses") and status_val != status_text:
-                show = False
-            if col_text != "All columns" and col_val != col_text:
+            elif status_text not in (open_only_label, all_status_label):
+                # Comparing French display labels
+                if status_label(status_val) != status_text:
+                    show = False
+            if col_text != all_cols_label and col_val != col_text:
                 show = False
 
-            # Proxy model filter is done manually here by hiding rows
             idx = self._source_model.index(row, 0)
             proxy_idx = self._proxy.mapFromSource(idx)
             self._tree.setRowHidden(proxy_idx.row(), proxy_idx.parent(), not show)
             if show:
                 visible += 1
 
-        self._count_label.setText(f"{visible} issue(s)")
+        self._count_label.setText(t("issues.count", n=visible))
 
     # ------------------------------------------------------------------
     # Events
@@ -237,9 +263,9 @@ class IssuesPanel(QWidget):
             return
 
         menu = QMenu(self)
-        go_act = menu.addAction("Go to cell")
-        ignore_act = menu.addAction("Ignore this issue")
-        except_act = menu.addAction("Add exception…")
+        go_act = menu.addAction(t("issues.ctx.goto"))
+        ignore_act = menu.addAction(t("issues.ctx.ignore"))
+        except_act = menu.addAction(t("issues.ctx.except"))
 
         action = menu.exec(self._tree.mapToGlobal(pos))
         if action == go_act:

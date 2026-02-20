@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from typing import TYPE_CHECKING, Any
 
 from PySide6.QtCore import Qt
@@ -23,12 +25,22 @@ from PySide6.QtWidgets import (
 
 from spreadsheet_qa.core.text_utils import INVISIBLE_RE as _INVISIBLE_RE
 from spreadsheet_qa.core.text_utils import UNICODE_SUSPECTS as _UNICODE_SUSPECTS
+from spreadsheet_qa.ui.i18n import t
 
 if TYPE_CHECKING:
     import pandas as pd
 
     from spreadsheet_qa.core.issue_store import IssueStore
     from spreadsheet_qa.ui.signals import AppSignals
+
+# Fix type indices (keep in sync with the combo addItems list)
+_FIX_EXACT_REPLACE = 0
+_FIX_TRIM = 1
+_FIX_COLLAPSE = 2
+_FIX_UNICODE = 3
+_FIX_INVISIBLE = 4
+_FIX_NBSP = 5
+_FIX_NEWLINES = 6
 
 
 class FindFixDrawer(QWidget):
@@ -55,7 +67,7 @@ class FindFixDrawer(QWidget):
         layout.setSpacing(8)
 
         # Left: search / fix controls
-        controls = QGroupBox("Find & Fix")
+        controls = QGroupBox(t("findfix.title"))
         ctrl_layout = QVBoxLayout(controls)
         ctrl_layout.setSpacing(6)
 
@@ -63,40 +75,42 @@ class FindFixDrawer(QWidget):
         form.setSpacing(4)
 
         self._search_edit = QLineEdit()
-        self._search_edit.setPlaceholderText("Search value…")
+        self._search_edit.setPlaceholderText(t("findfix.search.placeholder"))
         self._search_edit.returnPressed.connect(self._find)
-        form.addRow("Find:", self._search_edit)
+        form.addRow(t("findfix.search.label"), self._search_edit)
 
         self._replace_edit = QLineEdit()
-        self._replace_edit.setPlaceholderText("Replace with…")
-        form.addRow("Replace:", self._replace_edit)
+        self._replace_edit.setPlaceholderText(t("findfix.replace.placeholder"))
+        form.addRow(t("findfix.replace.label"), self._replace_edit)
 
         # Fix type selector
         self._fix_type = QComboBox()
         self._fix_type.addItems([
-            "Replace exact match",
-            "Trim whitespace",
-            "Collapse spaces",
-            "Normalize unicode",
-            "Strip invisible chars",
+            t("findfix.fixtype.exact_replace"),
+            t("findfix.fixtype.trim_whitespace"),
+            t("findfix.fixtype.collapse_spaces"),
+            t("findfix.fixtype.normalize_unicode"),
+            t("findfix.fixtype.strip_invisible"),
+            t("findfix.fixtype.replace_nbsp"),
+            t("findfix.fixtype.normalize_newlines"),
         ])
         self._fix_type.currentIndexChanged.connect(self._on_fix_type_changed)
-        form.addRow("Fix type:", self._fix_type)
+        form.addRow(t("findfix.fixtype.label"), self._fix_type)
 
         # Column filter
         self._col_filter = QComboBox()
-        self._col_filter.addItem("All columns")
-        form.addRow("In column:", self._col_filter)
+        self._col_filter.addItem(t("findfix.col.all"))
+        form.addRow(t("findfix.col.label"), self._col_filter)
 
         ctrl_layout.addLayout(form)
 
         btn_row = QHBoxLayout()
-        self._find_btn = QPushButton("Find")
+        self._find_btn = QPushButton(t("findfix.btn.find"))
         self._find_btn.clicked.connect(self._find)
-        self._apply_btn = QPushButton("Apply selected")
+        self._apply_btn = QPushButton(t("findfix.btn.apply_selected"))
         self._apply_btn.clicked.connect(self._apply_selected)
         self._apply_btn.setEnabled(False)
-        self._apply_all_btn = QPushButton("Apply all")
+        self._apply_all_btn = QPushButton(t("findfix.btn.apply_all"))
         self._apply_all_btn.clicked.connect(self._apply_all)
         self._apply_all_btn.setEnabled(False)
         btn_row.addWidget(self._find_btn)
@@ -106,9 +120,9 @@ class FindFixDrawer(QWidget):
         layout.addWidget(controls, 1)
 
         # Right: matches preview
-        preview = QGroupBox("Matches preview")
+        preview = QGroupBox(t("findfix.preview.title"))
         prev_layout = QVBoxLayout(preview)
-        self._match_count_label = QLabel("No search performed.")
+        self._match_count_label = QLabel(t("findfix.preview.empty"))
         prev_layout.addWidget(self._match_count_label)
         self._matches_list = QListWidget()
         self._matches_list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
@@ -116,15 +130,14 @@ class FindFixDrawer(QWidget):
         layout.addWidget(preview, 2)
 
     def _on_fix_type_changed(self, idx: int) -> None:
-        show_replace = idx == 0  # "Replace exact match"
+        show_replace = idx == _FIX_EXACT_REPLACE
         self._replace_edit.setEnabled(show_replace)
-        self._search_edit.setEnabled(idx in (0,))  # only for replace
+        self._search_edit.setEnabled(idx == _FIX_EXACT_REPLACE)
 
     def set_dataframe(self, df: "pd.DataFrame") -> None:
         self._df = df
-        # Refresh column list
         self._col_filter.clear()
-        self._col_filter.addItem("All columns")
+        self._col_filter.addItem(t("findfix.col.all"))
         for col in df.columns:
             self._col_filter.addItem(col)
 
@@ -145,9 +158,10 @@ class FindFixDrawer(QWidget):
         search_term = self._search_edit.text()
         replace_with = self._replace_edit.text()
 
+        all_cols_label = t("findfix.col.all")
         cols = (
             list(self._df.columns)
-            if col_filter == "All columns"
+            if col_filter == all_cols_label
             else [col_filter]
         )
 
@@ -162,13 +176,19 @@ class FindFixDrawer(QWidget):
                 if new_val is not None and new_val != s:
                     self._matches.append((int(row_idx), col, s, new_val))
                     item = QListWidgetItem(
-                        f"Row {row_idx + 1} | {col}: {s!r} → {new_val!r}"
+                        t(
+                            "findfix.preview.item",
+                            row=row_idx + 1,
+                            col=col,
+                            old=repr(s),
+                            new=repr(new_val),
+                        )
                     )
                     self._matches_list.addItem(item)
 
         count = len(self._matches)
         self._match_count_label.setText(
-            f"{count} match(es)" if count else "No matches found."
+            t("findfix.preview.count", n=count) if count else t("findfix.preview.none")
         )
         self._apply_all_btn.setEnabled(count > 0)
         self._apply_btn.setEnabled(count > 0)
@@ -177,25 +197,31 @@ class FindFixDrawer(QWidget):
         self, fix_type: int, value: str, search: str, replace: str
     ) -> str | None:
         """Return the fixed value or None if no fix applies."""
-        import re
-
-        if fix_type == 0:  # exact replace
+        if fix_type == _FIX_EXACT_REPLACE:
             if search and search in value:
                 return value.replace(search, replace)
             return None
-        elif fix_type == 1:  # trim whitespace
+        elif fix_type == _FIX_TRIM:
             stripped = value.strip()
             return stripped if stripped != value else None
-        elif fix_type == 2:  # collapse spaces
+        elif fix_type == _FIX_COLLAPSE:
             collapsed = re.sub(r"  +", " ", value).strip()
             return collapsed if collapsed != value else None
-        elif fix_type == 3:  # normalize unicode
+        elif fix_type == _FIX_UNICODE:
             fixed = value
             for ch, rep in _UNICODE_SUSPECTS.items():
                 fixed = fixed.replace(ch, rep)
+            # NFC normalisation
+            fixed = unicodedata.normalize("NFC", fixed)
             return fixed if fixed != value else None
-        elif fix_type == 4:  # strip invisible
+        elif fix_type == _FIX_INVISIBLE:
             fixed = _INVISIBLE_RE.sub("", value)
+            return fixed if fixed != value else None
+        elif fix_type == _FIX_NBSP:
+            fixed = value.replace("\u00a0", " ")
+            return fixed if fixed != value else None
+        elif fix_type == _FIX_NEWLINES:
+            fixed = value.replace("\r\n", "\n").replace("\r", "\n")
             return fixed if fixed != value else None
         return None
 
@@ -211,9 +237,8 @@ class FindFixDrawer(QWidget):
         if not matches or self._fix_controller is None:
             return
         self._fix_controller.apply_bulk(matches)
-        # Clear after apply
         self._matches = []
         self._matches_list.clear()
-        self._match_count_label.setText("Applied. Run Find again to check remaining issues.")
+        self._match_count_label.setText(t("findfix.applied"))
         self._apply_all_btn.setEnabled(False)
         self._apply_btn.setEnabled(False)

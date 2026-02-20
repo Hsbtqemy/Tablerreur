@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from spreadsheet_qa.core.dataset import DatasetLoader, get_xlsx_sheet_names, preview_header_rows
+from spreadsheet_qa.ui.i18n import t
 
 
 class LoadDialog(QDialog):
@@ -32,7 +33,7 @@ class LoadDialog(QDialog):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Open Spreadsheet")
+        self.setWindowTitle(t("load.title"))
         self.setMinimumSize(750, 500)
 
         self._file_path: str | None = None
@@ -50,25 +51,25 @@ class LoadDialog(QDialog):
         layout.setSpacing(12)
 
         # File selection
-        file_box = QGroupBox("File")
+        file_box = QGroupBox(t("load.group.file"))
         file_layout = QHBoxLayout(file_box)
         self._path_edit = QLineEdit()
         self._path_edit.setReadOnly(True)
-        self._path_edit.setPlaceholderText("No file selected…")
-        browse_btn = QPushButton("Browse…")
+        self._path_edit.setPlaceholderText(t("load.placeholder.no_file"))
+        browse_btn = QPushButton(t("load.btn.browse"))
         browse_btn.clicked.connect(self._browse)
         file_layout.addWidget(self._path_edit, 1)
         file_layout.addWidget(browse_btn)
         layout.addWidget(file_box)
 
         # Import options
-        opts_box = QGroupBox("Import options")
+        opts_box = QGroupBox(t("load.group.options"))
         opts_layout = QFormLayout(opts_box)
 
         # Sheet selector (XLSX only)
         self._sheet_combo = QComboBox()
         self._sheet_combo.setVisible(False)
-        self._sheet_label = QLabel("Sheet:")
+        self._sheet_label = QLabel(t("load.label.sheet"))
         self._sheet_label.setVisible(False)
         self._sheet_combo.currentIndexChanged.connect(self._on_options_changed)
         opts_layout.addRow(self._sheet_label, self._sheet_combo)
@@ -78,27 +79,27 @@ class LoadDialog(QDialog):
         self._header_spin.setMinimum(1)
         self._header_spin.setMaximum(100)
         self._header_spin.setValue(1)
-        self._header_spin.setToolTip(
-            "Row number used as column headers (1 = first row, the default)"
-        )
+        self._header_spin.setToolTip(t("load.tooltip.header_row"))
         self._header_spin.valueChanged.connect(self._on_options_changed)
-        opts_layout.addRow("Header row:", self._header_spin)
+        opts_layout.addRow(t("load.label.header_row"), self._header_spin)
 
         # Encoding hint
         self._encoding_combo = QComboBox()
-        self._encoding_combo.addItems(["(auto-detect)", "utf-8", "utf-8-sig", "latin-1", "cp1252"])
-        opts_layout.addRow("Encoding:", self._encoding_combo)
+        self._encoding_combo.addItems([
+            t("load.encoding.auto"), "utf-8", "utf-8-sig", "latin-1", "cp1252"
+        ])
+        opts_layout.addRow(t("load.label.encoding"), self._encoding_combo)
 
         # Delimiter hint (CSV only)
         self._delim_combo = QComboBox()
-        self._delim_combo.addItems(["(auto-detect)", ";", ",", "\\t", "|"])
-        self._delim_label = QLabel("Delimiter:")
+        self._delim_combo.addItems([t("load.delimiter.auto"), ";", ",", "\\t", "|"])
+        self._delim_label = QLabel(t("load.label.delimiter"))
         opts_layout.addRow(self._delim_label, self._delim_combo)
 
         layout.addWidget(opts_box)
 
         # Preview
-        preview_box = QGroupBox("Preview (first rows)")
+        preview_box = QGroupBox(t("load.group.preview"))
         preview_layout = QVBoxLayout(preview_box)
         self._preview_table = QTableWidget()
         self._preview_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -109,7 +110,9 @@ class LoadDialog(QDialog):
         layout.addWidget(preview_box, 1)
 
         # Buttons
-        btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Open | QDialogButtonBox.StandardButton.Cancel)
+        btns = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Open | QDialogButtonBox.StandardButton.Cancel
+        )
         btns.accepted.connect(self.accept)
         btns.rejected.connect(self.reject)
         self._open_btn = btns.button(QDialogButtonBox.StandardButton.Open)
@@ -123,9 +126,9 @@ class LoadDialog(QDialog):
     def _browse(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self,
-            "Open Spreadsheet",
+            t("load.dialog.title"),
             "",
-            "Spreadsheets (*.csv *.xlsx *.xls *.xlsm *.tsv *.txt);;All files (*)",
+            t("load.filter.spreadsheets"),
         )
         if not path:
             return
@@ -171,7 +174,7 @@ class LoadDialog(QDialog):
         except Exception as exc:
             self._preview_table.setRowCount(0)
             self._preview_table.setColumnCount(1)
-            self._preview_table.setHorizontalHeaderLabels(["Error"])
+            self._preview_table.setHorizontalHeaderLabels([t("load.preview.error_col")])
             self._preview_table.setItem(0, 0, QTableWidgetItem(str(exc)))
             return
 
@@ -187,7 +190,6 @@ class LoadDialog(QDialog):
 
         header_row_idx = self._header_spin.value() - 1  # 0-based
 
-        # Show row numbers as vertical header; highlight header row
         for r_idx, row in enumerate(rows):
             label = f"{'→ ' if r_idx == header_row_idx else ''}{r_idx + 1}"
             self._preview_table.setVerticalHeaderItem(r_idx, QTableWidgetItem(label))
@@ -205,11 +207,11 @@ class LoadDialog(QDialog):
 
     def _get_encoding_hint(self) -> str | None:
         txt = self._encoding_combo.currentText()
-        return None if txt.startswith("(") else txt
+        return None if txt == t("load.encoding.auto") else txt
 
     def _get_delimiter_hint(self) -> str | None:
         txt = self._delim_combo.currentText()
-        if txt.startswith("("):
+        if txt == t("load.delimiter.auto"):
             return None
         return "\t" if txt == "\\t" else txt
 

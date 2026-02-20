@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QMessageBox, QWidget
 from spreadsheet_qa.core.dataset import DatasetLoader
 from spreadsheet_qa.core.template_manager import TemplateManager
 from spreadsheet_qa.ui.dialogs.load_dialog import LoadDialog
+from spreadsheet_qa.ui.i18n import t
 
 if TYPE_CHECKING:
     from spreadsheet_qa.core.issue_store import IssueStore
@@ -39,7 +40,6 @@ class LoadController:
         self._template_manager = template_manager or TemplateManager()
         self._current_meta = None
 
-        # Active template state
         self._active_generic: str = "generic_default"
         self._active_overlay: str | None = None
 
@@ -114,8 +114,8 @@ class LoadController:
         except Exception as exc:
             QMessageBox.critical(
                 self._parent,
-                "Load error",
-                f"Could not load file:\n{exc}",
+                t("load.error_title"),
+                t("load.error_body", exc=exc),
             )
             return False
 
@@ -123,8 +123,6 @@ class LoadController:
         self._table_model.replace_dataframe(df)
         self._issue_store.replace_all([])
 
-        # Compile and apply template config before emitting dataset_loaded so
-        # ValidationController has the right config when validation fires.
         if self._validation_ctrl is not None:
             column_names = list(df.columns)
             config = self._template_manager.compile_config(
@@ -136,8 +134,12 @@ class LoadController:
 
         self._signals.dataset_loaded.emit(meta)
         self._signals.status_message.emit(
-            f"Loaded: {Path(meta.file_path).name}  "
-            f"({meta.original_shape[0]} rows × {meta.original_shape[1]} cols)"
+            t(
+                "status.loaded",
+                name=Path(meta.file_path).name,
+                rows=meta.original_shape[0],
+                cols=meta.original_shape[1],
+            )
         )
         return True
 

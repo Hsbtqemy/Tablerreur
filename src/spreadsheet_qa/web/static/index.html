@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tablerreur — Contrôle qualité tableurs</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <h1 class="app-title">Tablerreur</h1>
+    <p class="app-subtitle">Contrôle qualité pour tableurs CSV/XLSX</p>
+  </header>
+
+  <!-- Step navigation -->
+  <nav class="step-nav" id="step-nav">
+    <button class="step-btn active" data-step="upload" onclick="goToStep('upload')">
+      <span class="step-num">1</span> Téléverser
+    </button>
+    <span class="step-sep">›</span>
+    <button class="step-btn" data-step="configure" onclick="goToStep('configure')" disabled>
+      <span class="step-num">2</span> Configurer
+    </button>
+    <span class="step-sep">›</span>
+    <button class="step-btn" data-step="fixes" onclick="goToStep('fixes')" disabled>
+      <span class="step-num">3</span> Correctifs
+    </button>
+    <span class="step-sep">›</span>
+    <button class="step-btn" data-step="validate" onclick="goToStep('validate')" disabled>
+      <span class="step-num">4</span> Valider
+    </button>
+    <span class="step-sep">›</span>
+    <button class="step-btn" data-step="results" onclick="goToStep('results')" disabled>
+      <span class="step-num">5</span> Résultats
+    </button>
+  </nav>
+
+  <main class="main-content">
+
+    <!-- ================================================================
+         ÉTAPE 1 : TÉLÉVERSEMENT
+         ================================================================ -->
+    <section id="step-upload" class="step-section active">
+      <h2>Téléverser un fichier</h2>
+
+      <div class="upload-zone" id="upload-zone">
+        <div class="upload-inner">
+          <div class="upload-icon">📁</div>
+          <p>Déposez votre fichier ici ou</p>
+          <label class="btn btn-secondary" for="file-input">Parcourir…</label>
+          <input type="file" id="file-input" accept=".csv,.xlsx,.xls,.xlsm,.tsv,.txt" hidden />
+          <p class="upload-hint">Formats acceptés : CSV, XLSX, XLS, TSV</p>
+        </div>
+        <div class="upload-file-info" id="upload-file-info" hidden>
+          <span id="upload-filename"></span>
+          <button class="btn-icon" onclick="clearFile()" title="Changer de fichier">✕</button>
+        </div>
+      </div>
+
+      <div class="card mt-2">
+        <h3>Options d'import</h3>
+        <div class="form-grid">
+          <label for="header-row">Ligne d'en-tête :</label>
+          <input type="number" id="header-row" value="1" min="1" max="100" class="input-sm" />
+
+          <label for="delimiter">Délimiteur (CSV) :</label>
+          <select id="delimiter" class="input-sm">
+            <option value="">(détection auto)</option>
+            <option value=";">;</option>
+            <option value=",">,</option>
+            <option value="\t">tabulation</option>
+            <option value="|">|</option>
+          </select>
+
+          <label for="encoding">Encodage :</label>
+          <select id="encoding" class="input-sm">
+            <option value="">(détection auto)</option>
+            <option value="utf-8">UTF-8</option>
+            <option value="utf-8-sig">UTF-8 BOM</option>
+            <option value="latin-1">Latin-1</option>
+            <option value="cp1252">CP1252</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="card mt-2">
+        <h3>Modèle de validation</h3>
+        <div class="form-grid">
+          <label for="template-id">Choisir un modèle :</label>
+          <select id="template-id" class="input-sm">
+            <option value="generic_default">Générique — Défaut</option>
+            <option value="generic_strict">Générique — Strict</option>
+            <option value="nakala_baseline">NAKALA — Référence</option>
+            <option value="nakala_extended">NAKALA — Étendu</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="action-row mt-2">
+        <div id="upload-error" class="msg-error" hidden></div>
+        <div id="upload-progress" class="msg-info" hidden>Téléversement en cours…</div>
+        <button class="btn btn-primary" onclick="doUpload()">Étape suivante →</button>
+      </div>
+    </section>
+
+    <!-- ================================================================
+         ÉTAPE 2 : CONFIGURATION DES COLONNES
+         ================================================================ -->
+    <section id="step-configure" class="step-section" hidden>
+      <h2>Configuration des colonnes</h2>
+      <p class="step-desc">
+        Cliquez sur un en-tête de colonne pour configurer ses règles de validation.
+        Cette étape est facultative — vous pouvez passer directement aux correctifs.
+      </p>
+
+      <div class="card preview-table-wrapper">
+        <div id="preview-table-container" style="overflow-x: auto;">
+          <div id="preview-loading" class="msg-info" style="padding: 1rem 0;">Chargement de l'aperçu…</div>
+          <table id="preview-table" class="preview-table" hidden>
+            <thead><tr id="preview-header"></tr></thead>
+            <tbody id="preview-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Column config panel — static HTML, populated dynamically -->
+      <div id="column-config-panel" class="card mt-2" hidden>
+        <div class="col-config-header">
+          <h3 class="col-config-title">Configuration — <span id="col-config-name"></span></h3>
+          <button class="btn-icon" onclick="closeColumnConfig()" title="Fermer">✕</button>
+        </div>
+        <div class="col-config-grid">
+          <div class="col-config-field col-config-full">
+            <label class="checkbox-label">
+              <input type="checkbox" id="cfg-required" />
+              Valeur obligatoire (les cellules vides seront signalées)
+            </label>
+          </div>
+          <div class="col-config-field">
+            <label for="cfg-content-type">Type de contenu</label>
+            <select id="cfg-content-type" class="input-sm">
+              <option value="">Aucun</option>
+              <option value="integer">Nombre entier</option>
+              <option value="decimal">Nombre décimal</option>
+              <option value="date">Date</option>
+              <option value="email">Adresse e-mail</option>
+              <option value="url">URL</option>
+            </select>
+          </div>
+          <div class="col-config-field col-config-checks">
+            <label class="checkbox-label">
+              <input type="checkbox" id="cfg-unique" />
+              Valeurs uniques obligatoires
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="cfg-multiline" />
+              Retours à la ligne autorisés
+            </label>
+          </div>
+          <div class="col-config-field">
+            <label for="cfg-format-preset">Format attendu</label>
+            <select id="cfg-format-preset" class="input-sm format-preset-select">
+              <option value="">Aucun</option>
+              <optgroup label="── Formats généraux">
+                <option value="year">Année (YYYY)</option>
+                <option value="yes_no">Oui / Non</option>
+                <option value="alphanum">Alphanumérique</option>
+                <option value="letters_only">Lettres uniquement</option>
+                <option value="positive_int">Nombre entier positif</option>
+              </optgroup>
+              <optgroup label="── Identifiants &amp; liens">
+                <option value="doi">DOI</option>
+                <option value="orcid">ORCID</option>
+                <option value="ark">ARK</option>
+                <option value="issn">ISSN</option>
+              </optgroup>
+              <optgroup label="── Dates">
+                <option value="w3cdtf">Date W3C-DTF (YYYY, YYYY-MM ou YYYY-MM-DD)</option>
+                <option value="iso_date">Date ISO stricte (YYYY-MM-DD)</option>
+              </optgroup>
+              <optgroup label="── Codes &amp; référentiels">
+                <option value="lang_iso639">Langue ISO 639 (fr, en, de…)</option>
+              </optgroup>
+              <optgroup label="── Avancé">
+                <option value="custom">Personnalisé (regex)…</option>
+              </optgroup>
+            </select>
+            <div id="cfg-format-hint" class="format-hint" hidden></div>
+            <div id="cfg-custom-regex-wrap" class="custom-regex-wrap" hidden>
+              <input type="text" id="cfg-regex" class="input-sm" placeholder="Expression régulière (ex : ^\d{5}$)" />
+              <span class="format-hint">Laissez vide pour désactiver. Utilisez une expression régulière Python.</span>
+            </div>
+          </div>
+          <div class="col-config-field">
+            <label>Longueur min / max</label>
+            <div class="length-row">
+              <input type="number" id="cfg-min-length" class="input-sm input-num" placeholder="Min" min="0" />
+              <span class="length-sep">–</span>
+              <input type="number" id="cfg-max-length" class="input-sm input-num" placeholder="Max" min="0" />
+            </div>
+          </div>
+          <div class="col-config-field">
+            <label for="cfg-forbidden-chars">Caractères interdits</label>
+            <input type="text" id="cfg-forbidden-chars" class="input-sm"
+              placeholder="Ex : ;|&quot; (chaque caractère saisi sera interdit)" />
+            <span class="format-hint">Saisissez les caractères à interdire, sans séparateur.</span>
+          </div>
+          <div class="col-config-field">
+            <label for="cfg-expected-case">Casse attendue</label>
+            <select id="cfg-expected-case" class="input-sm">
+              <option value="">Aucune contrainte</option>
+              <option value="upper">MAJUSCULES</option>
+              <option value="lower">minuscules</option>
+              <option value="title">Titre</option>
+            </select>
+          </div>
+          <div class="col-config-field col-config-full">
+            <label for="cfg-allowed-values">Valeurs autorisées (une par ligne)</label>
+            <textarea id="cfg-allowed-values" rows="3"
+              placeholder="Laisser vide pour désactiver cette règle"></textarea>
+          </div>
+          <!-- List section -->
+          <div class="col-config-field col-config-full list-section">
+            <div class="list-section-header">── Liste (valeurs multiples)</div>
+            <span class="format-hint">Laissez vide si la colonne ne contient pas de listes.</span>
+            <div class="list-section-body">
+              <div class="list-sep-row">
+                <label for="cfg-list-separator">Séparateur :</label>
+                <input type="text" id="cfg-list-separator" class="input-sm input-sep"
+                  maxlength="3" placeholder="ex : |" />
+              </div>
+              <div id="cfg-list-options" class="list-options">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="cfg-list-unique" />
+                  Éléments uniques dans la liste
+                </label>
+                <label class="checkbox-label">
+                  <input type="checkbox" id="cfg-list-no-empty" checked />
+                  Interdire les éléments vides
+                </label>
+                <div class="list-minmax-row">
+                  <label>Nombre min :</label>
+                  <input type="number" id="cfg-list-min-items" class="input-sm input-num" min="1" placeholder="—" />
+                  <label>max :</label>
+                  <input type="number" id="cfg-list-max-items" class="input-sm input-num" min="1" placeholder="—" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-config-actions">
+          <button class="btn btn-primary" onclick="applyColumnConfig()">Appliquer</button>
+          <span id="col-config-saved" class="col-config-saved" hidden>✓ Enregistré</span>
+        </div>
+      </div>
+
+      <div class="action-row mt-2">
+        <button class="btn btn-secondary" onclick="configureDone()">Passer (sans configuration) →</button>
+        <button class="btn btn-primary" onclick="configureDone()">Étape suivante →</button>
+      </div>
+    </section>
+
+    <!-- ================================================================
+         ÉTAPE 3 : CORRECTIFS
+         ================================================================ -->
+    <section id="step-fixes" class="step-section" hidden>
+      <h2>Correctifs d'hygiène</h2>
+      <p class="step-desc">Sélectionnez les correctifs à appliquer avant la validation.</p>
+
+      <div class="card">
+        <h3>Correctifs disponibles</h3>
+
+        <div class="fix-item">
+          <label>
+            <input type="checkbox" id="fix-trim" />
+            Supprimer les espaces en début et fin
+          </label>
+          <span class="fix-desc">Supprime les espaces superflus avant et après chaque valeur.</span>
+        </div>
+        <div class="fix-item">
+          <label>
+            <input type="checkbox" id="fix-collapse" />
+            Réduire les espaces multiples
+          </label>
+          <span class="fix-desc">Remplace toute séquence d'espaces par un seul espace.</span>
+        </div>
+        <div class="fix-item">
+          <label>
+            <input type="checkbox" id="fix-nbsp" />
+            Remplacer les espaces insécables (NBSP)
+          </label>
+          <span class="fix-desc">Remplace les espaces insécables (U+00A0) par des espaces normaux.</span>
+        </div>
+        <div class="fix-item">
+          <label>
+            <input type="checkbox" id="fix-invisible" />
+            Supprimer les caractères invisibles
+          </label>
+          <span class="fix-desc">Supprime les caractères de largeur nulle (U+200B, U+FEFF, etc.).</span>
+        </div>
+        <div class="fix-item">
+          <label>
+            <input type="checkbox" id="fix-unicode" />
+            Normaliser l'Unicode
+          </label>
+          <span class="fix-desc">Remplace les guillemets courbes, tirets fantaisie, etc. par leurs équivalents ASCII.</span>
+        </div>
+        <div class="fix-item">
+          <label>
+            <input type="checkbox" id="fix-newlines" />
+            Normaliser les retours à la ligne
+          </label>
+          <span class="fix-desc">Convertit les fins de ligne Windows (\\r\\n) en Unix (\\n).</span>
+        </div>
+
+        <div class="form-grid mt-2">
+          <label for="fix-columns">Appliquer seulement à certaines colonnes :</label>
+          <select id="fix-columns" class="input-sm">
+            <option value="">Toutes les colonnes</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="card mt-2">
+        <h3>Aperçu des modifications</h3>
+        <button class="btn btn-secondary" onclick="previewFixes()">Calculer l'aperçu</button>
+        <div id="fixes-preview" class="mt-1"></div>
+      </div>
+
+      <div class="action-row mt-2">
+        <button class="btn btn-secondary" onclick="skipFixes()">Passer (sans correctifs) →</button>
+        <button class="btn btn-primary" onclick="applyFixes()">Appliquer les correctifs →</button>
+      </div>
+    </section>
+
+    <!-- ================================================================
+         ÉTAPE 4 : VALIDATION
+         ================================================================ -->
+    <section id="step-validate" class="step-section" hidden>
+      <h2>Validation</h2>
+      <p class="step-desc">Lancement de la validation sur le fichier…</p>
+
+      <div class="progress-container" id="validate-progress">
+        <div class="spinner"></div>
+        <p>Validation en cours…</p>
+      </div>
+
+      <div id="validate-summary" hidden>
+        <div class="summary-cards">
+          <div class="summary-card summary-error">
+            <div class="summary-count" id="sum-errors">0</div>
+            <div class="summary-label">Erreur(s)</div>
+          </div>
+          <div class="summary-card summary-warning">
+            <div class="summary-count" id="sum-warnings">0</div>
+            <div class="summary-label">Avertissement(s)</div>
+          </div>
+          <div class="summary-card summary-suspicion">
+            <div class="summary-count" id="sum-suspicions">0</div>
+            <div class="summary-label">Suspicion(s)</div>
+          </div>
+          <div class="summary-card summary-total">
+            <div class="summary-count" id="sum-total">0</div>
+            <div class="summary-label">Total</div>
+          </div>
+        </div>
+        <div class="action-row mt-2">
+          <button class="btn btn-primary" onclick="goToStep('results')">Voir les résultats →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================
+         ÉTAPE 5 : RÉSULTATS
+         ================================================================ -->
+    <section id="step-results" class="step-section" hidden>
+      <h2>Résultats de la validation</h2>
+
+      <!-- Downloads -->
+      <div class="card">
+        <h3>Télécharger</h3>
+        <div class="download-buttons">
+          <a id="dl-report" class="btn btn-download" href="#" onclick="return downloadFile('rapport.txt')">
+            📄 Rapport de validation (.txt)
+          </a>
+          <a id="dl-problems" class="btn btn-download" href="#" onclick="return downloadFile('problemes.csv')">
+            📋 Liste des problèmes (.csv)
+          </a>
+          <a id="dl-xlsx" class="btn btn-download" href="#" onclick="return downloadFile('nettoye.xlsx')">
+            📊 Tableur nettoyé (.xlsx)
+          </a>
+          <a id="dl-csv" class="btn btn-download" href="#" onclick="return downloadFile('nettoye.csv')">
+            📑 Tableur nettoyé (.csv)
+          </a>
+        </div>
+      </div>
+
+      <!-- Filters -->
+      <div class="card mt-2">
+        <h3>Problèmes détectés</h3>
+        <div class="filter-bar">
+          <label>Sévérité :
+            <select id="filter-severity" onchange="loadProblems(1)">
+              <option value="">Toutes les sévérités</option>
+              <option value="ERROR">Erreur</option>
+              <option value="WARNING">Avertissement</option>
+              <option value="SUSPICION">Suspicion</option>
+            </select>
+          </label>
+          <label>Filtrer par colonne :
+            <select id="filter-column" onchange="loadProblems(1)">
+              <option value="">Toutes les colonnes</option>
+            </select>
+          </label>
+        </div>
+
+        <div id="problems-container">
+          <table class="problems-table" id="problems-table">
+            <thead>
+              <tr>
+                <th>Sévérité</th>
+                <th>Colonne</th>
+                <th>Ligne</th>
+                <th>Message</th>
+                <th>Suggestion</th>
+              </tr>
+            </thead>
+            <tbody id="problems-body"></tbody>
+          </table>
+          <div class="pagination" id="pagination"></div>
+          <div id="no-issues" class="msg-success" hidden>
+            ✅ Aucun problème détecté. Le fichier est valide !
+          </div>
+        </div>
+      </div>
+
+      <div class="action-row mt-2">
+        <button class="btn btn-secondary" onclick="resetApp()">Nouveau fichier</button>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="app-footer">
+    <p>Tablerreur — Contrôle qualité tableurs · <a href="https://github.com/anthropics/claude-code" target="_blank">Open source</a></p>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

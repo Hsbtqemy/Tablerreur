@@ -18,13 +18,15 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from spreadsheet_qa.ui.i18n import t
+
 
 class ExportDialog(QDialog):
     """Let the user pick formats and output directory for export."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Export")
+        self.setWindowTitle(t("export.title"))
         self.setMinimumWidth(450)
         self._output_dir: Path | None = None
         self._build_ui()
@@ -33,29 +35,29 @@ class ExportDialog(QDialog):
         layout = QVBoxLayout(self)
 
         # Output folder
-        folder_box = QGroupBox("Output folder")
+        folder_box = QGroupBox(t("export.group.folder"))
         folder_layout = QHBoxLayout(folder_box)
         self._folder_edit = QLineEdit()
         self._folder_edit.setReadOnly(True)
-        self._folder_edit.setPlaceholderText("Select a folder…")
-        browse_btn = QPushButton("Browse…")
+        self._folder_edit.setPlaceholderText(t("export.placeholder.folder"))
+        browse_btn = QPushButton(t("export.btn.browse"))
         browse_btn.clicked.connect(self._browse)
         folder_layout.addWidget(self._folder_edit, 1)
         folder_layout.addWidget(browse_btn)
         layout.addWidget(folder_box)
 
         # Format choices
-        fmt_box = QGroupBox("Formats")
+        fmt_box = QGroupBox(t("export.group.formats"))
         fmt_layout = QVBoxLayout(fmt_box)
-        self._xlsx_check = QCheckBox("Cleaned spreadsheet (XLSX)")
+        self._xlsx_check = QCheckBox(t("export.fmt.xlsx"))
         self._xlsx_check.setChecked(True)
-        self._csv_check = QCheckBox("Cleaned spreadsheet (CSV  —  delimiter: ;)")
+        self._csv_check = QCheckBox(t("export.fmt.csv"))
         self._csv_check.setChecked(True)
-        self._csv_bom_check = QCheckBox("  UTF-8 BOM (for Excel on Windows)")
+        self._csv_bom_check = QCheckBox(t("export.fmt.csv_bom"))
         self._csv_bom_check.setEnabled(True)
-        self._report_check = QCheckBox("Validation report (TXT)")
+        self._report_check = QCheckBox(t("export.fmt.report"))
         self._report_check.setChecked(True)
-        self._issues_csv_check = QCheckBox("Issues list (CSV  —  delimiter: ;)")
+        self._issues_csv_check = QCheckBox(t("export.fmt.issues_csv"))
         self._issues_csv_check.setChecked(True)
         fmt_layout.addWidget(self._xlsx_check)
         fmt_layout.addWidget(self._csv_check)
@@ -73,7 +75,7 @@ class ExportDialog(QDialog):
         layout.addWidget(btns)
 
     def _browse(self) -> None:
-        folder = QFileDialog.getExistingDirectory(self, "Select export folder")
+        folder = QFileDialog.getExistingDirectory(self, t("export.dialog.folder"))
         if folder:
             self._folder_edit.setText(folder)
             self._output_dir = Path(folder)

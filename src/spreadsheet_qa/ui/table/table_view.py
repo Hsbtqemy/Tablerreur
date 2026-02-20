@@ -53,8 +53,13 @@ class SpreadsheetTableView(QTableView):
 
     def scroll_to_cell(self, row: int, col: int) -> None:
         """Scroll to and select a specific cell."""
-        if self.model() is None:
+        model = self.model()
+        if model is None:
             return
-        idx = self.model().index(row, col)
+        if row < 0 or row >= model.rowCount() or col < 0 or col >= model.columnCount():
+            return
+        idx = model.index(row, col)
+        if not idx.isValid():
+            return
         self.setCurrentIndex(idx)
         self.scrollTo(idx, QAbstractItemView.ScrollHint.PositionAtCenter)

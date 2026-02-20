@@ -37,7 +37,7 @@ python run.py
 ## Troubleshooting
 
 - **No module named spreadsheet_qa** after `pip install -e ".[dev]"`: run from the project root with `python run.py` (this adds `src/` to the path). Or ensure you activated the same environment where you ran pip (e.g. `conda activate tablerreur` then `pip install -e ".[dev]"` and `python -m spreadsheet_qa` from that env).
-- **Segmentation fault on macOS**: PySide6/Qt6 can be unstable with Python 3.13 on some macOS (arm64) setups. Use **Python 3.11 or 3.12** (e.g. `conda create -n tablerreur python=3.12` then `pip install -e ".[dev]"`).
+- **Segmentation fault on macOS**: The crash comes from Qt/PySide6 (C++), not from our code — we can only avoid triggering it or change the stack. In order: (1) Use **Python 3.11 or 3.12**. (2) The app disables Qt accessibility on macOS (`QT_ACCESSIBILITY=0`) and guards the table model against out-of-bounds access. (3) If it still crashes, try an older PySide6: `pip install "PySide6>=6.6,<6.10"` then run again.
 
 ## Running tests
 
@@ -48,6 +48,7 @@ pytest
 ## Documentation
 
 - [SPEC.md](SPEC.md) — product overview
+- [docs/AGENT_README.md](docs/AGENT_README.md) — **guide pour agents / développeurs** (structure, conventions, flux, modèles)
 - [docs/architecture.md](docs/architecture.md) — software architecture
 - [docs/formats.md](docs/formats.md) — file format specifications
 - [docs/ux.md](docs/ux.md) — UX design

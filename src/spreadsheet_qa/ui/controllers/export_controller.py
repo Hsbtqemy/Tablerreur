@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from PySide6.QtWidgets import QFileDialog, QMessageBox, QWidget
 
 from spreadsheet_qa.core.exporters import CSVExporter, IssuesCSVExporter, TXTReporter, XLSXExporter
+from spreadsheet_qa.ui.i18n import t
 
 if TYPE_CHECKING:
     from spreadsheet_qa.core.issue_store import IssueStore
@@ -41,32 +42,38 @@ class ExportController:
 
     def export_xlsx(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
-            self._parent, "Export XLSX", f"cleaned_{_stamp()}.xlsx", "Excel (*.xlsx)"
+            self._parent,
+            t("export.title"),
+            f"nettoyé_{_stamp()}.xlsx",
+            "Excel (*.xlsx)",
         )
         if not path:
             return
         try:
             XLSXExporter().export(self._table_model.df, Path(path))
-            self._signals.status_message.emit(f"Exported XLSX: {path}")
+            self._signals.status_message.emit(t("status.export_done", path=path))
         except Exception as exc:
-            QMessageBox.critical(self._parent, "Export error", str(exc))
+            QMessageBox.critical(self._parent, t("export.error_title"), str(exc))
 
     def export_csv(self, bom: bool = False) -> None:
         path, _ = QFileDialog.getSaveFileName(
-            self._parent, "Export CSV (;)", f"cleaned_{_stamp()}.csv", "CSV (*.csv)"
+            self._parent,
+            t("export.title"),
+            f"nettoyé_{_stamp()}.csv",
+            "CSV (*.csv)",
         )
         if not path:
             return
         try:
             CSVExporter().export(self._table_model.df, Path(path), bom=bom)
-            self._signals.status_message.emit(f"Exported CSV: {path}")
+            self._signals.status_message.emit(t("status.export_done", path=path))
         except Exception as exc:
-            QMessageBox.critical(self._parent, "Export error", str(exc))
+            QMessageBox.critical(self._parent, t("export.error_title"), str(exc))
 
     def export_report(self, output_dir: Path | None = None) -> None:
         if output_dir is None:
             folder = QFileDialog.getExistingDirectory(
-                self._parent, "Select export folder"
+                self._parent, t("export.dialog.folder")
             )
             if not folder:
                 return
@@ -77,22 +84,20 @@ class ExportController:
 
         try:
             TXTReporter().export(
-                issues, output_dir / f"report_{stamp}.txt", meta=self._meta
+                issues, output_dir / f"rapport_{stamp}.txt", meta=self._meta
             )
             IssuesCSVExporter().export(
-                issues, output_dir / f"issues_{stamp}.csv", meta=self._meta
+                issues, output_dir / f"problèmes_{stamp}.csv", meta=self._meta
             )
-            self._signals.status_message.emit(
-                f"Exported report + issues.csv to {output_dir}"
-            )
+            self._signals.status_message.emit(t("status.export_done", path=output_dir))
         except Exception as exc:
-            QMessageBox.critical(self._parent, "Export error", str(exc))
+            QMessageBox.critical(self._parent, t("export.error_title"), str(exc))
 
     def export_all(self, output_dir: Path | None = None) -> None:
-        """Export XLSX + CSV + TXT + issues.csv to a single folder."""
+        """Export XLSX + CSV + TXT + problèmes.csv to a single folder."""
         if output_dir is None:
             folder = QFileDialog.getExistingDirectory(
-                self._parent, "Select export folder"
+                self._parent, t("export.dialog.folder")
             )
             if not folder:
                 return
@@ -103,10 +108,10 @@ class ExportController:
         issues = self._issue_store.all_issues()
 
         try:
-            XLSXExporter().export(df, output_dir / f"cleaned_{stamp}.xlsx")
-            CSVExporter().export(df, output_dir / f"cleaned_{stamp}.csv")
-            TXTReporter().export(issues, output_dir / f"report_{stamp}.txt", meta=self._meta)
-            IssuesCSVExporter().export(issues, output_dir / f"issues_{stamp}.csv", meta=self._meta)
-            self._signals.status_message.emit(f"All exports saved to {output_dir}")
+            XLSXExporter().export(df, output_dir / f"nettoyé_{stamp}.xlsx")
+            CSVExporter().export(df, output_dir / f"nettoyé_{stamp}.csv")
+            TXTReporter().export(issues, output_dir / f"rapport_{stamp}.txt", meta=self._meta)
+            IssuesCSVExporter().export(issues, output_dir / f"problèmes_{stamp}.csv", meta=self._meta)
+            self._signals.status_message.emit(t("status.export_done", path=output_dir))
         except Exception as exc:
-            QMessageBox.critical(self._parent, "Export error", str(exc))
+            QMessageBox.critical(self._parent, t("export.error_title"), str(exc))
