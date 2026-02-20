@@ -1,0 +1,91 @@
+# Tablerreur — Generic Strict template
+# Stricter thresholds than Generic Default.
+# Pseudo-missing is ERROR, multiline is ERROR, more typos caught.
+version: 1
+id: generic_strict
+name: "Generic Strict"
+scope: builtin
+type: generic
+
+rules:
+  generic.hygiene.leading_trailing_space:
+    enabled: true
+    severity: WARNING
+
+  generic.hygiene.multiple_spaces:
+    enabled: true
+    severity: WARNING
+
+  generic.hygiene.unicode_chars:
+    enabled: true
+    severity: WARNING
+
+  generic.hygiene.invisible_chars:
+    enabled: true
+    severity: WARNING
+
+  generic.pseudo_missing:
+    enabled: true
+    severity: ERROR
+    tokens: [NA, N/A, NULL, null, n/a, na, "-", "?", none, None, "#N/A", "—", "–", "...", "???"]
+
+  generic.duplicate_rows:
+    enabled: true
+    severity: WARNING
+
+  generic.unique_column:
+    enabled: true
+    severity: ERROR
+
+  generic.soft_typing:
+    enabled: true
+    severity: SUSPICION
+    min_count: 20
+    threshold: 0.90
+
+  generic.rare_values:
+    enabled: true
+    severity: SUSPICION
+    max_distinct: 50
+    max_ratio: 0.15
+
+  generic.similar_values:
+    enabled: true
+    severity: SUSPICION
+    threshold: 85
+    max_distinct: 200
+
+  generic.unexpected_multiline:
+    enabled: true
+    severity: ERROR
+
+column_groups:
+  "id_*":
+    unique: true
+    required: true
+    kind: structured
+
+  "date_*":
+    kind: structured
+
+  "desc*":
+    multiline_ok: true
+    kind: free_text_long
+
+  "description*":
+    multiline_ok: true
+    kind: free_text_long
+
+columns:
+  "*":
+    kind: free_text_short
+    required: false
+    unique: false
+    multiline_ok: false
+
+export:
+  csv_delimiter: ";"
+  csv_encoding: utf-8
+  csv_bom: false
+  multivalues_mode: in_cell
+  list_separator: "|"

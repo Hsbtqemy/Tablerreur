@@ -1,0 +1,125 @@
+# Tablerreur — NAKALA overlay template
+# Extends generic.yml with NAKALA-specific rules and policies.
+# Enable via: Settings → Overlay → NAKALA
+version: 1
+name: overlay_nakala
+
+# Required NAKALA fields
+required_columns:
+  - nakala:type
+  - nakala:title
+  - nakala:creator
+  - nakala:created
+  - nakala:license
+
+# -----------------------------------------------------------------------
+# NAKALA vocabulary rules
+# -----------------------------------------------------------------------
+rules:
+  nakala.deposit_type:
+    enabled: true
+    severity: ERROR
+    field: nakala:type
+
+  nakala.license:
+    enabled: true
+    severity: ERROR
+    field: nakala:license
+
+  nakala.language:
+    enabled: true
+    severity: WARNING
+    field: dcterms:language
+
+  nakala.created_format:
+    enabled: true
+    severity: ERROR
+    # Accepts: YYYY | YYYY-MM | YYYY-MM-DD  (W3C-DTF subset)
+    field: nakala:created
+    regex: "^\\d{4}(-\\d{2}(-\\d{2})?)?$"
+
+# -----------------------------------------------------------------------
+# NAKALA column profiles
+# -----------------------------------------------------------------------
+column_groups:
+  "title_*":
+    kind: free_text_short
+    required: true
+    multiline_ok: false
+
+  "description_*":
+    kind: free_text_long
+    multiline_ok: true
+    # '|' is allowed inside description text — do NOT flag as in-cell list
+
+  "keywords_*":
+    kind: list
+    multiline_ok: false
+    # Prefer repeated columns (keywords_1, keywords_2, …) over in-cell lists
+
+  "creator_*":
+    kind: structured
+    required: false
+    # Format: "Lastname, Firstname" optionally followed by ORCID
+
+columns:
+  "nakala:type":
+    kind: controlled
+    required: true
+    unique: false
+    rule_overrides:
+      nakala.deposit_type:
+        enabled: true
+
+  "nakala:title":
+    kind: free_text_short
+    required: true
+
+  "nakala:creator":
+    kind: structured
+    required: true
+
+  "nakala:created":
+    kind: structured
+    required: true
+    rule_overrides:
+      nakala.created_format:
+        enabled: true
+
+  "nakala:license":
+    kind: controlled
+    required: true
+    rule_overrides:
+      nakala.license:
+        enabled: true
+
+  "dcterms:language":
+    kind: controlled
+    required: false
+    rule_overrides:
+      nakala.language:
+        enabled: true
+
+# -----------------------------------------------------------------------
+# NAKALA-specific policies
+# -----------------------------------------------------------------------
+policies:
+  # Warn when in-cell | lists are used in fields that should use repeated cols
+  warn_incel_lists_in_repeatables: true
+  repeatable_fields:
+    - nakala:creator
+    - dcterms:subject
+    - keywords_*
+
+  # Recommend splitting in-cell lists to repeated columns for these fields
+  recommend_split_to_repeated:
+    - nakala:creator
+    - dcterms:subject
+
+# -----------------------------------------------------------------------
+# Export policy (NAKALA default: expanded multivalues)
+# -----------------------------------------------------------------------
+export:
+  multivalues_mode: expanded
+  list_separator: "|"
+  csv_delimiter: ";"

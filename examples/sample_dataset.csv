@@ -1,0 +1,55 @@
+Source: Tablerreur sample dataset — contains intentional issues for demonstration
+Titre;Auteur;Date;Type;Description;Licence;Langue
+"Introduction à la linguistique ";Jean Dupont;2021-03-15;Article;Un texte de présentation.;CC BY 4.0;fr
+"Méthodes qualitatives";Marie Martin ;2020-11-01;Rapport;Un rapport détaillé
+sur plusieurs lignes.;CC BY-SA 4.0;fr
+"Analyse statistique";Pierre Durand;2019-07-22;Article;"";CC BY 4.0;fr
+"Introduction à la linguistique";Jean Dupont;2021-03-15;Article;Un texte de présentation.;CC BY 4.0;fr
+"Grammaire comparée";Marie Martin;2021-03-15;Thèse;N/A;CC BY-NC 4.0;fr
+"Histoire médiévale";Sophie Bernard;2018-05-10;Chapitre;Un chapitre de livre.;CC0 1.0;fr
+"Histoire médiévale";Sophie Bernard;2018-05-10;Chapitre;Un chapitre de livre.;CC0 1.0;fr
+"Linguistique computationnelle";Luc Leclerc;2022-01-30;Article;Étude des modèles de langage.;CC BY 4.0;en
+"Phonologie du français";Ana Silva;2019-09-14;Article;Analyse phonologique.;CC BY 4.0;fr
+"Sociolinguistique";Marc Roux;2020-06-05;Rapport;NULL;CC BY-SA 4.0;fr
+"Phonologie du français ";Ana Silva;2019-09-14;Article;Analyse phonologique.;CC BY 4.0;fr
+"Traitement automatique";Luc Leclerc;2022-02-28;Artcile;TAL appliqué.;CC BY 4.0;en
+"Morphologie  verbale";Jean Dupont;2021-08-12;Article;Étude morphologique.;CC BY 4.0;fr
+"Sémantique lexicale";Claire Morin;2017-12-01;Thèse;Thèse de doctorat.;CC BY-NC 4.0;fr
+"Pragmatique du discours";Henri Petit;2016-03-20;Article;Analyse pragmatique.;CC BY 4.0;fr
+"Acquisition du langage";Fatima Zahra;2023-01-15;Article;Étude développementale.;CC BY 4.0;ar
+"Corpus linguistics";James Smith;2022-08-10;Article;English corpus study.;CC BY 4.0;en
+"Neurolinguistique";Marie-Claude Tremblay;2021-05-05;Article;Étude neurolinguistique.;CC BY 4.0;fr
+"Discours politique";Jean Dupont;2020-09-01;Rapport;-;CC BY 4.0;fr
+"Écriture et orthographe";Sophie Bernard;2019-11-11;Chapitre;Normes orthographiques.;CC0 1.0;fr
+"Dialectologie";Marc Roux;2018-04-22;Thèse;Étude dialectale.;CC BY-NC 4.0;fr
+"Traduction automatique";Ana Silva;2023-03-01;Article;Systèmes de traduction.;CC BY 4.0;fr
+"Linguistique cognitive";Claire Morin;2022-07-15;Article;Approche cognitive.;CC BY 4.0;fr
+"Communication interculturelle";Henri Petit;2021-10-10;Rapport;Rapport de communication.;CC BY-SA 4.0;fr
+"Stylistique littéraire";Luc Leclerc;2019-02-14;Thèse;Analyse stylistique.;CC BY-NC 4.0;fr
+"Analyse de discours";James Smith;2020-12-05;Article;Discourse analysis.;CC BY 4.0;en
+"Phonétique acoustique";Marie-Claude Tremblay;2018-08-30;Article;Étude acoustique.;CC BY 4.0;fr
+"Syntaxe générative";Fatima Zahra;2022-05-20;Thèse;Syntaxe formelle.;CC BY-NC 4.0;ar
+"Langue des signes";Sophie Bernard;2023-02-28;Article;Étude de la LSF.;CC0 1.0;fr
+"Bilinguisme";Jean Dupont;2017-06-17;Rapport;Étude bilingue.;CC BY 4.0;fr
+"Psycholinguistique";Marc Roux;2021-11-22;Article;Mécanismes cognitifs.;CC BY 4.0;fr
+"Littératie numérique";Marie Martin;2022-09-05;Rapport;Compétences numériques.;CC BY-SA 4.0;fr
+"Rhétorique classique";Henri Petit;2016-12-01;Chapitre;Rhétorique d'Aristote.;CC BY 4.0;fr
+"Analyse lexicale";Ana Silva;2020-04-18;Article;Analyse du lexique.;CC BY 4.0;fr
+"Sémiotique";Claire Morin;2019-07-03;Thèse;Théorie des signes.;CC BY-NC 4.0;fr
+"Politesse linguistique";Luc Leclerc;2021-03-10;Article;Normes de politesse.;CC BY 4.0;fr
+"Langage et genre";Fatima Zahra;2022-11-18;Article;Genre et langage.;CC BY 4.0;ar
+"Orthographe réformée";James Smith;2018-09-25;Rapport;Réforme de 1990.;CC BY 4.0;fr
+"Langage enfantin";Marie-Claude Tremblay;2023-04-01;Article;Acquisition précoce.;CC BY 4.0;fr
+"Créoles et pidgins";Jean Dupont;2019-01-10;Thèse;Langues de contact.;CC BY-NC 4.0;fr
+"Traitement du signal vocal";Marc Roux;2022-06-30;Article;Signal processing.;CC BY 4.0;fr
+"Grammaire fonctionnelle";Sophie Bernard;2020-08-14;Article;Approche fonctionnelle.;CC0 1.0;fr
+"Anthropologie linguistique";Marie Martin;2017-11-28;Rapport;Langage et culture.;CC BY-SA 4.0;fr
+"Lexicographie";Henri Petit;2021-07-19;Article;Dictionnaires et lexiques.;CC BY 4.0;fr
+"Linguistique de corpus";Ana Silva;2022-03-22;Article;Méthodes de corpus.;CC BY 4.0;fr
+"Pragmatique formelle";Claire Morin;2020-02-07;Article;Logique et langage.;CC BY 4.0;fr
+"Sémantique formelle";Luc Leclerc;2019-10-14;Thèse;Sémantique vériconditionnelle.;CC BY-NC 4.0;fr
+"Langue et identité";Fatima Zahra;2023-05-10;Article;Identité et langue.;CC BY 4.0;ar
+"Syntaxe des dépendances";James Smith;2018-01-20;Article;Dependency syntax.;CC BY 4.0;en
+"Interfaces syntax-sémantique";Marie-Claude Tremblay;2022-10-01;Article;Interface LF.;CC BY 4.0;fr
+"Morphologie dérivationnelle";Jean Dupont;2020-05-25;Article;Dérivation nominale.;CC BY 4.0;fr
+"Introduction à la linguistique";Jean Dupont;2021-03-15;Article;Un texte de présentation.;CC BY 4.0;fr

@@ -1,0 +1,88 @@
+# Tablerreur — NAKALA Baseline overlay
+# Activates NAKALA-specific validation on the 5 required NAKALA fields.
+# Merge this on top of a generic template via TemplateManager.
+version: 1
+id: nakala_baseline
+name: "NAKALA Baseline"
+scope: builtin
+type: overlay
+
+# Required NAKALA columns (must be present in the dataset)
+required_columns:
+  - "nakala:type"
+  - "nakala:title"
+  - "nakala:creator"
+  - "nakala:created"
+  - "nakala:license"
+
+rules:
+  # NAKALA-specific rules (implemented in core/rules/nakala_rules.py)
+  nakala.deposit_type:
+    enabled: true
+    severity: ERROR
+
+  nakala.license:
+    enabled: true
+    severity: ERROR
+
+  nakala.created_format:
+    enabled: true
+    severity: ERROR
+
+  # Keep generic hygiene active
+  generic.hygiene.leading_trailing_space:
+    enabled: true
+    severity: WARNING
+
+  generic.pseudo_missing:
+    enabled: true
+    severity: WARNING
+
+# Per-column configurations for NAKALA required fields
+columns:
+  "nakala:type":
+    kind: controlled
+    required: true
+    rule_overrides:
+      nakala.deposit_type:
+        enabled: true
+
+  "nakala:title":
+    kind: free_text_short
+    required: true
+    rule_overrides:
+      generic.pseudo_missing:
+        enabled: true
+        severity: ERROR
+
+  "nakala:creator":
+    kind: structured
+    required: true
+    # Warn when | used in-cell (suggest split to repeated columns)
+    pipe_in_cell_warning: true
+    rule_overrides:
+      generic.unexpected_multiline:
+        enabled: false
+
+  "nakala:created":
+    kind: structured
+    required: true
+    rule_overrides:
+      nakala.created_format:
+        enabled: true
+
+  "nakala:license":
+    kind: controlled
+    required: true
+    rule_overrides:
+      nakala.license:
+        enabled: true
+
+policies:
+  warn_pipe_in_repeatable_fields: true
+  allow_pipe_in_description: true
+  recommend_split_to_repeated_columns: true
+
+export:
+  multivalues_mode: expanded
+  list_separator: "|"

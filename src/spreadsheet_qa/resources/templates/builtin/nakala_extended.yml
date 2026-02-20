@@ -1,0 +1,160 @@
+# Tablerreur — NAKALA Extended overlay
+# Full NAKALA coverage including recommended fields, language validation,
+# multilingual column groups, creator format checks, and keyword columns.
+# Merge this on top of a generic template via TemplateManager.
+version: 1
+id: nakala_extended
+name: "NAKALA Extended"
+scope: builtin
+type: overlay
+
+# Required NAKALA columns
+required_columns:
+  - "nakala:type"
+  - "nakala:title"
+  - "nakala:creator"
+  - "nakala:created"
+  - "nakala:license"
+
+# Recommended columns (no error if absent, but rules activate when present)
+recommended_columns:
+  - "dcterms:description"
+  - "dcterms:language"
+  - "dcterms:subject"
+  - "dcterms:identifier"
+  - "dcterms:relation"
+
+rules:
+  # NAKALA-specific validation rules
+  nakala.deposit_type:
+    enabled: true
+    severity: ERROR
+
+  nakala.license:
+    enabled: true
+    severity: ERROR
+
+  nakala.created_format:
+    enabled: true
+    severity: ERROR
+
+  nakala.language:
+    enabled: true
+    severity: WARNING
+
+  # Generic hygiene (baseline)
+  generic.hygiene.leading_trailing_space:
+    enabled: true
+    severity: WARNING
+
+  generic.pseudo_missing:
+    enabled: true
+    severity: WARNING
+
+  generic.unexpected_multiline:
+    enabled: true
+    severity: WARNING
+
+column_groups:
+  # Multilingual title columns: title_fr, title_en, etc.
+  "nakala:title_*":
+    kind: free_text_short
+    required: false
+    rule_overrides:
+      generic.unexpected_multiline:
+        enabled: false
+
+  # Multilingual description columns
+  "dcterms:description_*":
+    kind: free_text_long
+    multiline_ok: true
+    required: false
+
+  # Keyword / subject repeated columns: keywords_*_1, keywords_*_2, …
+  "keywords_*":
+    kind: list
+    list_separator: "|"
+    rule_overrides:
+      generic.unexpected_multiline:
+        enabled: false
+
+  # Identifier / relation columns
+  "dcterms:identifier*":
+    kind: structured
+    preset: uri
+
+  "dcterms:relation*":
+    kind: structured
+    preset: uri
+
+columns:
+  "nakala:type":
+    kind: controlled
+    required: true
+    rule_overrides:
+      nakala.deposit_type:
+        enabled: true
+
+  "nakala:title":
+    kind: free_text_short
+    required: true
+    rule_overrides:
+      generic.pseudo_missing:
+        enabled: true
+        severity: ERROR
+
+  "nakala:creator":
+    kind: structured
+    required: true
+    # W3C creator format: "Lastname, Firstname" or ORCID suffix
+    preset: creator_name
+    pipe_in_cell_warning: true
+    rule_overrides:
+      generic.unexpected_multiline:
+        enabled: false
+
+  "nakala:created":
+    kind: structured
+    required: true
+    rule_overrides:
+      nakala.created_format:
+        enabled: true
+
+  "nakala:license":
+    kind: controlled
+    required: true
+    rule_overrides:
+      nakala.license:
+        enabled: true
+
+  "dcterms:description":
+    kind: free_text_long
+    multiline_ok: true
+    required: false
+    # | is allowed as text content in descriptions — do not treat as list sep
+    pipe_is_text: true
+    rule_overrides:
+      generic.unexpected_multiline:
+        enabled: false
+
+  "dcterms:language":
+    kind: controlled
+    required: false
+    rule_overrides:
+      nakala.language:
+        enabled: true
+
+  "dcterms:subject":
+    kind: list
+    required: false
+    list_separator: "|"
+    pipe_in_cell_warning: true
+
+policies:
+  warn_pipe_in_repeatable_fields: true
+  allow_pipe_in_description: true
+  recommend_split_to_repeated_columns: true
+
+export:
+  multivalues_mode: expanded
+  list_separator: "|"
