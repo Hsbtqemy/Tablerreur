@@ -206,18 +206,67 @@ class TestSoftTypingRule:
 class TestRareValuesRule:
     rule = RareValuesRule()
 
-    def test_detects_hapax(self):
-        # 5 values: 4 repeated, 1 hapax
-        vals = ["Article"] * 10 + ["Rapport"] * 8 + ["Thèse"] * 7 + ["Chapitre"] * 6 + ["Zarticle"]
+    def test_dormant_when_not_configured(self):
+        """Without detect_rare_values=True the rule produces no issues."""
+        vals = ["Article"] * 10 + ["Zarticle"]
         df = pd.DataFrame({"Type": vals})
         issues = self.rule.check(df, "Type", {})
-        assert any(i.original == "Zarticle" for i in issues)
-
-    def test_no_issue_when_too_many_distinct(self):
-        # 100 distinct → not categorical
-        df = pd.DataFrame({"ID": [str(i) for i in range(200)]})
-        issues = self.rule.check(df, "ID", {"max_distinct": 50})
         assert issues == []
+
+    def test_detects_rare_value(self):
+        """Value appearing once in a column with enough rows is flagged."""
+        vals = ["Article"] * 10 + ["Rapport"] * 8 + ["Zarticle"]
+        df = pd.DataFrame({"Type": vals})
+        issues = self.rule.check(df, "Type", {"detect_rare_values": True})
+        assert any(i.original == "Zarticle" for i in issues)
+        assert issues[0].severity == Severity.SUSPICION
+
+    def test_message_is_french(self):
+        """Issue message uses expected French wording."""
+        vals = ["A"] * 10 + ["B"]
+        df = pd.DataFrame({"Col": vals})
+        issues = self.rule.check(df, "Col", {"detect_rare_values": True})
+        assert len(issues) == 1
+        assert "n'apparaît que" in issues[0].message
+        assert "possible erreur de saisie" in issues[0].message
+
+    def test_no_suggestion(self):
+        """No auto-fix suggestion is produced."""
+        vals = ["A"] * 10 + ["B"]
+        df = pd.DataFrame({"Col": vals})
+        issues = self.rule.check(df, "Col", {"detect_rare_values": True})
+        assert issues[0].suggestion is None
+
+    def test_case_insensitive_counting(self):
+        """'OUI' and 'oui' are counted together and are not rare."""
+        # 1×OUI + 9×oui = 10 occurrences → not rare; 'non' ×5 → not rare
+        vals = ["OUI"] + ["oui"] * 9 + ["non"] * 5
+        df = pd.DataFrame({"Réponse": vals})
+        issues = self.rule.check(df, "Réponse", {"detect_rare_values": True})
+        assert not any(str(i.original).lower() == "oui" for i in issues)
+
+    def test_skipped_when_total_below_min(self):
+        """Rule does not fire when non-empty count < rare_min_total (default 10)."""
+        vals = ["A"] * 5 + ["B"]  # total = 6 < 10
+        df = pd.DataFrame({"Col": vals})
+        issues = self.rule.check(df, "Col", {"detect_rare_values": True})
+        assert issues == []
+
+    def test_custom_threshold(self):
+        """Values appearing ≤ rare_threshold times are flagged."""
+        vals = ["A"] * 10 + ["B"] * 2 + ["C"]
+        df = pd.DataFrame({"Col": vals})
+        issues = self.rule.check(df, "Col", {"detect_rare_values": True, "rare_threshold": 2})
+        originals = {i.original for i in issues}
+        assert "B" in originals
+        assert "C" in originals
+
+    def test_custom_min_total(self):
+        """Custom rare_min_total allows analysis on smaller datasets."""
+        vals = ["A"] * 5 + ["B"]  # total = 6
+        df = pd.DataFrame({"Col": vals})
+        issues = self.rule.check(df, "Col", {"detect_rare_values": True, "rare_min_total": 5})
+        assert any(i.original == "B" for i in issues)
 
 
 # ---------------------------------------------------------------------------
@@ -276,6 +325,17 @@ class TestAllowedValuesRule:
         cfg = {"allowed_values": ["fr", "en"]}
         issues = self.rule.check(df, "Lang", cfg)
         assert len(issues) == 1  # "fr|en" as a whole is not in the list
+
+    def test_allowed_values_locked_does_not_change_rule_behavior(self):
+        """allowed_values_locked is a UI-only flag; rule outcome is identical."""
+        df = pd.DataFrame({"Statut": ["A", "B", "D"]})
+        issues_locked = self.rule.check(
+            df, "Statut", {"allowed_values": ["A", "B", "C"], "allowed_values_locked": True}
+        )
+        issues_unlocked = self.rule.check(
+            df, "Statut", {"allowed_values": ["A", "B", "C"], "allowed_values_locked": False}
+        )
+        assert len(issues_locked) == len(issues_unlocked) == 1
 
 
 # ---------------------------------------------------------------------------

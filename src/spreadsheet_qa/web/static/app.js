@@ -12,6 +12,7 @@ const state = {
   columns: [],
   currentPage: 1,
   currentStep: 'upload',
+  validationDone: false,  // true once validation has been run for this job
   // Configure step
   columnConfig: {},     // { colName: { content_type, unique, ... } }
   activeColumn: null,   // name of the currently open config panel
@@ -174,21 +175,40 @@ const FORMAT_PRESETS = {
   lang_iso639:  { regex: '(?i)^[a-z]{2,3}$',                   hint: 'Accepte : fr, en, de, ita, oci. Rejette : français, FR-fr, french.' },
 };
 
-// Show/hide hint and custom regex field based on selected preset
+// Default Oui/Non values
+const YESNO_DEFAULT_TRUE  = 'oui, o, vrai, true, yes, y, 1';
+const YESNO_DEFAULT_FALSE = 'non, n, faux, false, no, 0';
+
+// Build a case-insensitive regex from Oui/Non text fields
+function _buildYesNoRegex() {
+  const trueRaw  = document.getElementById('cfg-yesno-true').value.trim();
+  const falseRaw = document.getElementById('cfg-yesno-false').value.trim();
+  const trueVals  = (trueRaw  || YESNO_DEFAULT_TRUE ).split(',').map(s => s.trim()).filter(Boolean);
+  const falseVals = (falseRaw || YESNO_DEFAULT_FALSE).split(',').map(s => s.trim()).filter(Boolean);
+  const allVals = [...trueVals, ...falseVals];
+  const escaped = allVals.map(v => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  return `(?i)^(${escaped.join('|')})$`;
+}
+
+// Show/hide hint, custom regex field, and Oui/Non fields based on selected preset
 function _updateFormatPresetUI(presetValue) {
-  const hintEl = document.getElementById('cfg-format-hint');
-  const customWrap = document.getElementById('cfg-custom-regex-wrap');
+  const hintEl      = document.getElementById('cfg-format-hint');
+  const customWrap  = document.getElementById('cfg-custom-regex-wrap');
+  const yesnoWrap   = document.getElementById('cfg-yesno-wrap');
+
+  hintEl.hidden     = true;
+  customWrap.hidden = true;
+  yesnoWrap.hidden  = true;
 
   if (presetValue === 'custom') {
-    hintEl.hidden = true;
     customWrap.hidden = false;
+  } else if (presetValue === 'yes_no') {
+    hintEl.textContent = FORMAT_PRESETS['yes_no'].hint;
+    hintEl.hidden = false;
+    yesnoWrap.hidden = false;
   } else if (presetValue && FORMAT_PRESETS[presetValue]) {
     hintEl.textContent = FORMAT_PRESETS[presetValue].hint;
     hintEl.hidden = false;
-    customWrap.hidden = true;
-  } else {
-    hintEl.hidden = true;
-    customWrap.hidden = true;
   }
 }
 
@@ -200,6 +220,16 @@ document.getElementById('cfg-format-preset')?.addEventListener('change', functio
 // Enable/disable list option fields based on separator input
 document.getElementById('cfg-list-separator')?.addEventListener('input', function () {
   _updateListOptionsState(this.value.trim());
+});
+
+// Real-time preview debounce — listen on the whole panel (event delegation)
+let _previewRuleTimer = null;
+document.getElementById('column-config-panel')?.addEventListener('input',  () => _schedulePreviewRule());
+document.getElementById('column-config-panel')?.addEventListener('change', () => _schedulePreviewRule());
+
+// Show/hide rare-value sub-options based on checkbox state
+document.getElementById('cfg-detect-rare')?.addEventListener('change', function () {
+  document.getElementById('cfg-rare-options').hidden = !this.checked;
 });
 
 function _updateListOptionsState(sepValue) {
@@ -244,9 +274,13 @@ async function loadPreview() {
       const th = document.createElement('th');
       th.textContent = col;
       th.dataset.column = col;
-      th.title = 'Cliquer pour configurer cette colonne';
       th.addEventListener('click', () => openColumnConfig(col));
-      if (_isColumnConfigured(col)) th.classList.add('column-configured');
+      if (_isColumnConfigured(col)) {
+        th.classList.add('column-configured');
+        th.title = _buildConfigSummary(state.columnConfig[col]);
+      } else {
+        th.title = 'Cliquer pour configurer cette colonne';
+      }
       headerRow.appendChild(th);
     });
 
@@ -264,10 +298,40 @@ async function loadPreview() {
 
     loadingEl.hidden = true;
     tableEl.hidden = false;
+
+    // Apply cell-level issue highlights if validation has already been run
+    if (state.validationDone) _applyCellIssueHighlights();
   } catch (err) {
     loadingEl.textContent = 'Erreur lors du chargement de l\'aperçu : ' + err.message;
     loadingEl.className = 'msg-error';
   }
+}
+
+async function _applyCellIssueHighlights() {
+  if (!state.jobId || !state.validationDone) return;
+  try {
+    const resp = await fetch(`/api/jobs/${state.jobId}/preview-issues?rows=30`);
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const issues = data.cell_issues || [];
+    if (!issues.length) return;
+
+    // Map column name → td index
+    const colIndexMap = {};
+    state.columns.forEach((col, i) => { colIndexMap[col] = i; });
+
+    const rows = document.querySelectorAll('#preview-body tr');
+    issues.forEach(issue => {
+      const tr = rows[issue.row];
+      if (!tr) return;
+      const colIdx = colIndexMap[issue.col];
+      if (colIdx == null) return;
+      const td = tr.querySelectorAll('td')[colIdx];
+      if (!td) return;
+      td.classList.add(`cell-${issue.severity}`);
+      td.title = issue.message;
+    });
+  } catch (_) { /* non-bloquant */ }
 }
 
 function openColumnConfig(colName) {
@@ -309,17 +373,52 @@ function openColumnConfig(colName) {
   document.getElementById('cfg-list-min-items').value = cfg.list_min_items != null ? cfg.list_min_items : '';
   document.getElementById('cfg-list-max-items').value = cfg.list_max_items != null ? cfg.list_max_items : '';
   _updateListOptionsState(listSep);
-  // allowed_values: list → one per line
-  const av = cfg.allowed_values;
-  document.getElementById('cfg-allowed-values').value =
-    Array.isArray(av) && av.length ? av.join('\n') : '';
-
   // Format preset: restore dropdown + conditional fields
   let preset = cfg.format_preset || '';
   if (!preset && cfg.regex) preset = 'custom';  // legacy: regex set but no preset stored
   document.getElementById('cfg-format-preset').value = preset;
   document.getElementById('cfg-regex').value = preset === 'custom' ? (cfg.regex || '') : '';
+  // Oui/Non custom values
+  document.getElementById('cfg-yesno-true').value  = cfg.yes_no_true_values  || '';
+  document.getElementById('cfg-yesno-false').value = cfg.yes_no_false_values || '';
   _updateFormatPresetUI(preset);
+
+  // Rare-value detection fields
+  const detectRare = cfg.detect_rare_values || false;
+  document.getElementById('cfg-detect-rare').checked = detectRare;
+  document.getElementById('cfg-rare-options').hidden = !detectRare;
+  document.getElementById('cfg-rare-threshold').value  = cfg.rare_threshold  != null ? cfg.rare_threshold  : 1;
+  document.getElementById('cfg-rare-min-total').value  = cfg.rare_min_total  != null ? cfg.rare_min_total  : 10;
+
+  // Allowed-values: handle lock flag
+  const avArr = cfg.allowed_values;
+  const avStr = Array.isArray(avArr) && avArr.length ? avArr.join('\n') : '';
+  const locked = cfg.allowed_values_locked || false;
+  const avEl = document.getElementById('cfg-allowed-values');
+  avEl.readOnly = locked;
+  avEl.classList.toggle('av-locked', locked);
+  document.getElementById('cfg-av-locked-msg').hidden = !locked;
+  if (locked && Array.isArray(avArr) && avArr.length > 20) {
+    avEl.value = avArr.slice(0, 20).join('\n');
+    const countEl = document.getElementById('cfg-av-count-msg');
+    countEl.textContent = `${avArr.length} valeurs autorisées`;
+    countEl.hidden = false;
+    const btn = document.getElementById('cfg-av-voir-tout');
+    btn.hidden = false;
+    btn.textContent = 'Voir tout';
+    btn.dataset.full = avStr;
+  } else {
+    avEl.value = avStr;
+    document.getElementById('cfg-av-count-msg').hidden = true;
+    document.getElementById('cfg-av-voir-tout').hidden = true;
+  }
+
+  // Vocabulaire NAKALA : restaurer la sélection et réinitialiser le statut
+  document.getElementById('cfg-nakala-vocabulary').value = cfg.nakala_vocabulary || '';
+  const nakalaStatusEl = document.getElementById('nakala-vocab-status');
+  nakalaStatusEl.hidden = true;
+  nakalaStatusEl.textContent = '';
+  nakalaStatusEl.className = 'format-hint';
 
   // Reset saved indicator
   const savedEl = document.getElementById('col-config-saved');
@@ -328,6 +427,9 @@ function openColumnConfig(colName) {
   // Show panel
   document.getElementById('column-config-panel').hidden = false;
   document.getElementById('column-config-panel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  // Trigger initial preview
+  _schedulePreviewRule();
 }
 
 function closeColumnConfig() {
@@ -346,21 +448,41 @@ function _saveCurrentPanelToState() {
 }
 
 function _readPanelValues() {
-  const avRaw = document.getElementById('cfg-allowed-values').value.trim();
-  const avList = avRaw ? avRaw.split('\n').map(s => s.trim()).filter(Boolean) : null;
+  const avEl = document.getElementById('cfg-allowed-values');
+  const avLocked = avEl.readOnly;
+  let avList = null;
+  if (!avLocked) {
+    // Editable: read from textarea
+    const avRaw = avEl.value.trim();
+    avList = avRaw ? avRaw.split('\n').map(s => s.trim()).filter(Boolean) : null;
+  } else {
+    // Locked: preserve existing values from state (don't erase with null)
+    const stateCfg = state.activeColumn ? (state.columnConfig[state.activeColumn] || {}) : {};
+    avList = stateCfg.allowed_values || null;
+  }
+
   const minLen = document.getElementById('cfg-min-length').value;
   const maxLen = document.getElementById('cfg-max-length').value;
 
   const preset = document.getElementById('cfg-format-preset').value;
   let regex = null;
   let format_preset = null;
+  let yes_no_true_values = null;
+  let yes_no_false_values = null;
   if (preset === 'custom') {
     regex = document.getElementById('cfg-regex').value.trim() || null;
     format_preset = 'custom';
+  } else if (preset === 'yes_no') {
+    yes_no_true_values  = document.getElementById('cfg-yesno-true').value.trim()  || null;
+    yes_no_false_values = document.getElementById('cfg-yesno-false').value.trim() || null;
+    regex = _buildYesNoRegex();
+    format_preset = 'yes_no';
   } else if (preset && FORMAT_PRESETS[preset]) {
     regex = FORMAT_PRESETS[preset].regex;
     format_preset = preset;
   }
+
+  const detectRare = document.getElementById('cfg-detect-rare').checked;
 
   return {
     required: document.getElementById('cfg-required').checked || false,
@@ -369,11 +491,15 @@ function _readPanelValues() {
     multiline_ok: document.getElementById('cfg-multiline').checked,
     format_preset,
     regex,
+    yes_no_true_values,
+    yes_no_false_values,
     min_length: minLen !== '' ? parseInt(minLen, 10) : null,
     max_length: maxLen !== '' ? parseInt(maxLen, 10) : null,
     forbidden_chars: document.getElementById('cfg-forbidden-chars').value || null,
     expected_case: document.getElementById('cfg-expected-case').value || null,
     allowed_values: avList,
+    allowed_values_locked: avLocked,
+    nakala_vocabulary: document.getElementById('cfg-nakala-vocabulary').value || null,
     // List fields
     list_separator: document.getElementById('cfg-list-separator').value.trim() || null,
     list_unique: document.getElementById('cfg-list-unique').checked || false,
@@ -382,6 +508,14 @@ function _readPanelValues() {
       ? parseInt(document.getElementById('cfg-list-min-items').value, 10) : null,
     list_max_items: document.getElementById('cfg-list-max-items').value !== ''
       ? parseInt(document.getElementById('cfg-list-max-items').value, 10) : null,
+    // Rare-value detection
+    detect_rare_values: detectRare,
+    rare_threshold: detectRare
+      ? (parseInt(document.getElementById('cfg-rare-threshold').value, 10) || 1)
+      : null,
+    rare_min_total: detectRare
+      ? (parseInt(document.getElementById('cfg-rare-min-total').value, 10) || 10)
+      : null,
   };
 }
 
@@ -404,11 +538,51 @@ async function applyColumnConfig() {
     savedEl.hidden = false;
     setTimeout(() => { savedEl.hidden = true; }, 2000);
 
-    // Mark configured indicator on header
-    _updateConfiguredMarker(state.activeColumn);
+    // Mark configured indicators on all header columns
+    _updateColumnBadges();
   } catch (err) {
     alert('Erreur lors de l\'enregistrement : ' + err.message);
   }
+}
+
+function _buildConfigSummary(cfg) {
+  if (!cfg) return '';
+  const parts = [];
+  if (cfg.required) parts.push('Obligatoire');
+  if (cfg.content_type) {
+    const types = { integer: 'Nombre entier', decimal: 'Nombre décimal', date: 'Date', email: 'E-mail', url: 'URL' };
+    parts.push('Type : ' + (types[cfg.content_type] || cfg.content_type));
+  }
+  if (cfg.unique) parts.push('Valeurs uniques');
+  if (cfg.format_preset && cfg.format_preset !== 'custom') {
+    const labels = { year: 'Année', yes_no: 'Oui/Non', alphanum: 'Alphanumérique',
+      letters_only: 'Lettres', positive_int: 'Entier positif', doi: 'DOI',
+      orcid: 'ORCID', ark: 'ARK', issn: 'ISSN', w3cdtf: 'Date W3C-DTF',
+      iso_date: 'Date ISO', lang_iso639: 'Langue ISO 639' };
+    parts.push('Format : ' + (labels[cfg.format_preset] || cfg.format_preset));
+  } else if (cfg.format_preset === 'custom' && cfg.regex) {
+    parts.push('Regex personnalisée');
+  }
+  if (Array.isArray(cfg.allowed_values) && cfg.allowed_values.length) {
+    parts.push(`${cfg.allowed_values.length} valeur(s) autorisée(s)`);
+  }
+  if (cfg.min_length != null || cfg.max_length != null) {
+    const lo = cfg.min_length != null ? `min ${cfg.min_length}` : '';
+    const hi = cfg.max_length != null ? `max ${cfg.max_length}` : '';
+    parts.push('Longueur : ' + [lo, hi].filter(Boolean).join(', '));
+  }
+  if (cfg.forbidden_chars) parts.push(`Chars interdits : ${cfg.forbidden_chars}`);
+  if (cfg.expected_case) {
+    const cases = { upper: 'MAJUSCULES', lower: 'minuscules', title: 'Titre' };
+    parts.push('Casse : ' + (cases[cfg.expected_case] || cfg.expected_case));
+  }
+  if (cfg.list_separator) parts.push(`Liste (séparateur "${cfg.list_separator}")`);
+  if (cfg.detect_rare_values) parts.push('Valeurs rares détectées');
+  return parts.join(' · ') || 'Configurée';
+}
+
+function _updateColumnBadges() {
+  state.columns.forEach(col => _updateConfiguredMarker(col));
 }
 
 function _updateConfiguredMarker(colName) {
@@ -416,8 +590,10 @@ function _updateConfiguredMarker(colName) {
   if (!th) return;
   if (_isColumnConfigured(colName)) {
     th.classList.add('column-configured');
+    th.title = _buildConfigSummary(state.columnConfig[colName]);
   } else {
     th.classList.remove('column-configured');
+    th.title = 'Cliquer pour configurer cette colonne';
   }
 }
 
@@ -438,6 +614,50 @@ function _isColumnConfigured(colName) {
     (Array.isArray(cfg.allowed_values) && cfg.allowed_values.length) ||
     cfg.list_separator
   );
+}
+
+async function showConfigSummary() {
+  // Auto-save any open panel
+  if (state.activeColumn) {
+    _saveCurrentPanelToState();
+    const cfg = state.columnConfig[state.activeColumn];
+    try {
+      await fetch(`/api/jobs/${state.jobId}/column-config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ columns: { [state.activeColumn]: cfg } }),
+      });
+    } catch (_) {}
+    closeColumnConfig();
+  }
+
+  // Build summary table
+  const configuredCols = state.columns.filter(col => _isColumnConfigured(col));
+  const unconfiguredCount = state.columns.length - configuredCols.length;
+
+  let html = '';
+  if (configuredCols.length > 0) {
+    html += '<table class="summary-table"><thead><tr><th>Colonne</th><th>Configuration</th></tr></thead><tbody>';
+    for (const col of configuredCols) {
+      const summary = _buildConfigSummary(state.columnConfig[col]);
+      html += `<tr><td class="summary-col-name">${esc(col)}</td><td>${esc(summary)}</td></tr>`;
+    }
+    html += '</tbody></table>';
+  } else {
+    html += '<p class="msg-info">Aucune colonne n\'a été configurée spécifiquement.</p>';
+  }
+  if (unconfiguredCount > 0) {
+    html += `<p class="summary-unconfigured">${unconfiguredCount} colonne${unconfiguredCount > 1 ? 's' : ''} sans configuration spécifique.</p>`;
+  }
+
+  document.getElementById('config-summary-content').innerHTML = html;
+  const summaryEl = document.getElementById('config-summary');
+  summaryEl.hidden = false;
+  summaryEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function hideConfigSummary() {
+  document.getElementById('config-summary').hidden = true;
 }
 
 async function configureDone() {
@@ -549,6 +769,7 @@ async function runValidation() {
 
     progEl.hidden = true;
     sumEl.hidden = false;
+    state.validationDone = true;
 
     enableStep('results');
   } catch (err) {
@@ -639,6 +860,191 @@ function downloadFile(filename) {
 }
 
 // ---------------------------------------------------------------------------
+// Aperçu temps réel (preview-rule)
+// ---------------------------------------------------------------------------
+function _schedulePreviewRule() {
+  clearTimeout(_previewRuleTimer);
+  _previewRuleTimer = setTimeout(_fetchPreviewRule, 300);
+}
+
+function _hasActiveConstraints() {
+  if (!state.activeColumn) return false;
+  const cfg = _readPanelValues();
+  return !!(
+    cfg.required || cfg.content_type || cfg.unique || cfg.format_preset ||
+    cfg.regex || cfg.min_length != null || cfg.max_length != null ||
+    cfg.forbidden_chars || cfg.expected_case ||
+    (Array.isArray(cfg.allowed_values) && cfg.allowed_values.length) ||
+    cfg.detect_rare_values
+  );
+}
+
+async function _fetchPreviewRule() {
+  const previewEl = document.getElementById('rule-preview');
+  if (!previewEl || !state.jobId || !state.activeColumn) return;
+
+  if (!_hasActiveConstraints()) {
+    previewEl.innerHTML = '<span class="rule-preview-empty">Aucune contrainte configurée.</span>';
+    return;
+  }
+
+  previewEl.innerHTML = '<span class="rule-preview-loading"><span class="spinner-sm"></span> Calcul…</span>';
+
+  try {
+    const cfg = _readPanelValues();
+    const resp = await fetch(`/api/jobs/${state.jobId}/preview-rule`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ column: state.activeColumn, config: cfg }),
+    });
+    if (!resp.ok) throw new Error('Aperçu indisponible');
+    const data = await resp.json();
+    _renderPreviewRule(previewEl, data);
+  } catch (_) {
+    previewEl.innerHTML = '<span class="rule-preview-empty">Aperçu non disponible.</span>';
+  }
+}
+
+function _renderPreviewRule(el, data) {
+  const okCount   = data.total_ok   ?? 0;
+  const failCount = data.total_fail ?? 0;
+  const sampleOk  = data.sample_ok  || [];
+  const sampleFail = data.sample_fail || [];
+
+  let html = '<div class="rp-row">';
+
+  // OK column
+  html += `<div class="rp-col rp-ok">`;
+  html += `<div class="rp-count rp-count-ok">✅ ${okCount} valeur${okCount !== 1 ? 's' : ''} valide${okCount !== 1 ? 's' : ''}</div>`;
+  if (sampleOk.length) {
+    html += '<ul class="rp-list">';
+    sampleOk.forEach(v => { html += `<li>${esc(v)}</li>`; });
+    html += '</ul>';
+  }
+  html += '</div>';
+
+  // Fail column
+  html += `<div class="rp-col rp-fail">`;
+  html += `<div class="rp-count rp-count-fail">❌ ${failCount} valeur${failCount !== 1 ? 's' : ''} en erreur</div>`;
+  if (sampleFail.length) {
+    html += '<ul class="rp-list">';
+    sampleFail.forEach(item => {
+      const val = item.value === '' ? '(vide)' : item.value;
+      const msg = item.message.length > 60 ? item.message.slice(0, 57) + '…' : item.message;
+      html += `<li title="${esc(item.message)}"><code>${esc(val)}</code> → ${esc(msg)}</li>`;
+    });
+    html += '</ul>';
+  }
+  html += '</div>';
+
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+// ---------------------------------------------------------------------------
+// Valeurs autorisées — Voir tout / Réduire
+// ---------------------------------------------------------------------------
+function _toggleAllowedValuesExpand() {
+  const avEl = document.getElementById('cfg-allowed-values');
+  const btn  = document.getElementById('cfg-av-voir-tout');
+  if (btn.textContent === 'Voir tout') {
+    avEl.value = btn.dataset.full;
+    btn.textContent = 'Réduire';
+  } else {
+    avEl.value = btn.dataset.full.split('\n').slice(0, 20).join('\n');
+    btn.textContent = 'Voir tout';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Vocabulaire distant NAKALA
+// ---------------------------------------------------------------------------
+async function loadNakalaVocabulary() {
+  const vocabName = document.getElementById('cfg-nakala-vocabulary').value;
+  const statusEl  = document.getElementById('nakala-vocab-status');
+
+  if (!vocabName) {
+    statusEl.textContent = 'Sélectionnez un vocabulaire dans la liste.';
+    statusEl.className = 'format-hint msg-warning';
+    statusEl.hidden = false;
+    return;
+  }
+
+  statusEl.textContent = 'Chargement du vocabulaire…';
+  statusEl.className = 'format-hint';
+  statusEl.hidden = false;
+
+  try {
+    const resp = await fetch(`/api/nakala/vocabulary/${vocabName}`);
+    const data = await resp.json();
+
+    if (!resp.ok) {
+      statusEl.textContent = data.detail || 'Erreur lors du chargement du vocabulaire.';
+      statusEl.className = 'format-hint msg-error';
+      return;
+    }
+
+    const values = data.values || [];
+
+    // Lock the allowed-values textarea and populate it
+    const avEl = document.getElementById('cfg-allowed-values');
+    avEl.readOnly = true;
+    avEl.classList.add('av-locked');
+    document.getElementById('cfg-av-locked-msg').hidden = false;
+
+    const countEl = document.getElementById('cfg-av-count-msg');
+    countEl.textContent = `${values.length} valeurs chargées depuis NAKALA`;
+    countEl.hidden = false;
+
+    const allStr = values.join('\n');
+    if (values.length > 20) {
+      avEl.value = values.slice(0, 20).join('\n');
+      const btn = document.getElementById('cfg-av-voir-tout');
+      btn.hidden = false;
+      btn.textContent = 'Voir tout';
+      btn.dataset.full = allStr;
+    } else {
+      avEl.value = allStr;
+      document.getElementById('cfg-av-voir-tout').hidden = true;
+    }
+
+    // Update local state directly (bypass _readPanelValues for locked values)
+    if (state.activeColumn) {
+      if (!state.columnConfig[state.activeColumn]) state.columnConfig[state.activeColumn] = {};
+      state.columnConfig[state.activeColumn].allowed_values = values;
+      state.columnConfig[state.activeColumn].allowed_values_locked = true;
+      state.columnConfig[state.activeColumn].nakala_vocabulary = vocabName;
+    }
+
+    statusEl.textContent = `${values.length} valeurs chargées depuis NAKALA.`;
+    statusEl.className = 'format-hint msg-success';
+
+    // Auto-save to server
+    if (state.jobId && state.activeColumn) {
+      try {
+        await fetch(`/api/jobs/${state.jobId}/column-config`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            columns: {
+              [state.activeColumn]: {
+                allowed_values: values,
+                allowed_values_locked: true,
+                nakala_vocabulary: vocabName,
+              },
+            },
+          }),
+        });
+        _updateColumnBadges();
+      } catch (_) { /* non-bloquant */ }
+    }
+  } catch (err) {
+    statusEl.textContent = 'Erreur : ' + err.message;
+    statusEl.className = 'format-hint msg-error';
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Réinitialisation
 // ---------------------------------------------------------------------------
 function resetApp() {
@@ -647,8 +1053,10 @@ function resetApp() {
   state.rows = 0;
   state.cols = 0;
   state.columns = [];
+  state.currentPage = 1;
   state.columnConfig = {};
   state.activeColumn = null;
+  state.validationDone = false;
 
   // Reset file input
   fileInput.value = '';
@@ -670,6 +1078,7 @@ function resetApp() {
   document.getElementById('preview-header').innerHTML = '';
   document.getElementById('preview-body').innerHTML = '';
   document.getElementById('column-config-panel').hidden = true;
+  document.getElementById('config-summary').hidden = true;
   document.getElementById('cfg-required').checked = false;
   document.getElementById('cfg-format-preset').value = '';
   document.getElementById('cfg-regex').value = '';
@@ -683,6 +1092,22 @@ function resetApp() {
   document.getElementById('cfg-list-min-items').value = '';
   document.getElementById('cfg-list-max-items').value = '';
   _updateListOptionsState('');
+  // Oui/Non
+  document.getElementById('cfg-yesno-true').value = '';
+  document.getElementById('cfg-yesno-false').value = '';
+  // Valeurs autorisées (locked)
+  const avEl = document.getElementById('cfg-allowed-values');
+  avEl.value = '';
+  avEl.readOnly = false;
+  avEl.classList.remove('av-locked');
+  document.getElementById('cfg-av-locked-msg').hidden = true;
+  document.getElementById('cfg-av-count-msg').hidden = true;
+  document.getElementById('cfg-av-voir-tout').hidden = true;
+  // Valeurs rares
+  document.getElementById('cfg-detect-rare').checked = false;
+  document.getElementById('cfg-rare-options').hidden = true;
+  document.getElementById('cfg-rare-threshold').value = 1;
+  document.getElementById('cfg-rare-min-total').value = 10;
 
   // Reset step buttons
   ['configure','fixes','validate','results'].forEach(step => {

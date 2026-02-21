@@ -41,7 +41,7 @@ def find_free_port(start: int = 8400, end: int = 8500) -> int:
     raise RuntimeError(f"Aucun port libre trouvé entre {start} et {end}.")
 
 
-def wait_for_health(url: str, timeout: float = 15.0) -> bool:
+def wait_for_health(url: str, timeout: float = 90.0) -> bool:
     """Poll *url* every 200 ms until it returns HTTP 200 or *timeout* elapses."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -143,3 +143,7 @@ def main() -> None:
                 time.sleep(1)
         except (KeyboardInterrupt, SystemExit):
             pass
+
+
+if __name__ == "__main__":
+    main()

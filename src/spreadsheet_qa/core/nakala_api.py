@@ -1,12 +1,17 @@
 """NAKALA API client with disk caching.
 
 Fetches controlled vocabularies from api.nakala.fr:
-- Deposit types
-- Licenses
-- Languages (RFC5646)
+- Deposit types (COAR resource type URIs)
+- Licenses (SPDX codes)
+- Languages (ISO 639-3 codes)
 
 All results are cached to disk as nakala_cache.json.
 Network calls are made asynchronously in a worker thread.
+
+API response formats (verified 2026-02):
+  GET /vocabularies/datatypes  → flat list of COAR URI strings
+  GET /vocabularies/licenses   → [{"code": "CC-BY-4.0", "name": "..."}, ...]
+  GET /vocabularies/languages  → [{"id": "fra", "label": "..."}, ...]
 """
 
 from __future__ import annotations
@@ -30,9 +35,9 @@ except ImportError:
 _BASE_URL = "https://api.nakala.fr"
 
 _ENDPOINTS = {
-    "deposit_types": "/vocabularies/deposittypes",
-    "licenses": "/vocabularies/licenses",
-    "languages": "/vocabularies/languages?limit=10000",
+    "deposit_types": "/vocabularies/datatypes",          # flat list of COAR URI strings
+    "licenses": "/vocabularies/licenses",                # [{"code": "CC-BY-4.0", "name": ...}]
+    "languages": "/vocabularies/languages?limit=10000",  # [{"id": "fra", "label": ...}]
 }
 
 
@@ -85,16 +90,29 @@ class NakalaClient:
         return data
 
     def fetch_deposit_types(self) -> list[str]:
+        """Return COAR resource type URIs.
+
+        The API returns a flat list of URI strings, e.g.:
+        ["http://purl.org/coar/resource_type/c_ddb1", ...]
+        """
         data = self._fetch_sync(_ENDPOINTS["deposit_types"])
-        return [item.get("id") or item.get("@id", "") for item in data if isinstance(item, dict)]
+        return [item for item in data if isinstance(item, str)]
 
     def fetch_licenses(self) -> list[str]:
+        """Return SPDX license codes.
+
+        The API returns [{"code": "CC-BY-4.0", "name": "..."}, ...].
+        """
         data = self._fetch_sync(_ENDPOINTS["licenses"])
-        return [item.get("id") or item.get("@id", "") for item in data if isinstance(item, dict)]
+        return [item["code"] for item in data if isinstance(item, dict) and "code" in item]
 
     def fetch_languages(self) -> list[str]:
+        """Return ISO 639-3 language codes.
+
+        The API returns [{"id": "fra", "label": "..."}, ...].
+        """
         data = self._fetch_sync(_ENDPOINTS["languages"])
-        return [item.get("id") or item.get("code", "") for item in data if isinstance(item, dict)]
+        return [item["id"] for item in data if isinstance(item, dict) and "id" in item]
 
     def fetch_all_async(self, on_done: Callable[[], None] | None = None) -> None:
         """Fetch all vocabularies in a background thread."""

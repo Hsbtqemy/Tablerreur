@@ -1,0 +1,16 @@
+services:
+  tablerreur:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - TABLERREUR_ENV=prod
+      - TABLERREUR_MAX_UPLOAD_MB=50
+      - TABLERREUR_CORS_ORIGINS=*
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

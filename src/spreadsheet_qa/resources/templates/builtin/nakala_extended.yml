@@ -78,19 +78,51 @@ column_groups:
       generic.unexpected_multiline:
         enabled: false
 
-  # Identifier / relation columns
+  # Identifier / relation columns (URI format)
   "dcterms:identifier*":
     kind: structured
-    preset: uri
+    regex: "^(https?://|ark:/|doi:|urn:).+"
 
   "dcterms:relation*":
     kind: structured
-    preset: uri
+    regex: "^(https?://|ark:/|doi:|urn:).+"
 
 columns:
   "nakala:type":
     kind: controlled
     required: true
+    # Offline fallback: full list of COAR resource type URIs (29 values, snapshot 2026-02)
+    allowed_values:
+      - "http://purl.org/coar/resource_type/c_c513"
+      - "http://purl.org/coar/resource_type/c_12ce"
+      - "http://purl.org/coar/resource_type/c_18cc"
+      - "http://purl.org/coar/resource_type/c_6501"
+      - "http://purl.org/coar/resource_type/c_6670"
+      - "http://purl.org/coar/resource_type/c_c94f"
+      - "http://purl.org/coar/resource_type/c_e059"
+      - "http://purl.org/coar/resource_type/c_2f33"
+      - "http://purl.org/coar/resource_type/c_12cd"
+      - "http://purl.org/coar/resource_type/c_ddb1"
+      - "http://purl.org/coar/resource_type/c_5ce6"
+      - "http://purl.org/coar/resource_type/c_1843"
+      - "http://purl.org/coar/resource_type/YC9F-HGCF"
+      - "http://purl.org/coar/resource_type/F8RT-TJK0"
+      - "http://purl.org/coar/resource_type/c_86bc"
+      - "http://purl.org/coar/resource_type/c_ba08"
+      - "http://purl.org/coar/resource_type/c_0040"
+      - "http://purl.org/coar/resource_type/c_0857"
+      - "http://purl.org/coar/resource_type/c_93fc"
+      - "http://purl.org/coar/resource_type/c_2fe3"
+      - "http://purl.org/coar/resource_type/c_816b"
+      - "http://purl.org/coar/resource_type/c_efa0"
+      - "http://purl.org/coar/resource_type/c_18cw"
+      - "http://purl.org/coar/resource_type/NHD0-W6SY"
+      - "http://purl.org/coar/resource_type/c_18cf"
+      - "http://purl.org/coar/resource_type/c_46ec"
+      - "http://purl.org/coar/resource_type/c_7ad9"
+      - "http://purl.org/coar/resource_type/c_beb9"
+      - "http://purl.org/coar/resource_type/c_e9a0"
+    allowed_values_locked: true
     rule_overrides:
       nakala.deposit_type:
         enabled: true
@@ -106,8 +138,8 @@ columns:
   "nakala:creator":
     kind: structured
     required: true
-    # W3C creator format: "Lastname, Firstname" or ORCID suffix
-    preset: creator_name
+    # Format : "Nom, Prénom" (optionnellement suivi d'un ORCID ou identifiant)
+    regex: "^[^,]+,\\s*.+"
     pipe_in_cell_warning: true
     rule_overrides:
       generic.unexpected_multiline:
@@ -123,6 +155,7 @@ columns:
   "nakala:license":
     kind: controlled
     required: true
+    # NakalaClient validates dynamically (620 SPDX codes) when online.
     rule_overrides:
       nakala.license:
         enabled: true
@@ -131,7 +164,7 @@ columns:
     kind: free_text_long
     multiline_ok: true
     required: false
-    # | is allowed as text content in descriptions — do not treat as list sep
+    # | is allowed as text content in descriptions
     pipe_is_text: true
     rule_overrides:
       generic.unexpected_multiline:
@@ -140,6 +173,8 @@ columns:
   "dcterms:language":
     kind: controlled
     required: false
+    # ISO 639-3 codes (3 letters: fra, eng, deu…)
+    # NakalaClient validates dynamically (8039 codes) when online.
     rule_overrides:
       nakala.language:
         enabled: true

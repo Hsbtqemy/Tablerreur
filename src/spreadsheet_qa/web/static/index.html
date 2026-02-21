@@ -190,6 +190,20 @@
               <input type="text" id="cfg-regex" class="input-sm" placeholder="Expression régulière (ex : ^\d{5}$)" />
               <span class="format-hint">Laissez vide pour désactiver. Utilisez une expression régulière Python.</span>
             </div>
+            <!-- Oui / Non — champs personnalisés (visible uniquement si preset = yes_no) -->
+            <div id="cfg-yesno-wrap" class="yesno-wrap" hidden>
+              <p class="format-hint yesno-intro">Personnalisez les valeurs acceptées (séparées par des virgules).</p>
+              <div class="yesno-row">
+                <label for="cfg-yesno-true">Valeurs vraies :</label>
+                <input type="text" id="cfg-yesno-true" class="input-sm"
+                  placeholder="oui, o, vrai, true, yes, y, 1" />
+              </div>
+              <div class="yesno-row">
+                <label for="cfg-yesno-false">Valeurs fausses :</label>
+                <input type="text" id="cfg-yesno-false" class="input-sm"
+                  placeholder="non, n, faux, false, no, 0" />
+              </div>
+            </div>
           </div>
           <div class="col-config-field">
             <label>Longueur min / max</label>
@@ -215,9 +229,49 @@
             </select>
           </div>
           <div class="col-config-field col-config-full">
-            <label for="cfg-allowed-values">Valeurs autorisées (une par ligne)</label>
+            <label for="cfg-allowed-values" id="cfg-av-label">Valeurs autorisées (une par ligne)</label>
+            <div id="cfg-av-locked-msg" class="av-locked-msg" hidden>
+              🔒 Liste définie par le modèle (non modifiable)
+            </div>
+            <div id="cfg-av-count-msg" class="av-count-msg" hidden></div>
             <textarea id="cfg-allowed-values" rows="3"
               placeholder="Laisser vide pour désactiver cette règle"></textarea>
+            <button id="cfg-av-voir-tout" class="btn-link" hidden
+              onclick="_toggleAllowedValuesExpand()">Voir tout</button>
+          </div>
+          <!-- Vocabulaire distant NAKALA -->
+          <div class="col-config-field col-config-full">
+            <label for="cfg-nakala-vocabulary">Vocabulaire distant (NAKALA)</label>
+            <div class="nakala-vocab-row">
+              <select id="cfg-nakala-vocabulary" class="input-sm">
+                <option value="">Aucun</option>
+                <option value="datatypes">NAKALA — Types de ressource (COAR, 29 valeurs)</option>
+                <option value="licenses">NAKALA — Licences (SPDX, 620 valeurs)</option>
+                <option value="languages">NAKALA — Langues (ISO 639-3, ~8 000 valeurs)</option>
+              </select>
+              <button class="btn btn-sm" onclick="loadNakalaVocabulary()">Charger</button>
+            </div>
+            <div id="nakala-vocab-status" class="format-hint" hidden></div>
+          </div>
+          <!-- Valeurs rares -->
+          <div class="col-config-field col-config-full">
+            <label class="checkbox-label">
+              <input type="checkbox" id="cfg-detect-rare" />
+              Signaler les valeurs rares (suspicions de fautes de saisie)
+            </label>
+            <div id="cfg-rare-options" class="rare-options" hidden>
+              <div class="rare-row">
+                <label for="cfg-rare-threshold">Seuil d'occurrences :</label>
+                <input type="number" id="cfg-rare-threshold" class="input-sm input-num"
+                  min="1" value="1" placeholder="1" />
+                <span class="format-hint">valeur ≤ seuil → signalée</span>
+              </div>
+              <div class="rare-row">
+                <label for="cfg-rare-min-total">Minimum de valeurs non vides :</label>
+                <input type="number" id="cfg-rare-min-total" class="input-sm input-num"
+                  min="1" value="10" placeholder="10" />
+              </div>
+            </div>
           </div>
           <!-- List section -->
           <div class="col-config-field col-config-full list-section">
@@ -248,15 +302,33 @@
             </div>
           </div>
         </div>
+        <!-- Aperçu de l'impact sur les données réelles -->
+        <div class="rule-preview-section">
+          <div class="rule-preview-header">── Aperçu sur vos données</div>
+          <div id="rule-preview" class="rule-preview-body">
+            <span class="rule-preview-empty">Aucune contrainte configurée.</span>
+          </div>
+        </div>
+
         <div class="col-config-actions">
           <button class="btn btn-primary" onclick="applyColumnConfig()">Appliquer</button>
           <span id="col-config-saved" class="col-config-saved" hidden>✓ Enregistré</span>
         </div>
       </div>
 
-      <div class="action-row mt-2">
+      <!-- Résumé de config (affiché avant de passer aux correctifs) -->
+      <div id="config-summary" class="card mt-2" hidden>
+        <h3>Résumé de la configuration</h3>
+        <div id="config-summary-content"></div>
+        <div class="action-row mt-2">
+          <button class="btn btn-secondary" onclick="hideConfigSummary()">← Modifier</button>
+          <button class="btn btn-primary" onclick="configureDone()">Continuer →</button>
+        </div>
+      </div>
+
+      <div class="action-row mt-2" id="configure-action-row">
         <button class="btn btn-secondary" onclick="configureDone()">Passer (sans configuration) →</button>
-        <button class="btn btn-primary" onclick="configureDone()">Étape suivante →</button>
+        <button class="btn btn-primary" onclick="showConfigSummary()">Étape suivante →</button>
       </div>
     </section>
 

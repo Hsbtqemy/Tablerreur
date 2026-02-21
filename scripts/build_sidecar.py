@@ -235,7 +235,7 @@ def main() -> None:
         stderr=subprocess.DEVNULL,
     )
     try:
-        ready = wait_for_health(test_port, timeout=15.0)
+        ready = wait_for_health(test_port, timeout=90.0)
         if ready:
             print(f"  ✓ /health a répondu sur le port {test_port}")
         else:

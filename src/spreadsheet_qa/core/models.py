@@ -91,6 +91,15 @@ class ColumnMeta:
     list_no_empty: bool = True         # reject empty items after split+trim
     violation_severity: Severity = Severity.WARNING
     nakala_field: str | None = None  # e.g. "nakala:type"
+    # Rare-value detection (generic.rare_values rule)
+    detect_rare_values: bool = False
+    rare_threshold: int = 1
+    rare_min_total: int = 10
+    # UI-only lock flag: template-defined allowed_values cannot be edited by user
+    allowed_values_locked: bool = False
+    # Oui/Non mapping: custom comma-separated true/false value lists
+    yes_no_true_values: str | None = None
+    yes_no_false_values: str | None = None
 
 
 # ---------------------------------------------------------------------------

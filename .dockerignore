@@ -1,0 +1,47 @@
+# Tauri — application desktop (non nécessaire en mode web)
+src-tauri/
+
+# Interface Qt legacy
+src/spreadsheet_qa/ui/
+
+# Tests et outils de développement
+tests/
+docs/
+scripts/
+
+# Artefacts Python
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Environnements virtuels
+.venv/
+venv/
+env/
+
+# Git
+.git/
+.github/
+
+# Node.js
+node_modules/
+
+# Artefacts macOS / distribution
+*.dmg
+*.app
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Fichiers temporaires
+"EXIT CODE: "
+"EXIT: "
+echo
