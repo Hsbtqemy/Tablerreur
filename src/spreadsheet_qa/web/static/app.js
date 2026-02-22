@@ -38,6 +38,7 @@ function goToStep(step) {
 
   // Step-specific init
   if (step === 'configure') loadPreview();
+  if (step === 'fixes') updateUndoRedoButtons();
   if (step === 'validate') runValidation();
   if (step === 'results') loadProblems(1);
 }
@@ -103,7 +104,10 @@ async function doUpload() {
   formData.append('header_row', document.getElementById('header-row').value);
   formData.append('delimiter', document.getElementById('delimiter').value);
   formData.append('encoding', document.getElementById('encoding').value);
-  formData.append('template_id', document.getElementById('template-id').value);
+  // Le modèle importé manuellement a priorité sur le sélecteur builtin
+  formData.append('template_id', _pendingTemplateFile
+    ? 'generic_default'
+    : document.getElementById('template-id').value);
 
   try {
     const resp = await fetch('/api/jobs', { method: 'POST', body: formData });
@@ -113,6 +117,11 @@ async function doUpload() {
     }
     const data = await resp.json();
     state.jobId = data.job_id;
+
+    // Appliquer le modèle personnalisé s'il y en a un
+    if (_pendingTemplateFile) {
+      await _applyPendingTemplate(state.jobId);
+    }
     state.filename = data.filename;
     state.rows = data.rows;
     state.cols = data.cols;
@@ -232,6 +241,11 @@ document.getElementById('cfg-detect-rare')?.addEventListener('change', function 
   document.getElementById('cfg-rare-options').hidden = !this.checked;
 });
 
+// Show/hide similar-values sub-options based on checkbox state
+document.getElementById('cfg-detect-similar')?.addEventListener('change', function () {
+  document.getElementById('cfg-similar-options').hidden = !this.checked;
+});
+
 function _updateListOptionsState(sepValue) {
   const optionsEl = document.getElementById('cfg-list-options');
   if (!optionsEl) return;
@@ -301,6 +315,13 @@ async function loadPreview() {
 
     // Apply cell-level issue highlights if validation has already been run
     if (state.validationDone) _applyCellIssueHighlights();
+
+    // Consume pending cell navigation (triggered from the Results step)
+    if (_pendingCellNav) {
+      const nav = _pendingCellNav;
+      _pendingCellNav = null;
+      setTimeout(() => _highlightCell(nav.rowIdx, nav.colName), 50);
+    }
   } catch (err) {
     loadingEl.textContent = 'Erreur lors du chargement de l\'aperçu : ' + err.message;
     loadingEl.className = 'msg-error';
@@ -389,6 +410,15 @@ function openColumnConfig(colName) {
   document.getElementById('cfg-rare-options').hidden = !detectRare;
   document.getElementById('cfg-rare-threshold').value  = cfg.rare_threshold  != null ? cfg.rare_threshold  : 1;
   document.getElementById('cfg-rare-min-total').value  = cfg.rare_min_total  != null ? cfg.rare_min_total  : 10;
+
+  // Similar-value detection fields
+  const detectSimilar = cfg.detect_similar_values || false;
+  const cfgDetectSimilarEl = document.getElementById('cfg-detect-similar');
+  if (cfgDetectSimilarEl) cfgDetectSimilarEl.checked = detectSimilar;
+  const cfgSimilarOptionsEl = document.getElementById('cfg-similar-options');
+  if (cfgSimilarOptionsEl) cfgSimilarOptionsEl.hidden = !detectSimilar;
+  const cfgSimilarThreshEl = document.getElementById('cfg-similar-threshold');
+  if (cfgSimilarThreshEl) cfgSimilarThreshEl.value = cfg.similar_threshold != null ? cfg.similar_threshold : 85;
 
   // Allowed-values: handle lock flag
   const avArr = cfg.allowed_values;
@@ -516,6 +546,11 @@ function _readPanelValues() {
     rare_min_total: detectRare
       ? (parseInt(document.getElementById('cfg-rare-min-total').value, 10) || 10)
       : null,
+    // Similar-value detection
+    detect_similar_values: document.getElementById('cfg-detect-similar')?.checked || false,
+    similar_threshold: document.getElementById('cfg-detect-similar')?.checked
+      ? (parseInt(document.getElementById('cfg-similar-threshold')?.value, 10) || 85)
+      : null,
   };
 }
 
@@ -612,7 +647,8 @@ function _isColumnConfigured(colName) {
     cfg.forbidden_chars ||
     cfg.expected_case ||
     (Array.isArray(cfg.allowed_values) && cfg.allowed_values.length) ||
-    cfg.list_separator
+    cfg.list_separator ||
+    cfg.detect_similar_values
   );
 }
 
@@ -730,11 +766,66 @@ async function applyFixes() {
   try {
     const resp = await fetch(`/api/jobs/${state.jobId}/fixes`, { method: 'POST', body: formData });
     if (!resp.ok) throw new Error('Échec de l\'application des correctifs');
+    await updateUndoRedoButtons();
     enableStep('validate');
     goToStep('validate');
   } catch (err) {
     alert('Erreur : ' + err.message);
   }
+}
+
+/** Annuler le dernier correctif. */
+async function undoFix() {
+  if (!state.jobId) return;
+  try {
+    const resp = await fetch(`/api/jobs/${state.jobId}/undo`, { method: 'POST' });
+    const data = await resp.json();
+    if (data.success) {
+      _showToast('↩ Correctif annulé', 'success');
+      await previewFixes();
+    } else {
+      _showToast(data.message || 'Rien à annuler.', 'warning');
+    }
+    _syncUndoRedoButtons(data.can_undo, data.can_redo);
+  } catch (err) {
+    _showToast('Erreur : ' + err.message, 'error');
+  }
+}
+
+/** Rétablir le dernier correctif annulé. */
+async function redoFix() {
+  if (!state.jobId) return;
+  try {
+    const resp = await fetch(`/api/jobs/${state.jobId}/redo`, { method: 'POST' });
+    const data = await resp.json();
+    if (data.success) {
+      _showToast('↪ Correctif rétabli', 'success');
+      await previewFixes();
+    } else {
+      _showToast(data.message || 'Rien à rétablir.', 'warning');
+    }
+    _syncUndoRedoButtons(data.can_undo, data.can_redo);
+  } catch (err) {
+    _showToast('Erreur : ' + err.message, 'error');
+  }
+}
+
+/** Interroge GET /history et met à jour les boutons undo/redo. */
+async function updateUndoRedoButtons() {
+  if (!state.jobId) return;
+  try {
+    const resp = await fetch(`/api/jobs/${state.jobId}/history`);
+    if (!resp.ok) return;
+    const data = await resp.json();
+    _syncUndoRedoButtons(data.can_undo, data.can_redo);
+  } catch (_) { /* non-bloquant */ }
+}
+
+function _syncUndoRedoButtons(canUndo, canRedo) {
+  const btnUndo = document.getElementById('btn-undo');
+  const btnRedo = document.getElementById('btn-redo');
+  if (btnUndo) btnUndo.disabled = !canUndo;
+  if (btnRedo) btnRedo.disabled = !canRedo;
 }
 
 function skipFixes() {
@@ -788,12 +879,14 @@ async function loadProblems(page) {
 
   const severity = document.getElementById('filter-severity').value;
   const column = document.getElementById('filter-column').value;
+  const statusFilter = document.getElementById('filter-status')?.value || '';
 
   const url = new URL(`/api/jobs/${state.jobId}/problems`, window.location.origin);
   url.searchParams.set('page', page);
   url.searchParams.set('per_page', '50');
   if (severity) url.searchParams.set('severity', severity);
   if (column) url.searchParams.set('column', column);
+  if (statusFilter) url.searchParams.set('status', statusFilter);
 
   try {
     const resp = await fetch(url.toString());
@@ -816,22 +909,158 @@ async function loadProblems(page) {
         const sev = p['sévérité'];
         const sevClass = sev === 'ERROR' ? 'sev-error' : sev === 'WARNING' ? 'sev-warning' : 'sev-suspicion';
         const sevLabel = sev === 'ERROR' ? 'Erreur' : sev === 'WARNING' ? 'Avertissement' : 'Suspicion';
+        const status = p['statut'] || 'OPEN';
+        const issueId = p['issue_id'] || '';
+
         const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td class="${sevClass}">${sevLabel}</td>
-          <td>${esc(p['colonne'])}</td>
-          <td>${p['ligne']}</td>
-          <td>${esc(p['message'])}</td>
-          <td>${esc(p['suggestion'] || '')}</td>
-        `;
+        tr.classList.add('problem-row-clickable');
+        if (status === 'IGNORED') tr.classList.add('issue-ignored');
+        if (status === 'EXCEPTED') tr.classList.add('issue-excepted');
+        tr.dataset.row = p['ligne'];
+        tr.dataset.col = p['colonne'];
+        tr.dataset.issueId = issueId;
+        tr.addEventListener('click', (e) => {
+          if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
+          navigateToCell(parseInt(tr.dataset.row), tr.dataset.col);
+        });
+
+        // Checkbox cell
+        const tdCheck = document.createElement('td');
+        tdCheck.className = 'td-check';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.className = 'problem-checkbox';
+        cb.dataset.issueId = issueId;
+        cb.addEventListener('change', _updateBulkActionBar);
+        tdCheck.appendChild(cb);
+        tr.appendChild(tdCheck);
+
+        const tdSev = document.createElement('td');
+        tdSev.className = sevClass;
+        tdSev.textContent = sevLabel;
+        tr.appendChild(tdSev);
+
+        const tdCol = document.createElement('td');
+        tdCol.textContent = p['colonne'];
+        tr.appendChild(tdCol);
+
+        const tdLig = document.createElement('td');
+        tdLig.textContent = p['ligne'];
+        tr.appendChild(tdLig);
+
+        const tdMsg = document.createElement('td');
+        tdMsg.textContent = p['message'];
+        tr.appendChild(tdMsg);
+
+        const tdSug = document.createElement('td');
+        tdSug.textContent = p['suggestion'] || '';
+        tr.appendChild(tdSug);
+
+        // Actions cell
+        const tdAct = document.createElement('td');
+        tdAct.className = 'td-actions';
+        if (status === 'OPEN') {
+          const bIgn = document.createElement('button');
+          bIgn.className = 'btn-status btn-ignore';
+          bIgn.textContent = 'Ignorer';
+          bIgn.title = 'Ignorer ce problème';
+          bIgn.onclick = () => setIssueStatus(issueId, 'IGNORED');
+          const bExc = document.createElement('button');
+          bExc.className = 'btn-status btn-except';
+          bExc.textContent = 'Exclure';
+          bExc.title = 'Exclure ce problème (exception documentée)';
+          bExc.onclick = () => setIssueStatus(issueId, 'EXCEPTED');
+          tdAct.appendChild(bIgn);
+          tdAct.appendChild(bExc);
+        } else {
+          const bReo = document.createElement('button');
+          bReo.className = 'btn-status btn-reopen';
+          bReo.textContent = 'Rouvrir';
+          bReo.title = 'Remettre ce problème à l\'état ouvert';
+          bReo.onclick = () => setIssueStatus(issueId, 'OPEN');
+          tdAct.appendChild(bReo);
+        }
+        tr.appendChild(tdAct);
+
+        const tdNav = document.createElement('td');
+        tdNav.innerHTML = '<span class="problem-nav-icon" title="Localiser dans le tableau">→</span>';
+        tr.appendChild(tdNav);
+
         tbody.appendChild(tr);
       }
     }
+
+    // Reset check-all and bulk bar after reload
+    const checkAll = document.getElementById('check-all-problems');
+    if (checkAll) checkAll.checked = false;
+    _updateBulkActionBar();
 
     renderPagination(page, data.pages);
   } catch (err) {
     console.error('Erreur lors du chargement des problèmes', err);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Gestion des statuts d'issues (Ignorer / Exclure / Rouvrir)
+// ---------------------------------------------------------------------------
+
+async function setIssueStatus(issueId, newStatus) {
+  if (!state.jobId || !issueId) return;
+  try {
+    const resp = await fetch(`/api/jobs/${state.jobId}/issues/${issueId}/status`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus }),
+    });
+    if (!resp.ok) {
+      const d = await resp.json().catch(() => ({}));
+      throw new Error(d.detail || 'Échec');
+    }
+    await loadProblems(state.currentPage);
+  } catch (err) {
+    _showToast('Erreur : ' + err.message, 'error');
+  }
+}
+
+async function _bulkSetStatus(status) {
+  if (!state.jobId) return;
+  const checkboxes = document.querySelectorAll('.problem-checkbox:checked');
+  const ids = Array.from(checkboxes).map(cb => cb.dataset.issueId).filter(Boolean);
+  if (!ids.length) return;
+  try {
+    const resp = await fetch(`/api/jobs/${state.jobId}/issues/bulk-status`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ issue_ids: ids, status }),
+    });
+    if (!resp.ok) throw new Error('Échec');
+    const data = await resp.json();
+    const label = status === 'IGNORED' ? 'ignoré(s)' : status === 'EXCEPTED' ? 'exclu(s)' : 'rouvert(s)';
+    _showToast(`✓ ${data.changed} problème(s) ${label}`, 'success');
+    await loadProblems(state.currentPage);
+  } catch (err) {
+    _showToast('Erreur : ' + err.message, 'error');
+  }
+}
+
+function bulkIgnoreSelected()  { return _bulkSetStatus('IGNORED'); }
+function bulkExceptSelected()  { return _bulkSetStatus('EXCEPTED'); }
+function bulkReopenSelected()  { return _bulkSetStatus('OPEN'); }
+
+function toggleAllProblems(checkbox) {
+  document.querySelectorAll('.problem-checkbox').forEach(cb => {
+    cb.checked = checkbox.checked;
+  });
+  _updateBulkActionBar();
+}
+
+function _updateBulkActionBar() {
+  const checked = document.querySelectorAll('.problem-checkbox:checked').length;
+  const bar = document.getElementById('bulk-action-bar');
+  const countEl = document.getElementById('bulk-selected-count');
+  if (bar) bar.hidden = checked === 0;
+  if (countEl) countEl.textContent = `${checked} sélectionné${checked > 1 ? 's' : ''}`;
 }
 
 function renderPagination(current, total) {
@@ -1057,10 +1286,22 @@ function resetApp() {
   state.columnConfig = {};
   state.activeColumn = null;
   state.validationDone = false;
+  _pendingCellNav = null;
+  const bulkBar = document.getElementById('bulk-action-bar');
+  if (bulkBar) bulkBar.hidden = true;
+  const checkAll = document.getElementById('check-all-problems');
+  if (checkAll) checkAll.checked = false;
 
   // Reset file input
   fileInput.value = '';
   clearFile();
+
+  // Reset modèle personnalisé Upload
+  _pendingTemplateFile = null;
+  const uploadTplInput = document.getElementById('upload-template-input');
+  if (uploadTplInput) uploadTplInput.value = '';
+  const uploadTplName = document.getElementById('upload-template-name');
+  if (uploadTplName) uploadTplName.hidden = true;
 
   // Reset fix checkboxes
   ['fix-trim','fix-collapse','fix-nbsp','fix-invisible','fix-unicode','fix-newlines'].forEach(id => {
@@ -1108,17 +1349,71 @@ function resetApp() {
   document.getElementById('cfg-rare-options').hidden = true;
   document.getElementById('cfg-rare-threshold').value = 1;
   document.getElementById('cfg-rare-min-total').value = 10;
+  // Valeurs similaires
+  const rstSimilar = document.getElementById('cfg-detect-similar');
+  if (rstSimilar) rstSimilar.checked = false;
+  const rstSimilarOpts = document.getElementById('cfg-similar-options');
+  if (rstSimilarOpts) rstSimilarOpts.hidden = true;
+  const rstSimilarThresh = document.getElementById('cfg-similar-threshold');
+  if (rstSimilarThresh) rstSimilarThresh.value = 85;
 
   // Reset step buttons
   ['configure','fixes','validate','results'].forEach(step => {
     const btn = document.querySelector(`[data-step="${step}"]`);
     if (btn) btn.disabled = true;
   });
+  _syncUndoRedoButtons(false, false);
 
   // Go back to upload
   goToStep('upload');
   document.getElementById('upload-error').hidden = true;
   document.getElementById('upload-progress').hidden = true;
+}
+
+// ---------------------------------------------------------------------------
+// Navigation cellule (étape Résultats → Configurer)
+// ---------------------------------------------------------------------------
+
+/** Navigation en attente quand le tableau n'est pas encore rendu. */
+let _pendingCellNav = null;
+
+/**
+ * Naviguer vers une cellule (row 1-based, colName) depuis l'étape Résultats.
+ * Si row > 30 : toast informatif (au-delà du preview).
+ * Sinon : basculer sur Configurer + scroll + flash.
+ */
+function navigateToCell(row1based, colName) {
+  if (row1based > 30) {
+    _showToast(
+      `Ligne ${row1based} — au-delà de l'aperçu (30 premières lignes affichées)`,
+      'warning'
+    );
+    return;
+  }
+  const rowIdx = row1based - 1;
+  if (state.currentStep === 'configure') {
+    _highlightCell(rowIdx, colName);
+  } else {
+    _pendingCellNav = { rowIdx, colName };
+    goToStep('configure');
+  }
+}
+
+/** Scroll et flash sur le <td> ciblé dans le tableau d'aperçu. */
+function _highlightCell(rowIdx, colName) {
+  const colIdx = state.columns.indexOf(colName);
+  if (colIdx < 0) return;
+  const rows = document.querySelectorAll('#preview-body tr');
+  const tr = rows[rowIdx];
+  if (!tr) return;
+  const td = tr.querySelectorAll('td')[colIdx];
+  if (!td) return;
+  td.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+  td.classList.remove('cell-highlight-flash');
+  // Force reflow pour relancer l'animation si déjà active
+  void td.offsetWidth;
+  td.classList.add('cell-highlight-flash');
+  setTimeout(() => td.classList.remove('cell-highlight-flash'), 1500);
 }
 
 // ---------------------------------------------------------------------------
@@ -1132,3 +1427,267 @@ function esc(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 }
+
+// ---------------------------------------------------------------------------
+// Export / Import de modèle — étape Configurer
+// ---------------------------------------------------------------------------
+
+/** Déclenche le téléchargement du template YAML courant. */
+async function exportTemplate() {
+  if (!state.jobId) {
+    _showToast('Aucun fichier chargé.', 'error');
+    return;
+  }
+  const configuredCols = state.columns.filter(col => _isColumnConfigured(col));
+  if (configuredCols.length === 0) {
+    _showToast('Configurez au moins une colonne avant d\'exporter.', 'warning');
+    return;
+  }
+
+  try {
+    const resp = await fetch(`/api/jobs/${state.jobId}/export-template`);
+    if (!resp.ok) throw new Error('Échec de l\'export');
+
+    // Extraire le nom de fichier depuis Content-Disposition
+    const cd = resp.headers.get('content-disposition') || '';
+    const match = cd.match(/filename="([^"]+)"/);
+    const filename = match ? match[1] : 'template.yml';
+
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+
+    _showToast('✓ Configuration exportée : ' + filename, 'success');
+  } catch (err) {
+    _showToast('✗ Erreur lors de l\'export : ' + err.message, 'error');
+  }
+}
+
+/** Ouvre le sélecteur de fichier pour l'import de modèle (étape Configurer). */
+function triggerImportTemplate() {
+  const input = document.getElementById('import-template-input');
+  if (input) input.click();
+}
+
+// Écoute du changement de fichier pour l'import dans Configurer
+document.getElementById('import-template-input')?.addEventListener('change', async function () {
+  if (!this.files.length || !state.jobId) return;
+  const file = this.files[0];
+  this.value = '';  // reset pour pouvoir re-sélectionner le même fichier
+
+  const fd = new FormData();
+  fd.append('file', file);
+
+  try {
+    const resp = await fetch(`/api/jobs/${state.jobId}/import-template`, {
+      method: 'POST',
+      body: fd,
+    });
+    const data = await resp.json();
+
+    if (!resp.ok) {
+      _showToast('✗ ' + (data.detail || 'Fichier YAML invalide'), 'error');
+      return;
+    }
+
+    // Notification avec niveau selon présence de colonnes ignorées
+    const level = data.skipped && data.skipped.length > 0 ? 'warning' : 'success';
+    const prefix = level === 'warning' ? '⚠' : '✓';
+    _showToast(prefix + ' ' + data.message, level);
+
+    // Recharger la config et rafraîchir l'aperçu
+    await _reloadColumnConfigFromServer();
+    _updateColumnBadges();
+
+    // Si un panneau est ouvert, le rafraîchir
+    if (state.activeColumn && state.columnConfig[state.activeColumn]) {
+      openColumnConfig(state.activeColumn);
+    }
+  } catch (err) {
+    _showToast('✗ Erreur lors de l\'import : ' + err.message, 'error');
+  }
+});
+
+/** Recharge la column config depuis le serveur et met à jour state.columnConfig. */
+async function _reloadColumnConfigFromServer() {
+  if (!state.jobId) return;
+  try {
+    const resp = await fetch(`/api/jobs/${state.jobId}/column-config`);
+    if (resp.ok) {
+      const data = await resp.json();
+      // Fusionner : les valeurs serveur ont priorité
+      const serverCols = data.columns || {};
+      Object.entries(serverCols).forEach(([col, cfg]) => {
+        state.columnConfig[col] = Object.assign(state.columnConfig[col] || {}, cfg);
+      });
+    }
+  } catch (_) { /* non-bloquant */ }
+}
+
+/** Affiche un toast temporaire (4 s). type: 'success' | 'warning' | 'error' */
+let _toastTimer = null;
+function _showToast(message, type) {
+  const el = document.getElementById('template-toast');
+  if (!el) return;
+
+  clearTimeout(_toastTimer);
+  el.textContent = message;
+  el.className = `template-toast toast-${type}`;
+  el.hidden = false;
+
+  _toastTimer = setTimeout(() => {
+    el.style.animation = 'none';
+    el.hidden = true;
+    el.style.animation = '';
+  }, 4000);
+}
+
+// ---------------------------------------------------------------------------
+// Import de vocabulaire — panneau de config colonne (étape Configurer)
+// ---------------------------------------------------------------------------
+
+/** Ouvre le sélecteur de fichier pour l'import de vocabulaire. */
+function triggerImportVocabulary() {
+  const input = document.getElementById('import-vocabulary-input');
+  if (input) input.click();
+}
+
+document.getElementById('import-vocabulary-input')?.addEventListener('change', async function () {
+  if (!this.files.length || !state.jobId || !state.activeColumn) return;
+  const file = this.files[0];
+  this.value = '';
+
+  const fd = new FormData();
+  fd.append('file', file);
+
+  try {
+    const resp = await fetch(`/api/jobs/${state.jobId}/import-vocabulary`, {
+      method: 'POST',
+      body: fd,
+    });
+    const data = await resp.json();
+
+    if (!resp.ok) {
+      _showToast('✗ ' + (data.detail || 'Fichier invalide'), 'error');
+      return;
+    }
+
+    // Populate allowed-values textarea (editable, non-locked)
+    const avEl = document.getElementById('cfg-allowed-values');
+    avEl.readOnly = false;
+    avEl.classList.remove('av-locked');
+    document.getElementById('cfg-av-locked-msg').hidden = true;
+    avEl.value = data.values.join('\n');
+
+    // Hide "voir tout" since we just set a fresh list
+    document.getElementById('cfg-av-count-msg').hidden = true;
+    document.getElementById('cfg-av-voir-tout').hidden = true;
+
+    // Update local state
+    if (!state.columnConfig[state.activeColumn]) state.columnConfig[state.activeColumn] = {};
+    state.columnConfig[state.activeColumn].allowed_values = data.values;
+    state.columnConfig[state.activeColumn].allowed_values_locked = false;
+
+    _showToast(`✓ ${data.count} valeurs importées depuis « ${data.name} »`, 'success');
+    _schedulePreviewRule();
+  } catch (err) {
+    _showToast('✗ Erreur lors de l\'import : ' + err.message, 'error');
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Import de modèle — étape Upload (avant création du job)
+// ---------------------------------------------------------------------------
+
+/** Fichier de modèle personnalisé sélectionné à l'étape Upload (null si aucun). */
+let _pendingTemplateFile = null;
+
+/** Ouvre le sélecteur de fichier modèle à l'étape Upload. */
+function triggerUploadTemplateInput() {
+  document.getElementById('upload-template-input')?.click();
+}
+
+// Écoute du changement de fichier pour le modèle à l'étape Upload
+document.getElementById('upload-template-input')?.addEventListener('change', function () {
+  if (!this.files.length) return;
+  _pendingTemplateFile = this.files[0];
+  const nameEl = document.getElementById('upload-template-name');
+  if (nameEl) {
+    nameEl.textContent = '📄 ' + _pendingTemplateFile.name;
+    nameEl.hidden = false;
+  }
+});
+
+/** Applique le modèle en attente sur un job fraîchement créé. */
+async function _applyPendingTemplate(jobId) {
+  if (!_pendingTemplateFile) return;
+  const fd = new FormData();
+  fd.append('file', _pendingTemplateFile);
+  try {
+    await fetch(`/api/jobs/${jobId}/import-template`, { method: 'POST', body: fd });
+  } catch (_) { /* non-bloquant — l'import est best-effort au démarrage */ }
+}
+
+// ---------------------------------------------------------------------------
+// Thème sombre / clair
+// ---------------------------------------------------------------------------
+
+function _getThemeCookie() {
+  return document.cookie.split('; ')
+    .find(row => row.startsWith('theme='))
+    ?.split('=')[1] || null;
+}
+
+function _setThemeCookie(theme) {
+  document.cookie = `theme=${theme}; max-age=${365 * 24 * 3600}; path=/; samesite=strict`;
+}
+
+function _applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  const btn = document.getElementById('theme-toggle');
+  if (btn) btn.textContent = theme === 'dark' ? '☀️' : '🌙';
+}
+
+function toggleTheme() {
+  const current = document.documentElement.dataset.theme || 'light';
+  const next = current === 'dark' ? 'light' : 'dark';
+  _applyTheme(next);
+  _setThemeCookie(next);
+}
+
+// Applique le thème au chargement (cookie > préférence système)
+(function _initTheme() {
+  const saved = _getThemeCookie();
+  if (saved) {
+    _applyTheme(saved);
+  } else if (window.matchMedia?.('(prefers-color-scheme: dark)').matches) {
+    _applyTheme('dark');
+  }
+})();
+
+// ---------------------------------------------------------------------------
+// Raccourcis clavier undo/redo (Ctrl+Z / Ctrl+Shift+Z ou Cmd+Z / Cmd+Shift+Z)
+// Actifs uniquement à l'étape Correctifs, hors champs de saisie.
+// ---------------------------------------------------------------------------
+document.addEventListener('keydown', (e) => {
+  if (state.currentStep !== 'fixes') return;
+  const tag = document.activeElement?.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+  const mod = e.ctrlKey || e.metaKey;
+  if (!mod) return;
+
+  if (e.key === 'z' && !e.shiftKey) {
+    e.preventDefault();
+    undoFix();
+  } else if ((e.key === 'z' && e.shiftKey) || e.key === 'y') {
+    e.preventDefault();
+    redoFix();
+  }
+});

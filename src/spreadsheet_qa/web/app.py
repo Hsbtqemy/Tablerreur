@@ -33,6 +33,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from spreadsheet_qa.core.commands import Command
 from spreadsheet_qa.core.dataset import DatasetLoader
 from spreadsheet_qa.core.engine import ValidationEngine
 from spreadsheet_qa.core.exporters import CSVExporter, IssuesCSVExporter, TXTReporter, XLSXExporter
@@ -76,6 +77,51 @@ _ALLOWED_CONTENT_TYPES = {
 }
 
 _logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# WebBulkFixCommand — commande undo/redo pour les correctifs d'hygiène web
+# ---------------------------------------------------------------------------
+
+class WebBulkFixCommand(Command):
+    """Wraps a batch of cell edits (hygiene fixes) as an undoable/redoable command.
+
+    Rather than holding a live DataFrame reference, it stores the pickle path
+    and applies / reverses each ``(row_idx, col, old_val, new_val)`` change by
+    reloading and re-saving the pickle on every execute/undo call.
+    This keeps the command serialisable-friendly and avoids stale df references.
+    """
+
+    def __init__(
+        self,
+        df_path: Path,
+        changes: list[tuple],
+        label: str = "Correctifs d'hygiène",
+    ) -> None:
+        self._df_path = df_path
+        # list of (row_idx, col, old_val, new_val)
+        self._changes = changes
+        self._label = label
+
+    def execute(self) -> None:
+        df = pd.read_pickle(str(self._df_path))
+        for row_idx, col, _, new_val in self._changes:
+            df.at[row_idx, col] = new_val
+        df.to_pickle(str(self._df_path))
+
+    def undo(self) -> None:
+        df = pd.read_pickle(str(self._df_path))
+        for row_idx, col, old_val, _ in self._changes:
+            df.at[row_idx, col] = old_val
+        df.to_pickle(str(self._df_path))
+
+    @property
+    def description(self) -> str:
+        return f"{self._label} ({len(self._changes)} cellule{'s' if len(self._changes) != 1 else ''})"
+
+    @property
+    def cells_count(self) -> int:
+        return len(self._changes)
 
 # ---------------------------------------------------------------------------
 # Client NAKALA — singleton avec cache disque
@@ -220,6 +266,8 @@ async def get_column_config(job_id: str):
             "detect_rare_values": _pick("detect_rare_values", False),
             "rare_threshold": _pick("rare_threshold", 1),
             "rare_min_total": _pick("rare_min_total", 10),
+            "detect_similar_values": _pick("detect_similar_values", False),
+            "similar_threshold": _pick("similar_threshold", 85),
         }
 
     return {"columns": result}
@@ -272,6 +320,7 @@ async def preview_rule(job_id: str, request: Request):
     from spreadsheet_qa.core.rules.forbidden_chars import ForbiddenCharsRule
     from spreadsheet_qa.core.rules.case_rule import CaseRule
     from spreadsheet_qa.core.rules.rare_values import RareValuesRule
+    from spreadsheet_qa.core.rules.similar_values import SimilarValuesRule
 
     # For SoftTypingRule use a lower min_count so it fires on small datasets
     preview_config = {"min_count": 5, **config}
@@ -279,7 +328,7 @@ async def preview_rule(job_id: str, request: Request):
     rules = [
         RequiredRule(), SoftTypingRule(), RegexRule(),
         AllowedValuesRule(), LengthRule(), ForbiddenCharsRule(),
-        CaseRule(), RareValuesRule(),
+        CaseRule(), RareValuesRule(), SimilarValuesRule(),
     ]
 
     all_issues = []
@@ -455,7 +504,8 @@ async def apply_fixes(
     }
     job.fixes_applied = fixes_applied
 
-    cells_fixed = 0
+    # Compute changes (before/after) without modifying df in-place
+    changes: list[tuple] = []
     for col in target_cols:
         if col not in df.columns:
             continue
@@ -466,16 +516,18 @@ async def apply_fixes(
             orig = str(val)
             fixed = _apply_fixes(orig, fixes_applied)
             if fixed != orig:
-                df.at[row_idx, col] = fixed
-                cells_fixed += 1
+                changes.append((row_idx, col, orig, fixed))
 
-    job.cells_fixed = cells_fixed
-    # Persist updated DataFrame
-    df.to_pickle(str(job._df_path))
+    if changes:
+        # CommandHistory.push() calls execute() → applies changes + saves pickle
+        cmd = WebBulkFixCommand(job._df_path, changes)
+        job.command_history.push(cmd)
+
+    job.cells_fixed = len(changes)
     job.state = JobState.PENDING
     job_manager.update(job)
 
-    return {"cells_fixed": cells_fixed, "state": job.state.value}
+    return {"cells_fixed": len(changes), "state": job.state.value}
 
 
 def _apply_fixes(value: str, opts: dict[str, bool]) -> str:
@@ -494,6 +546,65 @@ def _apply_fixes(value: str, opts: dict[str, bool]) -> str:
     if opts.get("normalize_newlines"):
         value = value.replace("\r\n", "\n").replace("\r", "\n")
     return value
+
+
+@app.get("/api/jobs/{job_id}/history")
+async def get_fix_history(job_id: str):
+    """Return the current undo/redo state for a job's fix history."""
+    job = _get_job(job_id)
+    h = job.command_history
+    return {
+        "can_undo": h.can_undo,
+        "can_redo": h.can_redo,
+        "undo_count": h.undo_count,
+        "redo_count": h.redo_count,
+    }
+
+
+@app.post("/api/jobs/{job_id}/undo")
+async def undo_fix(job_id: str):
+    """Undo the last applied fix batch."""
+    job = _get_job(job_id)
+    h = job.command_history
+    if not h.can_undo:
+        return {
+            "success": False,
+            "message": "Rien à annuler.",
+            "can_undo": False,
+            "can_redo": h.can_redo,
+        }
+    h.undo()
+    job_manager.update(job)
+    return {
+        "success": True,
+        "action": "undo",
+        "message": "Correctif annulé.",
+        "can_undo": h.can_undo,
+        "can_redo": h.can_redo,
+    }
+
+
+@app.post("/api/jobs/{job_id}/redo")
+async def redo_fix(job_id: str):
+    """Re-apply the last undone fix batch."""
+    job = _get_job(job_id)
+    h = job.command_history
+    if not h.can_redo:
+        return {
+            "success": False,
+            "message": "Rien à rétablir.",
+            "can_undo": h.can_undo,
+            "can_redo": False,
+        }
+    h.redo()
+    job_manager.update(job)
+    return {
+        "success": True,
+        "action": "redo",
+        "message": "Correctif rétabli.",
+        "can_undo": h.can_undo,
+        "can_redo": h.can_redo,
+    }
 
 
 @app.post("/api/jobs/{job_id}/fixes/preview")
@@ -613,9 +724,18 @@ async def validate_job(job_id: str):
             row=issue.row + 1,
             message=issue.message,
             suggestion=str(issue.suggestion) if issue.suggestion is not None else "",
+            issue_id=issue.id,
         )
         for issue in issues
     ]
+
+    # Save issues as pickle for export regeneration when statuses change
+    issues_path = job.work_dir / "issues.pkl"
+    with open(str(issues_path), "wb") as _fh:
+        pickle.dump(issues, _fh)
+    job._issues_path = issues_path
+    job.issue_statuses = {}
+    job.exports_dirty = False
 
     # Generate downloadable outputs
     _generate_outputs(job, df, issues)
@@ -715,16 +835,34 @@ async def get_problems(
     per_page: int = 50,
     severity: str = "",
     column: str = "",
+    status: str = "",
 ):
     """Return a paginated, filtered list of problems for a job."""
-    job = _get_job(job_id)
-    problems = job.problems
+    from collections import Counter
 
-    # Filter
+    job = _get_job(job_id)
+
+    # Apply issue_statuses overrides to effective status
+    overrides = job.issue_statuses
+    effective: list[ProblemRow] = []
+    for p in job.problems:
+        eff_status = overrides.get(p.issue_id, p.status) if p.issue_id else p.status
+        if eff_status != p.status:
+            from dataclasses import replace as _dc_replace
+            p = _dc_replace(p, status=eff_status)
+        effective.append(p)
+
+    # Status breakdown (before further filters)
+    status_counts = Counter(p.status for p in effective)
+
+    # Filters
+    problems = effective
     if severity:
         problems = [p for p in problems if p.severity == severity]
     if column:
         problems = [p for p in problems if p.column == column]
+    if status:
+        problems = [p for p in problems if p.status == status]
 
     total = len(problems)
     start = (page - 1) * per_page
@@ -736,8 +874,15 @@ async def get_problems(
         "page": page,
         "per_page": per_page,
         "pages": max(1, (total + per_page - 1) // per_page),
+        "statuts": {
+            "OPEN": status_counts.get("OPEN", 0),
+            "IGNORED": status_counts.get("IGNORED", 0),
+            "EXCEPTED": status_counts.get("EXCEPTED", 0),
+            "FIXED": status_counts.get("FIXED", 0),
+        },
         "problèmes": [
             {
+                "issue_id": p.issue_id,
                 "sévérité": p.severity,
                 "statut": p.status,
                 "colonne": p.column,
@@ -748,6 +893,119 @@ async def get_problems(
             for p in page_items
         ],
     }
+
+
+# ---------------------------------------------------------------------------
+# Issue status management
+# ---------------------------------------------------------------------------
+
+_VALID_USER_STATUSES = {"OPEN", "IGNORED", "EXCEPTED"}
+
+
+@app.put("/api/jobs/{job_id}/issues/{issue_id}/status")
+async def set_issue_status(job_id: str, issue_id: str, request: Request):
+    """Set the status of a single issue (OPEN / IGNORED / EXCEPTED)."""
+    job = _get_job(job_id)
+    body = await request.json()
+    new_status: str = body.get("status", "OPEN")
+
+    if new_status not in _VALID_USER_STATUSES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Statut invalide : {new_status!r}. Valeurs acceptées : OPEN, IGNORED, EXCEPTED.",
+        )
+
+    known_ids = {p.issue_id for p in job.problems if p.issue_id}
+    if issue_id not in known_ids:
+        raise HTTPException(status_code=404, detail="Problème introuvable")
+
+    if new_status == "OPEN":
+        job.issue_statuses.pop(issue_id, None)
+    else:
+        job.issue_statuses[issue_id] = new_status
+    job.exports_dirty = True
+    job_manager.update(job)
+    return {"ok": True, "issue_id": issue_id, "status": new_status}
+
+
+@app.put("/api/jobs/{job_id}/issues/bulk-status")
+async def set_issues_bulk_status(job_id: str, request: Request):
+    """Set the status of multiple issues at once."""
+    job = _get_job(job_id)
+    body = await request.json()
+    issue_ids: list[str] = body.get("issue_ids", [])
+    new_status: str = body.get("status", "IGNORED")
+
+    if new_status not in _VALID_USER_STATUSES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Statut invalide : {new_status!r}. Valeurs acceptées : OPEN, IGNORED, EXCEPTED.",
+        )
+
+    known_ids = {p.issue_id for p in job.problems if p.issue_id}
+    changed = 0
+    for iid in issue_ids:
+        if iid in known_ids:
+            if new_status == "OPEN":
+                job.issue_statuses.pop(iid, None)
+            else:
+                job.issue_statuses[iid] = new_status
+            changed += 1
+
+    if changed:
+        job.exports_dirty = True
+        job_manager.update(job)
+
+    return {"ok": True, "changed": changed, "status": new_status}
+
+
+def _regenerate_status_exports(job: "Job") -> None:
+    """Rebuild TXT report and issues CSV with updated issue statuses."""
+    if not job._issues_path or not job._issues_path.exists():
+        return
+    try:
+        with open(str(job._issues_path), "rb") as _fh:
+            issues = pickle.load(_fh)
+    except Exception:
+        return
+
+    # Apply overrides via dataclasses.replace (keeps original pickle intact)
+    from dataclasses import replace as _dc_replace
+    modified: list = []
+    for iss in issues:
+        if iss.id in job.issue_statuses:
+            modified.append(_dc_replace(iss, status=IssueStatus(job.issue_statuses[iss.id])))
+        else:
+            modified.append(iss)
+
+    out = job.work_dir / "exports"
+    try:
+        from spreadsheet_qa.core.models import DatasetMeta
+        meta = DatasetMeta(
+            file_path=str(job.upload_path),
+            encoding="utf-8",
+            delimiter=None,
+            sheet_name=None,
+            header_row=0,
+            skip_rows=0,
+            original_shape=(job.rows, job.cols),
+            column_order=job.columns,
+            fingerprint="",
+        )
+    except Exception:
+        meta = None
+
+    try:
+        TXTReporter().export(modified, out / "rapport.txt", meta=meta)
+    except Exception:
+        pass
+    try:
+        IssuesCSVExporter().export(modified, out / "problèmes.csv", meta=meta)
+    except Exception:
+        pass
+
+    job.exports_dirty = False
+    job_manager.update(job)
 
 
 # ---------------------------------------------------------------------------
@@ -776,6 +1034,10 @@ async def download_file(job_id: str, filename: str):
     resolved = allowed.get(filename)
     if not resolved:
         raise HTTPException(status_code=404, detail="Fichier non trouvé")
+
+    # Regenerate status-dependent exports when statuses have changed
+    if job.exports_dirty and resolved in ("rapport.txt", "problèmes.csv"):
+        _regenerate_status_exports(job)
 
     file_path = exports_dir / resolved
     if not file_path.exists():
@@ -895,6 +1157,8 @@ _COLUMN_DEFAULTS: dict[str, Any] = {
     "detect_rare_values": False,
     "rare_threshold": 1,
     "rare_min_total": 10,
+    "detect_similar_values": False,
+    "similar_threshold": 85,
 }
 
 # Max size for imported template YAML files
@@ -985,6 +1249,74 @@ async def export_template(job_id: str):
         media_type="application/x-yaml",
         headers={"Content-Disposition": f'attachment; filename="{export_filename}"'},
     )
+
+
+_MAX_VOCABULARY_BYTES = 5 * 1024 * 1024  # 5 Mo
+
+
+@app.post("/api/jobs/{job_id}/import-vocabulary")
+async def import_vocabulary(job_id: str, file: UploadFile = File(...)):
+    """Import a vocabulary file (.yml/.yaml or .txt) and return the parsed list.
+
+    Supported formats:
+      - YAML dict: { name: str, values: [str, ...] }
+      - YAML dict: { values: [str, ...] }
+      - YAML bare list: [val1, val2, ...]
+      - Plain text (.txt): one value per line
+
+    Returns { name, values, count }.
+    """
+    _get_job(job_id)  # validate job exists
+
+    content = await file.read()
+    if len(content) > _MAX_VOCABULARY_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail="Le fichier dépasse la taille maximale autorisée (5 Mo).",
+        )
+
+    filename_lower = (file.filename or "").lower()
+    text = content.decode("utf-8", errors="replace")
+
+    # Plain text (.txt): one value per line, no YAML parsing
+    if filename_lower.endswith(".txt"):
+        values = [line.strip() for line in text.splitlines() if line.strip()]
+        if not values:
+            raise HTTPException(
+                status_code=422,
+                detail="Le fichier ne contient pas de liste de valeurs valide.",
+            )
+        name = Path(file.filename or "vocabulaire").stem
+        return {"name": name, "values": values, "count": len(values)}
+
+    # YAML
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError:
+        raise HTTPException(
+            status_code=422,
+            detail="Le fichier ne contient pas de liste de valeurs valide.",
+        )
+
+    values: list[str] | None = None
+    name = "Vocabulaire importé"
+
+    if isinstance(data, list):
+        values = [str(v) for v in data if v is not None]
+    elif isinstance(data, dict):
+        if "name" in data and isinstance(data["name"], str):
+            name = data["name"]
+        raw = data.get("values")
+        if isinstance(raw, list):
+            values = [str(v) for v in raw if v is not None]
+
+    if not values:
+        raise HTTPException(
+            status_code=422,
+            detail="Le fichier ne contient pas de liste de valeurs valide.",
+        )
+
+    return {"name": name, "values": values, "count": len(values)}
 
 
 @app.post("/api/jobs/{job_id}/import-template")

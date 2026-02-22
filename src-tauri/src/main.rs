@@ -3,13 +3,13 @@
 
 use std::env::consts::{ARCH, OS};
 use std::net::TcpListener;
+use std::path::PathBuf;
+use std::process::Child;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use tauri::{Manager, menu::{MenuBuilder, SubmenuBuilder, MenuItemBuilder}};
 use tauri_plugin_opener::OpenerExt;
-use tauri_plugin_shell::ShellExt;
-use tauri_plugin_shell::process::CommandChild;
 
 // ---------------------------------------------------------------------------
 // Networking helpers
@@ -74,7 +74,7 @@ fn to_base64(data: &[u8]) -> String {
 // Managed state: keeps the sidecar child alive for the app lifetime
 // ---------------------------------------------------------------------------
 
-struct SidecarState(Mutex<Option<CommandChild>>);
+struct SidecarState(Mutex<Option<Child>>);
 
 // ---------------------------------------------------------------------------
 // Entry point
@@ -82,7 +82,6 @@ struct SidecarState(Mutex<Option<CommandChild>>);
 
 fn main() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             // --- Build native menu ---
@@ -124,14 +123,56 @@ fn main() {
             let port = find_free_port(8400, 8500)
                 .expect("Aucun port libre trouvé entre 8400 et 8500");
 
-            // --- Launch the Python sidecar ---
-            let sidecar_cmd = app
-                .shell()
-                .sidecar("tablerreur-backend")?
-                .args(["--port", &port.to_string()]);
-            let (_rx, child) = sidecar_cmd.spawn()?;
+            // --- Launch the Python sidecar from the app's resource directory ---
+            //
+            // build_sidecar.py (--onedir mode) copies the bundle to:
+            //   src-tauri/binaries/tablerreur-backend-{triple}/
+            // tauri.conf.json bundles that directory via the resources array:
+            //   ["binaries/tablerreur-backend-{triple}/**/*"]
+            // Tauri preserves the relative path inside resource_dir, so at runtime:
+            //   resource_dir/binaries/tablerreur-backend-{triple}/{exe, _internal/…}
+            let exe_name = if cfg!(target_os = "windows") {
+                "tablerreur-backend.exe"
+            } else {
+                "tablerreur-backend"
+            };
+            // Build the platform triple at compile time to locate the onedir bundle.
+            let arch = if cfg!(target_arch = "aarch64") { "aarch64" } else { "x86_64" };
+            let os_part = if cfg!(target_os = "macos") { "apple-darwin" }
+                          else if cfg!(target_os = "linux") { "unknown-linux-gnu" }
+                          else { "pc-windows-msvc" };
+            let triple = format!("{arch}-{os_part}");
+            // En mode dev, Tauri ne copie pas les resources dans target/debug/.
+            // On pointe directement vers src-tauri/binaries/ via CARGO_MANIFEST_DIR.
+            let exe_path = if cfg!(dev) {
+                PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("binaries")
+                    .join(format!("tablerreur-backend-{triple}"))
+                    .join(exe_name)
+            } else {
+                let resource_dir = app.path().resource_dir()
+                    .map_err(|e| format!("Impossible de résoudre resource_dir : {e}"))?;
+                resource_dir
+                    .join("binaries")
+                    .join(format!("tablerreur-backend-{triple}"))
+                    .join(exe_name)
+            };
+            if !exe_path.exists() {
+                return Err(format!(
+                    "Sidecar introuvable : {}\n\
+                     Exécutez d'abord : python scripts/build_sidecar.py",
+                    exe_path.display()
+                ).into());
+            }
 
-            // Keep sidecar alive in managed state
+            let child = std::process::Command::new(&exe_path)
+                .args(["--port", &port.to_string()])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+                .map_err(|e| format!("Impossible de lancer le sidecar : {e}"))?;
+
+            // Keep the child process alive in managed state
             app.manage(SidecarState(Mutex::new(Some(child))));
 
             // --- Background thread: poll health then navigate ---
@@ -178,11 +219,29 @@ fn main() {
     <h1>Erreur de démarrage</h1>
     <p>Le serveur Tablerreur n'a pas pu démarrer dans les délais.</p>
     <pre id="diag">{diag}</pre>
-    <button onclick="navigator.clipboard.writeText(document.getElementById('diag').textContent).catch(function(){{}})">
-      Copier le diagnostic
-    </button>
+    <button id="copy-btn" onclick="copyDiag()">Copier le diagnostic</button>
     <p class="note">Contactez le support avec ces informations.</p>
   </div>
+  <script>
+    function copyDiag() {{
+      var t = document.getElementById('diag').textContent;
+      var btn = document.getElementById('copy-btn');
+      if (navigator.clipboard) {{
+        navigator.clipboard.writeText(t).catch(function() {{ fallbackCopy(t); }});
+      }} else {{
+        fallbackCopy(t);
+      }}
+      btn.textContent = '✓ Copié';
+    }}
+    function fallbackCopy(text) {{
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }}
+  </script>
 </body>
 </html>"#
                         );
@@ -217,8 +276,9 @@ fn main() {
                 // Kill the sidecar when the window is closed
                 if let Some(state) = window.app_handle().try_state::<SidecarState>() {
                     if let Ok(mut guard) = state.0.lock() {
-                        if let Some(child) = guard.take() {
+                        if let Some(mut child) = guard.take() {
                             let _ = child.kill();
+                            let _ = child.wait(); // reap to avoid zombie process
                         }
                     }
                 }

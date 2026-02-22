@@ -29,8 +29,8 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "externalBin": [
-      "binaries/tablerreur-backend"
+    "resources": [
+      "binaries/tablerreur-backend-aarch64-apple-darwin/**/*"
     ]
   }
 }

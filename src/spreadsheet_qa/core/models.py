@@ -100,6 +100,10 @@ class ColumnMeta:
     # Oui/Non mapping: custom comma-separated true/false value lists
     yes_no_true_values: str | None = None
     yes_no_false_values: str | None = None
+    # Similar-value detection (generic.similar_values rule)
+    detect_similar_values: bool = False
+    similar_threshold: int = 85      # minimum fuzz.ratio score to flag (0-100)
+    similar_min_distinct: int = 5    # minimum distinct values before rule runs
 
 
 # ---------------------------------------------------------------------------

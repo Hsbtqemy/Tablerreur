@@ -224,17 +224,16 @@ class TestTemplateRoundTrip:
             files={"file": ("template.yml", io.BytesIO(yaml_bytes), "application/x-yaml")},
         )
 
-        # Read back the column config of the new job
-        resp2 = self.client.get(f"/api/jobs/{job2_id}/column-config")
-        assert resp2.status_code == 200
-        cfg2 = resp2.json()["columns"]
+        # Re-export from job2 and compare column configs with the original
+        yaml2_bytes = self.client.get(f"/api/jobs/{job2_id}/export-template").content
+        cfg1 = yaml.safe_load(yaml_bytes).get("columns", {})
+        cfg2 = yaml.safe_load(yaml2_bytes).get("columns", {})
 
-        # Key fields must survive the round-trip
-        assert cfg2["titre"]["required"] is True
-        assert cfg2["titre"]["min_length"] == 3
-        assert cfg2["date"]["format_preset"] == "w3cdtf"
-        assert cfg2["langue"]["allowed_values"] == ["fra", "eng", "deu", "spa", "ita"]
-        assert cfg2["auteur"]["list_separator"] == "|"
+        for col in ("titre", "date", "langue", "auteur"):
+            assert cfg2.get(col) == cfg1.get(col), (
+                f"Colonne '{col}' diffère après round-trip:\n"
+                f"  job1: {cfg1.get(col)}\n  job2: {cfg2.get(col)}"
+            )
 
     # ------------------------------------------------------------------
     # 4. Import validation / error cases

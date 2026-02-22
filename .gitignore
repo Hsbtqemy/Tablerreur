@@ -17,3 +17,4 @@ node_modules/
 
 # Rust / Tauri build
 src-tauri/target/
+src-tauri/binaries/

@@ -10,6 +10,7 @@
   <header class="app-header">
     <h1 class="app-title">Tablerreur</h1>
     <p class="app-subtitle">Contrôle qualité pour tableurs CSV/XLSX</p>
+    <button id="theme-toggle" class="btn-icon btn-theme-toggle" onclick="toggleTheme()" title="Basculer le thème sombre / clair">🌙</button>
   </header>
 
   <!-- Step navigation -->
@@ -94,6 +95,12 @@
             <option value="nakala_extended">NAKALA — Étendu</option>
           </select>
         </div>
+        <div class="upload-template-row mt-1">
+          <span class="format-hint">ou </span>
+          <button class="btn-link" onclick="triggerUploadTemplateInput()">importer un modèle personnalisé (.yml)</button>
+          <input type="file" id="upload-template-input" accept=".yml,.yaml" hidden />
+          <span id="upload-template-name" class="upload-template-name" hidden></span>
+        </div>
       </div>
 
       <div class="action-row mt-2">
@@ -112,6 +119,20 @@
         Cliquez sur un en-tête de colonne pour configurer ses règles de validation.
         Cette étape est facultative — vous pouvez passer directement aux correctifs.
       </p>
+
+      <!-- Barre d'actions modèle -->
+      <div class="template-actions">
+        <button class="btn btn-secondary" id="btn-import-template" onclick="triggerImportTemplate()">
+          📂 Importer un modèle
+        </button>
+        <button class="btn btn-secondary" id="btn-export-template" onclick="exportTemplate()">
+          💾 Exporter la configuration
+        </button>
+      </div>
+      <input type="file" id="import-template-input" accept=".yml,.yaml" hidden />
+
+      <!-- Toast notifications -->
+      <div id="template-toast" class="template-toast" hidden role="status" aria-live="polite"></div>
 
       <div class="card preview-table-wrapper">
         <div id="preview-table-container" style="overflow-x: auto;">
@@ -238,6 +259,11 @@
               placeholder="Laisser vide pour désactiver cette règle"></textarea>
             <button id="cfg-av-voir-tout" class="btn-link" hidden
               onclick="_toggleAllowedValuesExpand()">Voir tout</button>
+            <div class="av-import-row">
+              <span class="format-hint">ou</span>
+              <button class="btn-link" onclick="triggerImportVocabulary()">Importer un vocabulaire (.yml)</button>
+              <input type="file" id="import-vocabulary-input" accept=".yml,.yaml,.txt" hidden />
+            </div>
           </div>
           <!-- Vocabulaire distant NAKALA -->
           <div class="col-config-field col-config-full">
@@ -270,6 +296,21 @@
                 <label for="cfg-rare-min-total">Minimum de valeurs non vides :</label>
                 <input type="number" id="cfg-rare-min-total" class="input-sm input-num"
                   min="1" value="10" placeholder="10" />
+              </div>
+            </div>
+          </div>
+          <!-- Valeurs similaires -->
+          <div class="col-config-field col-config-full">
+            <label class="checkbox-label">
+              <input type="checkbox" id="cfg-detect-similar" />
+              Détecter les valeurs très proches (variantes orthographiques probables)
+            </label>
+            <div id="cfg-similar-options" class="similar-options" hidden>
+              <div class="similar-row">
+                <label for="cfg-similar-threshold">Seuil de similarité (%) :</label>
+                <input type="number" id="cfg-similar-threshold" class="input-sm input-num"
+                  min="50" max="99" value="85" placeholder="85" />
+                <span class="format-hint">paire ≥ seuil → signalée (85 recommandé)</span>
               </div>
             </div>
           </div>
@@ -400,6 +441,10 @@
       </div>
 
       <div class="action-row mt-2">
+        <div class="undo-redo-bar">
+          <button id="btn-undo" class="btn btn-secondary btn-sm" onclick="undoFix()" disabled title="Annuler le dernier correctif (Ctrl+Z)">↩ Annuler</button>
+          <button id="btn-redo" class="btn btn-secondary btn-sm" onclick="redoFix()" disabled title="Rétablir (Ctrl+Shift+Z)">↪ Rétablir</button>
+        </div>
         <button class="btn btn-secondary" onclick="skipFixes()">Passer (sans correctifs) →</button>
         <button class="btn btn-primary" onclick="applyFixes()">Appliquer les correctifs →</button>
       </div>
@@ -484,17 +529,35 @@
               <option value="">Toutes les colonnes</option>
             </select>
           </label>
+          <label>Statut :
+            <select id="filter-status" onchange="loadProblems(1)">
+              <option value="">Tous les statuts</option>
+              <option value="OPEN">Ouverts</option>
+              <option value="IGNORED">Ignorés</option>
+              <option value="EXCEPTED">Exclus</option>
+            </select>
+          </label>
+        </div>
+
+        <div id="bulk-action-bar" class="bulk-action-bar" hidden>
+          <span id="bulk-selected-count" class="bulk-count">0 sélectionné(s)</span>
+          <button class="btn btn-sm btn-secondary" onclick="bulkIgnoreSelected()">Ignorer la sélection</button>
+          <button class="btn btn-sm btn-secondary" onclick="bulkExceptSelected()">Exclure la sélection</button>
+          <button class="btn btn-sm btn-secondary" onclick="bulkReopenSelected()">Rouvrir la sélection</button>
         </div>
 
         <div id="problems-container">
           <table class="problems-table" id="problems-table">
             <thead>
               <tr>
+                <th class="th-check"><input type="checkbox" id="check-all-problems" onchange="toggleAllProblems(this)" title="Tout sélectionner" /></th>
                 <th>Sévérité</th>
                 <th>Colonne</th>
                 <th>Ligne</th>
                 <th>Message</th>
                 <th>Suggestion</th>
+                <th class="th-actions">Actions</th>
+                <th class="th-nav"></th>
               </tr>
             </thead>
             <tbody id="problems-body"></tbody>

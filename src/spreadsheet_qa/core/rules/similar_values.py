@@ -1,12 +1,21 @@
-"""Similar values / typo detection using rapidfuzz.
+"""Rule: generic.similar_values
 
-Only runs on columns with ≤200 distinct non-empty values.
-Clusters near-duplicate values (ratio >= threshold) and flags them as
-SUSPICION — they may be the same entity spelled differently.
+Signals values that are very close to another value in the same column (likely
+typos or inconsistent spellings). Dormant by default — must be enabled per
+column by setting ``detect_similar_values: true`` in the column configuration.
+
+Algorithm
+---------
+- Uses ``rapidfuzz.fuzz.ratio`` for pair-wise similarity.
+- For columns with more than 500 distinct values, only rare values (count ≤ 3)
+  are compared against the full set, keeping the worst-case cost manageable.
+- The suggestion returned is the most frequent member of each similar pair.
+- One issue is emitted per flagged value (at its first occurrence in the data).
 """
 
 from __future__ import annotations
 
+from collections import Counter
 from typing import Any
 
 import pandas as pd
@@ -15,42 +24,16 @@ from spreadsheet_qa.core.models import Issue, Severity
 from spreadsheet_qa.core.rule_base import Rule, registry
 
 try:
-    from rapidfuzz import fuzz, process
+    from rapidfuzz import fuzz as _fuzz
     _RAPIDFUZZ_AVAILABLE = True
 except ImportError:
     _RAPIDFUZZ_AVAILABLE = False
 
 
-def _cluster_similar(values: list[str], threshold: int) -> list[list[str]]:
-    """Return groups of similar strings (each group has >= 2 members)."""
-    if not _RAPIDFUZZ_AVAILABLE or len(values) < 2:
-        return []
-
-    # Compute pairwise similarity using ratio (full string similarity)
-    matrix = process.cdist(values, values, scorer=fuzz.ratio)
-    n = len(values)
-    visited = [False] * n
-    clusters: list[list[str]] = []
-
-    for i in range(n):
-        if visited[i]:
-            continue
-        group = [values[i]]
-        visited[i] = True
-        for j in range(i + 1, n):
-            if not visited[j] and matrix[i][j] >= threshold:
-                group.append(values[j])
-                visited[j] = True
-        if len(group) >= 2:
-            clusters.append(group)
-
-    return clusters
-
-
 @registry.register
 class SimilarValuesRule(Rule):
     rule_id = "generic.similar_values"
-    name = "Similar / near-duplicate values"
+    name = "Valeurs très proches (variantes orthographiques)"
     default_severity = "SUSPICION"
     per_column = True
 
@@ -60,48 +43,83 @@ class SimilarValuesRule(Rule):
         if not _RAPIDFUZZ_AVAILABLE:
             return []
 
-        severity = Severity(config.get("severity", self.default_severity))
-        threshold = int(config.get("threshold", 90))
-        max_distinct = int(config.get("max_distinct", 200))
+        col_config = config.get("columns", {}).get(col, {})
 
-        series = df[col].dropna()
-        non_empty = series[series.astype(str).str.strip() != ""]
-        if non_empty.empty:
+        # Dormant unless explicitly enabled
+        if not col_config.get("detect_similar_values", False):
             return []
 
-        unique_values = list(non_empty.unique())
-        if len(unique_values) > max_distinct:
+        threshold = int(col_config.get("similar_threshold", 85))
+        min_distinct = int(col_config.get("similar_min_distinct", 5))
+
+        # Collect non-empty values
+        series = df[col].dropna().astype(str)
+        series = series[series.str.strip() != ""]
+        if series.empty:
             return []
 
-        # Run clustering
-        clusters = _cluster_similar(unique_values, threshold)
-        if not clusters:
+        freq: Counter = Counter(series.tolist())
+        distinct = list(freq.keys())
+
+        if len(distinct) < min_distinct:
             return []
 
-        # Build reverse map: value → cluster members
-        suspect_values: dict[str, list[str]] = {}
-        for group in clusters:
-            for v in group:
-                suspect_values[v] = [m for m in group if m != v]
+        # For large sets, only compare rare values (count ≤ 3) against all others
+        large_set = len(distinct) > 500
+        candidates = [v for v in distinct if freq[v] <= 3] if large_set else distinct
 
+        # Build flagged map: less-frequent value → (suggestion, score)
+        seen_pairs: set[frozenset] = set()
+        flagged: dict[str, tuple[str, int]] = {}
+
+        for val in candidates:
+            for other in distinct:
+                if val == other:
+                    continue
+                pair: frozenset = frozenset((val, other))
+                if pair in seen_pairs:
+                    continue
+                seen_pairs.add(pair)
+
+                score = int(_fuzz.ratio(val, other))
+                if score >= threshold:
+                    # Suggestion = the more frequent of the pair
+                    if freq[val] >= freq[other]:
+                        suggestion, less_frequent = val, other
+                    else:
+                        suggestion, less_frequent = other, val
+                    # Keep highest-score match for each flagged value
+                    if less_frequent not in flagged or score > flagged[less_frequent][1]:
+                        flagged[less_frequent] = (suggestion, score)
+
+        if not flagged:
+            return []
+
+        # Emit one issue per flagged value at its first occurrence
         issues: list[Issue] = []
-        for row_idx, val in df[col].items():
-            if pd.isna(val) or str(val).strip() == "":
+        remaining = dict(flagged)  # mutable copy to pop as we find them
+        for row_idx in df.index:
+            if not remaining:
+                break
+            raw = df.at[row_idx, col]
+            if pd.isna(raw):
                 continue
-            if val in suspect_values:
-                similar = suspect_values[val]
+            val = str(raw).strip()
+            if val in remaining:
+                suggestion, score = remaining.pop(val)
                 issues.append(
                     Issue.create(
                         rule_id=self.rule_id,
-                        severity=severity,
+                        severity=Severity.SUSPICION,
                         row=int(row_idx),
                         col=col,
                         original=val,
                         message=(
-                            f"«{val}» is similar to: "
-                            + ", ".join(f"«{s}»" for s in similar[:5])
+                            f"Valeur « {val} » très proche de « {suggestion} » "
+                            f"(similarité {score} %) — variante orthographique probable."
                         ),
-                        extra={"similar_to": similar},
+                        suggestion=suggestion,
                     )
                 )
+
         return issues

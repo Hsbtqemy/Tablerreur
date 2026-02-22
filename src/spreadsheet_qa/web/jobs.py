@@ -17,6 +17,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from spreadsheet_qa.core.history import CommandHistory
+
 
 TTL_SECONDS = 3600  # 1 hour
 
@@ -46,6 +48,7 @@ class ProblemRow:
     row: int
     message: str
     suggestion: str
+    issue_id: str = ""
 
 
 @dataclass
@@ -76,6 +79,13 @@ class Job:
     created_at: float = field(default_factory=time.time)
     # DataFrame stored as pickle for downstream steps
     _df_path: Path | None = None
+    # Issues stored as pickle for export regeneration after status changes
+    _issues_path: Path | None = None
+    # User-set issue status overrides: issue_id → status string
+    issue_statuses: dict[str, str] = field(default_factory=dict)
+    exports_dirty: bool = False
+    # Undo/redo history for hygiene fixes
+    command_history: CommandHistory = field(default_factory=CommandHistory)
 
 
 class JobManager:
