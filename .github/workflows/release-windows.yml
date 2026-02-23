@@ -1,0 +1,82 @@
+# Build Windows (installateurs + portable) et attache les artefacts à une Release GitHub.
+# Déclencher : créer une release (tag, ex. v0.1.0) sur GitHub → les .exe/.msi/.zip sont publiés sur la release.
+
+name: Release Windows
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Définir la version depuis le tag
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = $tag -replace '^v', ''
+          Write-Host "Version: $version"
+          (Get-Content src-tauri/tauri.conf.json) -replace '"version":\s*"[^"]*"', "`"version`": `"$version`"" | Set-Content src-tauri/tauri.conf.json
+          (Get-Content src-tauri/Cargo.toml) -replace '^version = ".*"', "version = `"$version`"" | Set-Content src-tauri/Cargo.toml
+
+      - name: Installer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+          cache: "npm"
+
+      - name: Installer Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Rust
+        uses: swatinem/rust-cache@v2
+
+      - name: Installer Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Installer 7-Zip (pour exe portable)
+        run: choco install 7zip -y
+
+      - name: Dépendances npm
+        run: npm ci
+
+      - name: Dépendances Python (projet + sidecar web)
+        run: |
+          pip install -e .
+          pip install pyinstaller fastapi uvicorn
+
+      - name: Builder le sidecar Python
+        run: python scripts/build_sidecar.py
+
+      - name: Builder Tauri (NSIS + MSI)
+        run: npm run tauri build
+
+      - name: Builder le bundle portable (zip + exe)
+        run: python scripts/build_portable_exe.py
+
+      - name: Rassembler les artefacts pour la release
+        run: |
+          New-Item -ItemType Directory -Force -Path release_assets
+          $b = "src-tauri/target/release/bundle"
+          Get-ChildItem -Path "$b/nsis" -Recurse -Include *.exe | ForEach-Object { Copy-Item $_.FullName -Destination release_assets -Force }
+          Get-ChildItem -Path "$b/msi" -Recurse -Include *.msi | ForEach-Object { Copy-Item $_.FullName -Destination release_assets -Force }
+          Get-ChildItem -Path "$b/portable" -Include *.zip,*.exe | ForEach-Object { Copy-Item $_.FullName -Destination release_assets -Force }
+          Get-ChildItem release_assets
+
+      - name: Publier les artefacts sur la Release
+        uses: softprops/action-gh-release@v2
+        with:
+          release_id: ${{ github.event.release.id }}
+          files: release_assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

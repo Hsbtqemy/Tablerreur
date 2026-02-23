@@ -2,7 +2,8 @@
   "name": "tablerreur",
   "private": true,
   "scripts": {
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "build:windows": "python scripts/build_sidecar.py && npm run tauri build && python scripts/build_portable_exe.py"
   },
   "devDependencies": {
     "@tauri-apps/cli": "latest"

@@ -248,9 +248,26 @@ L'app Qt souffrait de segfaults (PySide6) et de difficultés de packaging. Migra
 - **Port dynamique** : Tauri cherche un port libre entre 8400 et 8500, le passe au sidecar
 - **Health check** : poll TCP toutes les 200ms jusqu'à ce que le sidecar réponde, timeout configurable
 - **Icône** : lettre T blanche sur fond bleu #2563eb (générée par `scripts/generate_icon.py`)
-- **Distribution** : `.dmg` généré en mode debug — **non signé** (signing macOS à faire)
+- **Distribution** : `.dmg` (macOS) ; sur Windows : installateur NSIS (`.exe`) et MSI (`.msi`), langue WiX en français (fr-FR)
+- **Distribution macOS** : `.dmg` généré en mode debug — **non signé** (signing macOS à faire)
 - **Démarrage** : ~25–37s (extraction PyInstaller onefile + init Python + chargement pandas)
 - **Identifiant** : `com.tablerreur.desktop`, version 0.1.0
+
+### Release Windows (installateur)
+
+Pour produire une release Windows avec installateur :
+
+1. **Sur une machine Windows** : installer les prérequis (Rust, Node.js, Python 3, Visual Studio Build Tools ou équivalent pour le toolchain MSVC).
+2. À la racine du dépôt : `npm install` puis `npm run build:windows`.
+   - Le script exécute `python scripts/build_sidecar.py`, puis `npm run tauri build`, puis `python scripts/build_portable_exe.py` (bundle portable : zip + exe tout-en-un si 7-Zip disponible).
+3. Les artefacts sont dans `src-tauri/target/release/bundle/` :
+   - **NSIS** : `nsis/Tablerreur_0.1.0_x64-setup.exe` (installateur classique)
+   - **MSI** : `msi/Tablerreur_0.1.0_x64_fr-FR.msi` (installateur MSI, langue française)
+   - **Portable** : `portable/Tablerreur_0.1.0_x64_portable.zip` (à extraire puis lancer `tablerreur.exe`) et éventuellement `portable/Tablerreur_0.1.0_x64_portable.exe` (un seul .exe qui embarque tout, si 7-Zip est installé)
+
+L’installateur NSIS télécharge WebView2 au besoin (connexion internet requise lors de l’installation sauf si mode offline configuré). Voir `docs/build-windows.md` pour les détails.
+
+**Publication sur GitHub** : en créant une release (tag, ex. `v0.1.0`), le workflow `.github/workflows/release-windows.yml` build l’app Windows et attache les .exe/.msi/.zip à la release ; les utilisateurs peuvent alors télécharger le .exe directement depuis GitHub (onglet Releases → Assets).
 
 ---
 
@@ -323,8 +340,11 @@ pytest tests/test_engine.py -v
 # Développement Tauri (fenêtre native + rechargement auto)
 npm run tauri dev
 
-# Build Tauri (.dmg, mode release)
+# Build Tauri (plateforme courante : .dmg sur macOS, .exe/.msi sur Windows)
 npm run tauri build
+
+# Release Windows (sur machine Windows : sidecar + installateurs NSIS et MSI)
+npm run build:windows
 
 # Générer les icônes (à relancer si l'icône change)
 python scripts/generate_icon.py
@@ -344,6 +364,7 @@ python run.py
 |-------------------------------|--------------------------------------|
 | Spec produit                  | SPEC.md                              |
 | Architecture détaillée        | docs/architecture.md                 |
+| Build release Windows         | docs/build-windows.md                |
 | Formats (CSV, patches…)       | docs/formats.md                      |
 | Overlay NAKALA                | docs/nakala.md                       |
 | Guide agent complet           | docs/AGENT_README.md                 |

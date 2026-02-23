@@ -30,7 +30,15 @@
       "icons/icon.ico"
     ],
     "resources": [
-      "binaries/tablerreur-backend-aarch64-apple-darwin/**/*"
-    ]
+      "binaries/tablerreur-backend-x86_64-pc-windows-msvc/**/*"
+    ],
+    "windows": {
+      "wix": {
+        "language": "fr-FR"
+      },
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      }
+    }
   }
 }
