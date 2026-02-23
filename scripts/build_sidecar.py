@@ -180,7 +180,7 @@ def update_tauri_conf(triple: str) -> None:
     with conf_path.open("w", encoding="utf-8") as f:
         json.dump(conf, f, indent=2, ensure_ascii=False)
         f.write("\n")
-    print(f"  tauri.conf.json → resources: binaries/tablerreur-backend-{triple}")
+    print(f"  tauri.conf.json -> resources: binaries/tablerreur-backend-{triple}")
 
 
 # ---------------------------------------------------------------------------
@@ -304,10 +304,10 @@ def main() -> None:
         ready = wait_for_health(test_port, timeout=90.0)
         startup_time = time.monotonic() - t0
         if ready:
-            print(f"  ✓ /health a répondu sur le port {test_port}")
+            print(f"  OK /health a repondu sur le port {test_port}")  # ASCII-only for CI Windows
         else:
             print(
-                f"  ✗ /health n'a pas répondu dans les délais "
+                f"  ERREUR /health n'a pas repondu dans les delais "  # ASCII-only for CI Windows
                 f"({startup_time:.1f}s écoulées)",
                 file=sys.stderr,
             )
