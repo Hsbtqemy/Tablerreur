@@ -177,3 +177,52 @@
    - Auto-update Tauri
    - Détection automatique de format
    - Constructeur visuel de regex
+
+---
+
+## 7. Vocabulaires NAKALA — sélection et templates
+
+### A. Sélection dans le vocabulaire chargé
+
+Actuellement : « Charger le vocabulaire NAKALA » remplit *toute* la liste des valeurs autorisées et la verrouille ; la colonne accepte n’importe quelle valeur du vocabulaire.
+
+| Idée | Statut | Détail | Priorité |
+|------|--------|--------|----------|
+| Choisir un sous-ensemble dans le vocabulaire chargé | 📋 | Après chargement, permettre de sélectionner une ou plusieurs valeurs (ex. une seule licence, ou quelques types de ressource) au lieu d’accepter l’intégralité du vocabulaire. | Moyenne |
+| UI : liste à cocher après chargement | 📋 | Afficher les valeurs du vocabulaire en cases à cocher ; l’utilisateur coche celles qu’il veut autoriser ; `allowed_values` = sélection. | Moyenne |
+| UI : select multiple | 📋 | Alternative : `<select multiple>` pour choisir les valeurs ; même résultat (liste filtrée → `allowed_values`). | Moyenne |
+| Option « une seule valeur » (liste déroulante) | 📋 | Cas particulier : une seule valeur sélectionnable (ex. « cette colonne = CC-BY-4.0 ») ; `allowed_values` à un élément. | Basse |
+| Déverrouiller / personnaliser après chargement | 📋 | Bouton « Personnaliser » pour déverrouiller le textarea et éditer la liste (ajouter/supprimer des lignes) tout en gardant la trace `nakala_vocabulary`. | Basse |
+| Cohérence règles NAKALA | 📋 | Si l’utilisateur ne garde qu’un sous-ensemble : les règles `nakala.deposit_type` / `nakala.license` / `nakala.language` pourraient soit utiliser la liste configurée (allowed_values) au lieu du vocabulaire complet, soit rester sur le vocabulaire complet (comportement à trancher). | Moyenne |
+
+### B. Template depuis l’API NAKALA
+
+Créer un template de validation (colonnes + règles) uniquement à partir de ce que l’API NAKALA expose (vocabulaires, champs requis/recommandés), sans repartir d’un YAML builtin.
+
+| Idée | Statut | Détail | Priorité |
+|------|--------|--------|----------|
+| Découverte des champs NAKALA via l’API | 📋 | Si l’API NAKALA expose une liste de champs (requis / recommandés / optionnels) ou un schéma, l’utiliser pour générer la structure du template (colonnes, kinds, règles). | À préciser |
+| Génération de template « NAKALA pur » | 📋 | Endpoint ou flux UI : « Créer un template depuis NAKALA » → appel API (vocabulaires + métadonnées si dispo) → template YAML ou config en mémoire (colonnes, `nakala.deposit_type` / `nakala.license` / `nakala.language` / `nakala.created_format` sur les bons champs). | Moyenne |
+| Template = colonnes + vocabulaires branchés | 📋 | Le template généré attache les vocabulaires (datatypes, licenses, languages) aux colonnes correspondantes ; l’utilisateur peut ensuite appliquer la sélection (cf. § A) si l’option est en place. | Moyenne |
+| Documentation / découverte API | 📋 | Vérifier la doc officielle NAKALA (champs, vocabulaires, éventuels endpoints de schéma) pour cadrer la génération de template. | Haute (avant implémentation) |
+
+### Ordre suggéré (NAKALA)
+
+1. **Documentation** : confirmer ce que l’API NAKALA expose (champs, schéma, vocabulaires).
+2. **Sélection** : UI pour choisir un sous-ensemble dans le vocabulaire chargé (liste à cocher ou select multiple), puis cohérence avec les règles NAKALA.
+3. **Template depuis l’API** : génération d’un template (colonnes + règles) à partir des données NAKALA disponibles.
+
+---
+
+## 8. Étape curation — édition manuelle des cellules
+
+Possibilité pour l'utilisateur de modifier directement certaines cellules dans l'interface (correction manuelle, curation), dans une étape dédiée ou intégrée au flux actuel.
+
+| Idée | Statut | Détail | Priorité |
+|------|--------|--------|----------|
+| Étape « Curation » dans le workflow | 📋 | Ajouter une étape (ex. après Validation ou Correctifs) où l'utilisateur peut éditer les valeurs du tableau : clic sur une cellule → édition in-place ou dans un panneau, sauvegarde dans le job. | Moyenne |
+| Édition in-place dans le tableau d'aperçu | 📋 | Rendre les cellules du tableau d'aperçu (étape Configurer ou Résultats) éditables : focus → saisie → validation → mise à jour du DataFrame côté backend. | Moyenne |
+| Curation ciblée (cellules en erreur) | 📋 | Proposer d'éditer en priorité les cellules signalées par la validation (liste des issues → clic → ouvrir la cellule en édition avec suggestion si disponible). | Moyenne |
+| Persistance des modifications | 📋 | Les changements de curation doivent être renvoyés au backend (endpoint type PATCH/PUT sur les données du job), re-validation optionnelle après édition. | Moyenne |
+| Historique / annuler une modification | 📋 | Undo/redo ou journal des modifications dans l'étape curation (peut s'appuyer sur `CommandHistory` / `ApplyCellFixCommand` côté core si réutilisé). | Basse |
+| Export après curation | 📋 | S'assurer que l'export (CSV, XLSX) reflète les valeurs éditées lors de la curation. | Moyenne |

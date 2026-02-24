@@ -256,6 +256,46 @@ function _updateListOptionsState(sepValue) {
   optionsEl.classList.toggle('list-options-disabled', disabled);
 }
 
+const _previewTableContainerEl = document.getElementById('preview-table-container');
+const _previewScrollTopEl = document.getElementById('preview-scroll-top');
+const _previewScrollTopInnerEl = document.getElementById('preview-scroll-top-inner');
+let _previewScrollSyncLock = false;
+
+function _refreshPreviewTopScrollbar() {
+  if (!_previewTableContainerEl || !_previewScrollTopEl || !_previewScrollTopInnerEl) return;
+  const tableEl = document.getElementById('preview-table');
+  if (!tableEl || tableEl.hidden) {
+    _previewScrollTopEl.hidden = true;
+    return;
+  }
+
+  const scrollWidth = _previewTableContainerEl.scrollWidth;
+  const clientWidth = _previewTableContainerEl.clientWidth;
+  const hasOverflow = scrollWidth > (clientWidth + 1);
+
+  _previewScrollTopInnerEl.style.width = `${scrollWidth}px`;
+  _previewScrollTopEl.hidden = !hasOverflow;
+  if (hasOverflow) {
+    _previewScrollTopEl.scrollLeft = _previewTableContainerEl.scrollLeft;
+  }
+}
+
+if (_previewScrollTopEl && _previewTableContainerEl) {
+  _previewScrollTopEl.addEventListener('scroll', () => {
+    if (_previewScrollSyncLock) return;
+    _previewScrollSyncLock = true;
+    _previewTableContainerEl.scrollLeft = _previewScrollTopEl.scrollLeft;
+    _previewScrollSyncLock = false;
+  });
+  _previewTableContainerEl.addEventListener('scroll', () => {
+    if (_previewScrollSyncLock) return;
+    _previewScrollSyncLock = true;
+    _previewScrollTopEl.scrollLeft = _previewTableContainerEl.scrollLeft;
+    _previewScrollSyncLock = false;
+  });
+  window.addEventListener('resize', _refreshPreviewTopScrollbar);
+}
+
 async function loadPreview() {
   if (!state.jobId) return;
 
@@ -266,6 +306,7 @@ async function loadPreview() {
 
   loadingEl.hidden = false;
   tableEl.hidden = true;
+  if (_previewScrollTopEl) _previewScrollTopEl.hidden = true;
   headerRow.innerHTML = '';
   body.innerHTML = '';
 
@@ -312,6 +353,7 @@ async function loadPreview() {
 
     loadingEl.hidden = true;
     tableEl.hidden = false;
+    _refreshPreviewTopScrollbar();
 
     // Apply cell-level issue highlights if validation has already been run
     if (state.validationDone) _applyCellIssueHighlights();
@@ -325,6 +367,7 @@ async function loadPreview() {
   } catch (err) {
     loadingEl.textContent = 'Erreur lors du chargement de l\'aperçu : ' + err.message;
     loadingEl.className = 'msg-error';
+    if (_previewScrollTopEl) _previewScrollTopEl.hidden = true;
   }
 }
 
@@ -1082,9 +1125,59 @@ function renderPagination(current, total) {
   el.innerHTML = html;
 }
 
-function downloadFile(filename) {
-  if (!state.jobId) return false;
-  window.location.href = `/api/jobs/${state.jobId}/download/${filename}`;
+function _filenameFromContentDisposition(headerValue) {
+  if (!headerValue) return null;
+  // RFC 5987 form: filename*=UTF-8''...
+  const extMatch = headerValue.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
+  if (extMatch && extMatch[1]) {
+    try {
+      return decodeURIComponent(extMatch[1].trim());
+    } catch (_) { /* fallback below */ }
+  }
+  // Basic form: filename="..."
+  const basicMatch = headerValue.match(/filename\s*=\s*"([^"]+)"/i);
+  if (basicMatch && basicMatch[1]) return basicMatch[1].trim();
+  return null;
+}
+
+async function downloadFile(filename) {
+  if (!state.jobId) {
+    _showToast('Aucune session active pour l\'export.', 'warning');
+    return false;
+  }
+  if (!state.validationDone) {
+    _showToast('Lancez la validation avant d\'exporter les fichiers.', 'warning');
+    return false;
+  }
+
+  const url = `/api/jobs/${state.jobId}/download/${filename}`;
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      let detail = '';
+      try {
+        const data = await resp.json();
+        detail = data.detail || '';
+      } catch (_) { /* ignore non-JSON errors */ }
+      throw new Error(detail || `Téléchargement impossible (${resp.status})`);
+    }
+
+    const blob = await resp.blob();
+    const serverFilename = _filenameFromContentDisposition(resp.headers.get('content-disposition'));
+    const downloadName = serverFilename || filename;
+
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = downloadName;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(objectUrl);
+  } catch (err) {
+    _showToast('✗ Erreur lors du téléchargement : ' + err.message, 'error');
+  }
   return false;
 }
 
@@ -1316,6 +1409,8 @@ function resetApp() {
   document.getElementById('preview-loading').className = 'msg-info';
   document.getElementById('preview-loading').hidden = false;
   document.getElementById('preview-table').hidden = true;
+  if (_previewScrollTopEl) _previewScrollTopEl.hidden = true;
+  if (_previewScrollTopInnerEl) _previewScrollTopInnerEl.style.width = '0px';
   document.getElementById('preview-header').innerHTML = '';
   document.getElementById('preview-body').innerHTML = '';
   document.getElementById('column-config-panel').hidden = true;
