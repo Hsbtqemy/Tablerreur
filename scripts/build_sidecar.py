@@ -135,6 +135,39 @@ def run(cmd: list[str], **kwargs) -> None:
     subprocess.run(cmd, check=True, **kwargs)
 
 
+def preflight_sidecar_runtime(python_bin: str) -> None:
+    """Fail fast when required runtime deps for the web sidecar are missing."""
+    check_script = r"""
+import importlib.util
+import pathlib
+import sys
+import traceback
+
+repo_root = pathlib.Path.cwd()
+sys.path.insert(0, str(repo_root / "src"))
+
+required_modules = ("fastapi", "uvicorn", "multipart")
+missing = [name for name in required_modules if importlib.util.find_spec(name) is None]
+if missing:
+    print(
+        "Dependencies missing for web sidecar: "
+        + ", ".join(missing)
+        + ". Install with: pip install -e \".[web]\"",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+
+try:
+    from spreadsheet_qa.web.app import app  # noqa: F401
+except Exception:
+    print("Cannot import spreadsheet_qa.web.app in the build environment.", file=sys.stderr)
+    traceback.print_exc()
+    raise SystemExit(1)
+"""
+    print("\nVerification des dependances runtime du sidecar...")
+    run([python_bin, "-c", check_script], cwd=REPO_ROOT)
+
+
 def wait_for_health(port: int, timeout: float = 90.0) -> bool:
     url = f"http://127.0.0.1:{port}/health"
     deadline = time.monotonic() + timeout
@@ -223,6 +256,10 @@ def main() -> None:
     if importlib.util.find_spec("PyInstaller") is None or build_python != sys.executable:
         print("\nInstallation de PyInstaller dans l'interpréteur de build…")
         run([build_python, "-m", "pip", "install", "pyinstaller", "--quiet"])
+
+    # --- Verify runtime deps before freezing ---
+    # FastAPI file/form endpoints require python-multipart at import time.
+    preflight_sidecar_runtime(build_python)
 
     # --- Build PyInstaller command ---
     add_data_sep = ";" if platform.system() == "Windows" else ":"

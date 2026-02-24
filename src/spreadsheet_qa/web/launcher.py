@@ -16,17 +16,21 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 import urllib.error
 import urllib.request
 import webbrowser
 from subprocess import DEVNULL
 
+_IMPORT_ERROR: Exception | None = None
+
 try:
     import uvicorn
     from spreadsheet_qa.web.app import app as _web_app
     _UVICORN_AVAILABLE = True
-except ImportError:
+except Exception as exc:
     _UVICORN_AVAILABLE = False
+    _IMPORT_ERROR = exc
 
 
 def find_free_port(start: int = 8400, end: int = 8500) -> int:
@@ -81,7 +85,9 @@ def main() -> None:
 
     if frozen:
         if not _UVICORN_AVAILABLE:
-            print("Erreur : uvicorn non disponible dans le bundle.", file=sys.stderr)
+            print("Erreur : backend web indisponible dans le bundle.", file=sys.stderr)
+            if _IMPORT_ERROR is not None:
+                traceback.print_exception(_IMPORT_ERROR)
             sys.exit(1)
 
         def _serve() -> None:

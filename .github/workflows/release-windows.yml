@@ -54,8 +54,8 @@ jobs:
 
       - name: Dépendances Python (projet + sidecar web)
         run: |
-          pip install -e .
-          pip install pyinstaller fastapi uvicorn
+          pip install -e ".[web]"
+          pip install pyinstaller
 
       - name: Builder le sidecar Python
         run: python scripts/build_sidecar.py
