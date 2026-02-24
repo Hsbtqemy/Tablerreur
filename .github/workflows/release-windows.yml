@@ -1,9 +1,12 @@
 # Build Windows (installateurs + portable) et attache les artefacts à une Release GitHub.
-# Déclencher : créer une release (tag, ex. v0.1.0) sur GitHub → les .exe/.msi/.zip sont publiés sur la release.
+# Déclencher : push d'un tag v* (ex. git push origin v0.1.4) OU publication d'une release depuis l'interface GitHub.
 
 name: Release Windows
 
 on:
+  push:
+    tags:
+      - 'v*'
   release:
     types: [published]
 
@@ -21,11 +24,27 @@ jobs:
 
       - name: Définir la version depuis le tag
         run: |
-          $tag = "${{ github.ref_name }}"
-          $version = $tag -replace '^v', ''
-          Write-Host "Version: $version"
-          (Get-Content src-tauri/tauri.conf.json) -replace '"version":\s*"[^"]*"', "`"version`": `"$version`"" | Set-Content src-tauri/tauri.conf.json
-          (Get-Content src-tauri/Cargo.toml) -replace '^version = ".*"', "version = `"$version`"" | Set-Content src-tauri/Cargo.toml
+          if ("${{ github.event_name }}" -eq "release") {
+            $tag = "${{ github.event.release.tag_name }}"
+          } else {
+            $tag = "${{ github.ref_name }}"
+          }
+
+          $version = ($tag -replace '^v', '').Trim()
+          if ($version -match '^\d+\.\d+$') {
+            $version = "$version.0"
+          }
+
+          if (-not ($version -match '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$')) {
+            throw "Tag invalide pour Tauri/Cargo: '$tag' -> '$version'. Attendu: vX.Y.Z (ex: v0.1.0)."
+          }
+
+          Write-Host "Event: ${{ github.event_name }}"
+          Write-Host "Tag: $tag"
+          Write-Host "Version semver: $version"
+
+          (Get-Content src-tauri/tauri.conf.json -Raw) -replace '"version":\s*"[^"]*"', "`"version`": `"$version`"" | Set-Content src-tauri/tauri.conf.json -Encoding utf8
+          (Get-Content src-tauri/Cargo.toml -Raw) -replace '(?m)^version = ".*"$', "version = `"$version`"" | Set-Content src-tauri/Cargo.toml -Encoding utf8
 
       - name: Installer Node.js
         uses: actions/setup-node@v4
@@ -78,7 +97,9 @@ jobs:
       - name: Publier les artefacts sur la Release
         uses: softprops/action-gh-release@v2
         with:
-          release_id: ${{ github.event.release.id }}
+          release_id: ${{ github.event_name == 'release' && github.event.release.id }}
+          tag_name: ${{ github.event_name == 'push' && github.ref_name || github.event.release.tag_name }}
+          name: Release ${{ github.event_name == 'push' && github.ref_name || github.event.release.tag_name }}
           files: release_assets/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
