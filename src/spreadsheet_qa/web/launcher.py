@@ -32,6 +32,8 @@ except Exception as exc:
     _UVICORN_AVAILABLE = False
     _IMPORT_ERROR = exc
 
+_LOCAL_NO_PROXY_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
 
 def find_free_port(start: int = 8400, end: int = 8500) -> int:
     """Return the first free TCP port in [start, end)."""
@@ -50,7 +52,8 @@ def wait_for_health(url: str, timeout: float = 90.0) -> bool:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
-            with urllib.request.urlopen(url, timeout=1) as resp:
+            # Force direct local connection: ignore HTTP(S)_PROXY for 127.0.0.1.
+            with _LOCAL_NO_PROXY_OPENER.open(url, timeout=1) as resp:
                 if resp.status == 200:
                     return True
         except (urllib.error.URLError, OSError):
@@ -132,7 +135,7 @@ def main() -> None:
                 proc.terminate()
         sys.exit(1)
 
-    print(f"Serveur prêt → {app_url}")
+    print(f"Serveur prêt -> {app_url}")
     if not sidecar_mode:
         print("Ouverture du navigateur…")
         webbrowser.open(app_url)
