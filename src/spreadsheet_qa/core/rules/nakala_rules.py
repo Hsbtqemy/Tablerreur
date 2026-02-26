@@ -119,7 +119,7 @@ class NakalaDepositTypeRule(Rule):
                         col=col,
                         original=cell,
                         message=f"Unknown NAKALA deposit type: {cell!r}.",
-                        suggestion="Use a COAR deposit type from api.nakala.fr/vocabularies/deposittypes.",
+                        suggestion="Use a COAR deposit type from api.nakala.fr/vocabularies/datatypes.",
                     )
                 )
         return issues

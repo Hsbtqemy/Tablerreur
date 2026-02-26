@@ -7,6 +7,8 @@ deposit in the [NAKALA](https://nakala.fr) research data repository.
 
 Enable it via: **Templates… → Apply template → Overlay → NAKALA Baseline or Extended**.
 
+**Référence complète (validation / formats acceptés) :** voir **[docs/nakala-validation-formats.md](nakala-validation-formats.md)** — 5 propriétés NAKALA obligatoires, dcterms, encodages (W3CDTF, LCSH, Box, Point, etc.), relations DataCite (RelationType), vocabulaires API (`/vocabularies/properties`, `/vocabularies/metadatatypes`, etc.), spécificité collections.
+
 ## Required NAKALA fields
 
 | Field | Kind | Rule |
@@ -25,15 +27,90 @@ Enable it via: **Templates… → Apply template → Overlay → NAKALA Baseline
 | `dcterms:subject` | list | Prefer repeated columns `keywords_*_1..n` |
 | `dcterms:language` | controlled | RFC5646 code from API |
 
+## Champs à intégrer (dcterms / alignement NAKALA)
+
+### Vérification via la doc officielle NAKALA (documentation.huma-num.fr)
+
+La description NAKALA repose sur **Dublin Core qualifié (dcterms)**. Outre les 5 champs obligatoires (Title, Author, Date, Type, License), il est possible d’ajouter **tout autre champ du vocabulaire Dublin Core qualifié**.
+
+**Termes confirmés par le guide NAKALA :**
+- **dcterms:creator** — explicitement cité (créateur ; peut compléter ou dupliquer le champ Author).
+- **dcterms:contributor** — explicitement cité (« Other fields relate to the description of a role… »).
+- **dcterms:publisher** — explicitement cité (éditeur).
+- **dcterms:rightsHolder** — correspond au « rightsholder » du Dublin Core qualifié (cité dans les « additional headings » : audience, provenance, **rightsholder**).
+
+**Terme à considérer (vocabulaire DC, non cité explicitement dans le guide) :**
+- **dcterms:mediator** — entité qui médiatise l’accès à la ressource (ex. enseignant pour une ressource pédagogique) ; terme valide en dcterms, à intégrer si besoin métier.
+
+**Autres champs dcterms mentionnés ou utiles** (non encore dans nos templates) :  
+dcterms:alternative (titre secondaire), dcterms:tableOfContents (sommaire), dcterms:abstract (résumé), dcterms:coverage (couverture), dcterms:provenance, dcterms:audience, et les qualificateurs de date (available, modified, issued, etc.). La liste complète est celle du [qualified Dublin Core](https://www.dublincore.org/specifications/dublin-core/dcmi-terms/).
+
+À prendre en compte dans les templates ou la config NAKALA :
+
+- **dcterms:creator**
+- **dcterms:contributor**
+- **dcterms:mediator** (optionnel, selon besoin)
+- **dcterms:publisher**
+- **dcterms:rightsHolder**
+
+Référence **schéma d’export NAKALA** (colonnes possibles, avec préfixes `nakala.fr/terms#` ou `purl.org/dc/terms/`) :
+
+| Colonne / URI | Note |
+|---------------|------|
+| DOI, Status donnee | Métadonnées dépôt |
+| http://nakala.fr/terms#title, langTitle | Titre(s) |
+| http://nakala.fr/terms#creator | Créateur |
+| http://nakala.fr/terms#created | Date création |
+| http://nakala.fr/terms#type | Type COAR |
+| http://nakala.fr/terms#license | Licence |
+| Embargoed | Embargo |
+| http://purl.org/dc/terms/created | dcterms:created |
+| http://purl.org/dc/terms/creator | dcterms:creator |
+| http://purl.org/dc/terms/contributor | dcterms:contributor |
+| http://purl.org/dc/terms/description, langDescription | Description(s) |
+| http://purl.org/dc/terms/language | Langue |
+| http://purl.org/dc/terms/relation | Relation(s) |
+| http://purl.org/dc/terms/rightsHolder | Titulaire des droits |
+| http://purl.org/dc/terms/spatial | Couverture spatiale |
+| http://purl.org/dc/terms/available | Disponibilité |
+| http://purl.org/dc/terms/modified | Date modification |
+| http://purl.org/dc/terms/rights | Droits |
+| http://purl.org/dc/terms/isVersionOf | Version de |
+| http://purl.org/dc/terms/format | Format |
+| http://purl.org/dc/terms/bibliographicCitation | Citation |
+| http://purl.org/dc/terms/abstract | Résumé |
+| http://purl.org/dc/terms/source | Source |
+| http://purl.org/dc/terms/subject, langSubject | Sujet(s) |
+| http://purl.org/dc/terms/medium | Support |
+| http://purl.org/dc/terms/publisher | Éditeur |
+| dcterms:mediator | Optionnel (médiateur ; dcterms valide, non cité explicitement dans le guide NAKALA) |
+| IsDescribedBy, IsIdenticalTo, IsDerivedFrom, IsPublishedIn | Relations |
+| sha1:files_to_delete, files_names_to_add, new_collectionsIds, collectionsIdsToDelete | Gestion technique dépôt |
+
+Les templates actuels utilisent des noms courts (`nakala:creator`, `dcterms:description`). Un mapping ou des alias vers les URIs complètes (`http://purl.org/dc/terms/creator`, etc.) peuvent être nécessaires pour l’export / l’alignement avec l’API NAKALA.
+
 ## API vocabulary sources
 
-Vocabularies are fetched once and cached to `nakala_cache.json`:
+Vocabularies sont récupérés via l’API NAKALA et mis en cache dans `nakala_cache.json`. Vérification 2026 : les endpoints ci‑dessous répondent (demander `Accept: application/json` pour le JSON). La fiche [nakala-validation-formats.md](nakala-validation-formats.md) détaille la règle « propriété ∈ properties, type ∈ metadatatypes ».
 
-| Vocab | Endpoint |
-|-------|---------|
-| Deposit types | `https://api.nakala.fr/vocabularies/deposittypes` |
-| Licenses | `https://api.nakala.fr/vocabularies/licenses` |
-| Languages | `https://api.nakala.fr/vocabularies/languages?limit=10000` |
+**Utilisés actuellement par Tablerreur :**
+
+| Vocab | Endpoint | Réponse |
+|-------|----------|---------|
+| Types de ressource (COAR) | `https://api.nakala.fr/vocabularies/datatypes` | Liste d’URIs COAR. Le [guide NAKALA](https://documentation.huma-num.fr/en/nakala-guide-de-description-en/) fournit le **mapping libellé → URI** (image, video, sound, text, dataset, etc.) pour affichage utilisateur. |
+| Licences | `https://api.nakala.fr/vocabularies/licenses` | `[{"code": "CC-BY-4.0", "name": "..."}, ...]` |
+| Langues | `https://api.nakala.fr/vocabularies/languages?limit=10000` | `[{"id": "fra", "label": "..."}, ...]` |
+
+**Endpoints recommandés par la fiche validation (à intégrer si besoin) :**
+
+| Vocab | Endpoint | Usage |
+|-------|----------|--------|
+| Propriétés acceptées | `/vocabularies/properties` (+ `.../details`) | Valider que toute propriété dcterms utilisée est acceptée ; types/encodages par propriété. |
+| Types/encodages métadonnées | `/vocabularies/metadatatypes` (+ `.../details`) | W3CDTF, URI, LCSH, TGN, Box, Point, Period, ISO3166, RFC5646, DCMIType, etc. |
+| Types DCMI | `/vocabularies/dcmitypes` | dcterms:type (Collection, Dataset, Image, Text, …). |
+| Codes pays | `/vocabularies/countryCodes` | dcterms:spatial / subject (ISO3166). |
+| LCSH | `/vocabularies/lcsh` | dcterms:subject (Library of Congress). |
+| Statuts | `/vocabularies/dataStatuses`, `/vocabularies/collectionStatuses` | Statut donnée ; collections : privé/public. |
 
 ## Separator policy
 
@@ -94,3 +171,8 @@ Vocabulary fetching from the NAKALA API is handled transparently:
 - If offline: vocabulary-based rules (`nakala.deposit_type`, `nakala.license`,
   `nakala.language`) skip silently (no false positives).
 - `nakala.created_format` is purely regex-based and works offline.
+
+## Backlog — libellés et champs dcterms
+
+- **Transformation libellé → URI** : aujourd’hui les vocabulaires NAKALA (types COAR, licences SPDX, langues) attendent des **valeurs canoniques** (URIs ou codes), pas des libellés (« texte », « image »). Idée : permettre de saisir un libellé et de le convertir en URI (correctif ou mapping), avec un dictionnaire libellé (FR/EN) → URI.
+- **Type selon le champ dcterms/nakala** : en config de colonne, pouvoir choisir « Cette colonne = nakala:type » (ou dcterms:type, nakala:license, dcterms:language, etc.) pour que l’interface applique automatiquement le bon vocabulaire et la bonne règle, avec éventuellement une liste déroulante libellé/URI. Voir BACKLOG.md §7.
