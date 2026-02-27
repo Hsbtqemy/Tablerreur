@@ -104,6 +104,8 @@ class ColumnMeta:
     detect_similar_values: bool = False
     similar_threshold: int = 85      # minimum fuzz.ratio score to flag (0-100)
     similar_min_distinct: int = 5    # minimum distinct values before rule runs
+    # Values accepted unconditionally (bypass regex/content_type, case-insensitive)
+    special_values: list[str] | None = None
 
 
 # ---------------------------------------------------------------------------

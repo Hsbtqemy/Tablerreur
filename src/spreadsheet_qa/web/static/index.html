@@ -3,13 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Tablerreur — Contrôle qualité tableurs</title>
+  <title>Tablerreur · Mapala — Contrôle qualité et mapping</title>
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
-  <header class="app-header">
-    <h1 class="app-title">Tablerreur</h1>
-    <p class="app-subtitle">Contrôle qualité pour tableurs CSV/XLSX</p>
+  <header class="app-header app-header--tablerreur" id="app-header">
+    <div class="app-header-brand">
+      <span class="app-header-name app-header-name--left">Tablerreur</span>
+      <span class="app-header-name app-header-name--right">Mapala</span>
+    </div>
+    <p class="app-subtitle">Contrôle qualité et mapping de tableurs CSV/XLSX</p>
     <button id="theme-toggle" class="btn-icon btn-theme-toggle" onclick="toggleTheme()" title="Basculer le thème sombre / clair">🌙</button>
   </header>
 
@@ -99,8 +102,8 @@
           <select id="template-id" class="input-sm">
             <option value="generic_default">Générique — Défaut</option>
             <option value="generic_strict">Générique — Strict</option>
-            <option value="nakala_baseline">NAKALA — Référence</option>
-            <option value="nakala_extended">NAKALA — Étendu</option>
+            <option value="generic_default" data-overlay="nakala_baseline">NAKALA — Référence</option>
+            <option value="generic_default" data-overlay="nakala_extended">NAKALA — Étendu</option>
           </select>
         </div>
         <div class="upload-template-row mt-1">
@@ -142,9 +145,18 @@
       <!-- Toast notifications -->
       <div id="template-toast" class="template-toast" hidden role="status" aria-live="polite"></div>
 
+      <div id="cells-edited-banner" class="cells-edited-banner" hidden>
+        Des cellules ont été modifiées manuellement.
+        <button onclick="revalidate()">Re-valider →</button>
+      </div>
+
       <div class="card preview-table-wrapper">
         <div class="preview-table-toolbar">
           <button class="btn btn-secondary btn-sm btn-toggle-special-chars" onclick="toggleSpecialChars()" title="Rendre visibles les espaces et caractères invisibles">¶ Caractères spéciaux</button>
+          <div class="undo-redo-bar">
+            <button id="btn-undo-configure" class="btn btn-secondary btn-sm" onclick="undoFix()" disabled title="Annuler la dernière modification (Ctrl+Z)">↩ Annuler</button>
+            <button id="btn-redo-configure" class="btn btn-secondary btn-sm" onclick="redoFix()" disabled title="Rétablir (Ctrl+Shift+Z)">↪ Rétablir</button>
+          </div>
         </div>
         <div id="preview-scroll-top" class="preview-scroll-top" hidden aria-hidden="true">
           <div id="preview-scroll-top-inner" class="preview-scroll-top-inner"></div>
@@ -208,13 +220,23 @@
                 <option value="orcid">ORCID</option>
                 <option value="ark">ARK</option>
                 <option value="issn">ISSN</option>
+                <option value="isbn13">ISBN-13</option>
+                <option value="isbn10">ISBN-10</option>
+                <option value="email_preset">Adresse e-mail</option>
               </optgroup>
               <optgroup label="── Dates">
                 <option value="w3cdtf">Date W3C-DTF (YYYY, YYYY-MM ou YYYY-MM-DD)</option>
                 <option value="iso_date">Date ISO stricte (YYYY-MM-DD)</option>
+                <option value="date_fr">Date française (JJ/MM/AAAA)</option>
               </optgroup>
               <optgroup label="── Codes &amp; référentiels">
                 <option value="lang_iso639">Langue ISO 639 (fr, en, de…)</option>
+                <option value="bcp47">Langue BCP 47 (fr-FR, en-GB…)</option>
+                <option value="country_iso">Pays ISO 3166 (FR, DE, US…)</option>
+              </optgroup>
+              <optgroup label="── Nombres &amp; mesures">
+                <option value="latitude">Latitude (-90 à 90)</option>
+                <option value="longitude">Longitude (-180 à 180)</option>
               </optgroup>
               <optgroup label="── Avancé">
                 <option value="custom">Personnalisé (regex)…</option>
@@ -292,6 +314,22 @@
               <button class="btn btn-sm" onclick="loadNakalaVocabulary()">Charger</button>
             </div>
             <div id="nakala-vocab-status" class="format-hint" hidden></div>
+            <!-- Sélecteur de sous-ensemble vocabulaire NAKALA -->
+            <div id="cfg-vocab-selector" class="vocab-selector" hidden>
+              <div class="vocab-selector-header">
+                <span id="vocab-selector-count"></span>
+                <div class="vocab-selector-actions">
+                  <button class="btn-link" onclick="_vocabSelectAll()">Tout sélectionner</button>
+                  <button class="btn-link" onclick="_vocabSelectNone()">Tout désélectionner</button>
+                </div>
+                <input type="text" id="vocab-search" class="input-sm vocab-search-input"
+                  placeholder="Rechercher…" oninput="_filterVocabSearch()">
+              </div>
+              <div id="vocab-selector-list" class="vocab-selector-list"></div>
+              <div class="vocab-selector-footer">
+                <span id="vocab-selected-count"></span>
+              </div>
+            </div>
           </div>
           <!-- Valeurs rares -->
           <div class="col-config-field col-config-full">
@@ -552,6 +590,7 @@
             </select>
           </label>
           <button class="btn btn-secondary btn-sm btn-toggle-special-chars" onclick="toggleSpecialChars()" title="Rendre visibles les espaces et caractères invisibles">¶ Caractères spéciaux</button>
+          <button id="btn-revalidate" class="btn btn-secondary btn-sm" onclick="revalidate()" title="Relancer la validation sur les données actuelles">🔄 Re-valider</button>
         </div>
 
         <div id="bulk-action-bar" class="bulk-action-bar" hidden>

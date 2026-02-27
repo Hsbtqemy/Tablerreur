@@ -17,6 +17,7 @@ from __future__ import annotations
 import io
 import logging
 import os
+import sys
 import pickle
 import re
 import tempfile
@@ -153,8 +154,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Serve the static frontend files
-_static_dir = Path(__file__).parent / "static"
+# Serve the static frontend files.
+# When run as a PyInstaller onedir sidecar, __file__ may not sit next to the
+# bundled static files; the latter are at {exe_dir}/spreadsheet_qa/web/static.
+if getattr(sys, "frozen", False):
+    _base_dir = Path(sys.executable).parent
+    _static_dir = _base_dir / "spreadsheet_qa" / "web" / "static"
+else:
+    _static_dir = Path(__file__).parent / "static"
+if not _static_dir.is_dir():
+    _logger.warning("Static directory not found: %s", _static_dir)
 app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
 
 # Mapala routes
@@ -257,6 +266,7 @@ async def get_column_config(job_id: str):
             return default
 
         result[col] = {
+            "required": _pick("required", False),
             "content_type": _pick("content_type", None),
             "unique": _pick("unique", False),
             "multiline_ok": _pick("multiline_ok", False),
@@ -611,6 +621,96 @@ async def redo_fix(job_id: str):
     }
 
 
+# ---------------------------------------------------------------------------
+# Édition manuelle de cellules
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/jobs/{job_id}/edit-cell")
+async def edit_cell(job_id: str, request: Request):
+    """Modify a single cell and push the change to the undo/redo history."""
+    job = _get_job(job_id)
+    body = await request.json()
+    row = body.get("row")
+    column = body.get("column")
+    value = body.get("value")
+
+    if row is None or column is None or value is None:
+        raise HTTPException(status_code=422, detail="Paramètres manquants : row, column, value")
+
+    df = _load_df(job)
+    if column not in df.columns:
+        raise HTTPException(status_code=422, detail=f"Colonne inconnue : {column!r}")
+    if not (isinstance(row, int) and 0 <= row < len(df)):
+        raise HTTPException(status_code=422, detail=f"Ligne hors limites : {row}")
+
+    cell_val = df.at[row, column]
+    old_value = "" if pd.isna(cell_val) else str(cell_val)
+    new_value = str(value)
+
+    cmd = WebBulkFixCommand(
+        job._df_path,
+        [(row, column, old_value, new_value)],
+        label=f"Édition manuelle — {column}[{row + 1}]",
+    )
+    job.command_history.push(cmd)
+    job.exports_dirty = True
+    job_manager.update(job)
+
+    return {
+        "success": True,
+        "row": row,
+        "column": column,
+        "old_value": old_value,
+        "new_value": new_value,
+    }
+
+
+@app.post("/api/jobs/{job_id}/edit-cells")
+async def edit_cells(job_id: str, request: Request):
+    """Modify multiple cells in a single undoable command."""
+    job = _get_job(job_id)
+    body = await request.json()
+    edits: list[dict] = body.get("edits", [])
+
+    if not edits:
+        raise HTTPException(status_code=422, detail="La liste d'éditions est vide")
+
+    df = _load_df(job)
+    changes: list[tuple] = []
+    results: list[dict] = []
+
+    for edit in edits:
+        row = edit.get("row")
+        column = edit.get("column")
+        value = edit.get("value")
+
+        if row is None or column is None or value is None:
+            raise HTTPException(status_code=422, detail="Paramètres manquants dans une édition")
+        if column not in df.columns:
+            raise HTTPException(status_code=422, detail=f"Colonne inconnue : {column!r}")
+        if not (isinstance(row, int) and 0 <= row < len(df)):
+            raise HTTPException(status_code=422, detail=f"Ligne hors limites : {row}")
+
+        cell_val = df.at[row, column]
+        old_value = "" if pd.isna(cell_val) else str(cell_val)
+        new_value = str(value)
+        changes.append((row, column, old_value, new_value))
+        results.append({"row": row, "column": column, "old_value": old_value, "new_value": new_value})
+
+    n = len(changes)
+    cmd = WebBulkFixCommand(
+        job._df_path,
+        changes,
+        label=f"Éditions manuelles en masse ({n} cellule{'s' if n != 1 else ''})",
+    )
+    job.command_history.push(cmd)
+    job.exports_dirty = True
+    job_manager.update(job)
+
+    return {"success": True, "modifications": results}
+
+
 @app.post("/api/jobs/{job_id}/fixes/preview")
 async def preview_fixes(
     job_id: str,
@@ -761,6 +861,93 @@ async def validate_job(job_id: str):
     _generate_outputs(job, df, issues)
 
     job.state = JobState.DONE
+    job_manager.update(job)
+
+    return {
+        "state": job.state.value,
+        "résumé": {
+            "erreurs": job.summary.errors,
+            "avertissements": job.summary.warnings,
+            "suspicions": job.summary.suspicions,
+            "total": job.summary.total,
+        },
+    }
+
+
+@app.post("/api/jobs/{job_id}/revalidate")
+async def revalidate_job(job_id: str):
+    """Re-run validation on the current DataFrame (after manual edits)."""
+    job = _get_job(job_id)
+    df = _load_df(job)
+
+    try:
+        mgr = TemplateManager()
+        config = mgr.compile_config(
+            generic_id=job.template_id,
+            overlay_id=job.overlay_id,
+            column_names=list(df.columns),
+            nakala_client=_nakala_client,
+        )
+        if job.column_config:
+            config_cols = config.setdefault("columns", {})
+            for col, user_overrides in job.column_config.items():
+                if col not in config_cols:
+                    config_cols[col] = {}
+                for key, val in user_overrides.items():
+                    if val is not None:
+                        config_cols[col][key] = val
+        engine = ValidationEngine()
+        issues = engine.validate(df, config=config)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    counts = {Severity.ERROR: 0, Severity.WARNING: 0, Severity.SUSPICION: 0}
+    for issue in issues:
+        counts[issue.severity] = counts.get(issue.severity, 0) + 1
+
+    job.summary = ValidationSummary(
+        errors=counts[Severity.ERROR],
+        warnings=counts[Severity.WARNING],
+        suspicions=counts[Severity.SUSPICION],
+        total=len(issues),
+    )
+
+    def _cell_str(row_idx, col_name):
+        if row_idx is None or not col_name:
+            return ""
+        try:
+            if 0 <= row_idx < len(df) and col_name in df.columns:
+                v = df.at[row_idx, col_name]
+                if v is None:
+                    return ""
+                s = str(v)
+                return "" if s in ("<NA>", "nan") else s
+        except Exception:
+            pass
+        return ""
+
+    job.problems = [
+        ProblemRow(
+            severity=issue.severity.value,
+            status=issue.status.value,
+            column=issue.col,
+            row=issue.row + 1,
+            message=issue.message,
+            suggestion=str(issue.suggestion) if issue.suggestion is not None else "",
+            issue_id=issue.id,
+            valeur=_cell_str(issue.row, issue.col),
+        )
+        for issue in issues
+    ]
+
+    issues_path = job.work_dir / "issues.pkl"
+    with open(str(issues_path), "wb") as _fh:
+        pickle.dump(issues, _fh)
+    job._issues_path = issues_path
+    job.issue_statuses = {}
+    job.exports_dirty = False
+
+    _generate_outputs(job, df, issues)
     job_manager.update(job)
 
     return {
@@ -1146,7 +1333,14 @@ async def get_nakala_vocabulary(vocab_name: str):
             detail="Le vocabulaire NAKALA n'est pas disponible actuellement.",
         )
 
-    return {"values": values, "count": len(values), "source": "NAKALA API"}
+    result: dict[str, Any] = {"values": values, "count": len(values), "source": "NAKALA API"}
+
+    # Pour les types de dépôt (datatypes), ajouter les libellés FR
+    if vocab_name == "datatypes":
+        from spreadsheet_qa.core.coar_mapping import COAR_URI_TO_LABEL_FR
+        result["labels"] = {uri: COAR_URI_TO_LABEL_FR[uri] for uri in values if uri in COAR_URI_TO_LABEL_FR}
+
+    return result
 
 
 # ---------------------------------------------------------------------------

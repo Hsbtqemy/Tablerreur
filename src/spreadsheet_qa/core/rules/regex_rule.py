@@ -47,6 +47,8 @@ class RegexRule(Rule):
             return []
 
         severity = Severity(config.get("severity", self.default_severity))
+        special: list[str] = config.get("special_values") or []
+        special_lower = [sv.lower() for sv in special]
         issues: list[Issue] = []
 
         for row_idx, val in df[col].items():
@@ -55,6 +57,8 @@ class RegexRule(Rule):
             cell = str(val)
             if cell.strip() == "":
                 continue
+            if special_lower and cell.strip().lower() in special_lower:
+                continue  # valeur spéciale acceptée inconditionnellement
             if not pattern.fullmatch(cell):
                 issues.append(
                     Issue.create(

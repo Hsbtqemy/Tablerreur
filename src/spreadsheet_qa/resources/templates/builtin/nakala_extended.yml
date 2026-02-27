@@ -141,6 +141,8 @@ columns:
     # Format : "Nom, Prénom" (optionnellement suivi d'un ORCID ou identifiant)
     regex: "^[^,]+,\\s*.+"
     pipe_in_cell_warning: true
+    # "Anonyme" est accepté inconditionnellement (bypass regex)
+    special_values: ["Anonyme"]
     rule_overrides:
       generic.unexpected_multiline:
         enabled: false
@@ -148,6 +150,8 @@ columns:
   "nakala:created":
     kind: structured
     required: true
+    # "Inconnue" est accepté inconditionnellement (bypass nakala.created_format)
+    special_values: ["Inconnue"]
     rule_overrides:
       nakala.created_format:
         enabled: true

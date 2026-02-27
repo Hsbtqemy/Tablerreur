@@ -32,21 +32,57 @@ body {
   display: flex;
   flex-direction: column;
 }
+/* Panneaux onglets (Tablerreur / Mapala) : prennent la place restante (fix WebView / app) */
+#app-tablerreur,
+#app-mapala {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+#app-tablerreur[hidden],
+#app-mapala[hidden] { display: none !important; }
 
-/* ---- Header ---- */
+/* ---- Header (Tablerreur gauche, Mapala droite, couleur selon onglet actif) ---- */
 .app-header {
-  background: var(--color-primary);
   color: #fff;
   padding: 1rem 2rem;
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
   gap: 0.25rem;
+  position: relative;
+  /* Onglet Tablerreur actif : gauche plus claire, droite plus foncée */
+  background: linear-gradient(90deg, #3b82f6 0%, #1d4ed8 50%, #1e40af 100%) !important;
 }
-.app-header .app-title,
+.app-header--mapala {
+  /* Onglet Mapala actif : gauche plus foncée, droite Mapala (vert) plus claire */
+  background: linear-gradient(90deg, #1e40af 0%, #1d4ed8 35%, #059669 70%, #34d399 100%) !important;
+}
+.app-header-brand {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  width: 100%;
+  padding-right: 2.5rem; /* place pour le bouton thème */
+}
+.app-header-name {
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.app-header-name--left { opacity: 1; }
+.app-header-name--right { opacity: 0.9; }
+.app-header--mapala .app-header-name--left { opacity: 0.85; }
+.app-header--mapala .app-header-name--right { opacity: 1; }
 .app-header .app-subtitle { flex: 0 0 100%; }
-.app-title { font-size: 1.6rem; font-weight: 700; }
-.app-subtitle { font-size: 0.9rem; opacity: 0.85; margin-top: 2px; }
+.app-subtitle { font-size: 0.9rem; opacity: 0.9; margin-top: 2px; }
+.app-header .btn-theme-toggle {
+  position: absolute;
+  top: 1rem;
+  right: 2rem;
+  margin-left: 0;
+}
 
 /* ---- Step nav ---- */
 .step-nav {
@@ -896,7 +932,12 @@ textarea.av-locked {
   --color-secondary: #94a3b8;
   --shadow: 0 2px 8px rgba(0,0,0,.25);
 }
-[data-theme="dark"] .app-header   { background: #1d4ed8; }
+[data-theme="dark"] .app-header {
+  background: linear-gradient(90deg, #2563eb 0%, #1d4ed8 50%, #1e40af 100%) !important;
+}
+[data-theme="dark"] .app-header--mapala {
+  background: linear-gradient(90deg, #1e40af 0%, #1d4ed8 35%, #047857 70%, #059669 100%) !important;
+}
 [data-theme="dark"] .step-nav     { background: #1e293b; border-color: #334155; }
 [data-theme="dark"] .card         { background: #1e293b; border-color: #334155; }
 [data-theme="dark"] .app-footer   { background: #1e293b; border-color: #334155; }
@@ -1107,24 +1148,37 @@ textarea.av-locked {
 /* ---- Barre d'onglets principale ---- */
 .app-tabs {
   display: flex;
+  flex-shrink: 0;
+  align-items: stretch;
+  min-height: 44px;
   background: var(--color-surface);
   border-bottom: 2px solid var(--color-border);
   padding: 0 1.5rem;
   gap: 0;
 }
 .app-tab {
-  background: none;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
   border: none;
   border-bottom: 3px solid transparent;
+  margin: 0;
   margin-bottom: -2px;
   padding: 0.65rem 1.25rem;
+  font-family: inherit;
   font-size: 0.95rem;
   font-weight: 500;
+  line-height: 1.4;
   cursor: pointer;
   color: var(--color-text-muted);
   transition: color .15s, border-color .15s;
+  outline: none;
 }
 .app-tab:hover { color: var(--color-text); }
+.app-tab:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
 #tab-tablerreur.active {
   color: var(--color-primary);
   border-bottom-color: var(--color-primary);
@@ -1294,6 +1348,170 @@ textarea.av-locked {
   background: rgba(255,255,255,.04);
 }
 [data-theme="dark"] .mapala-badge { background: var(--mapala-accent); }
+
+/* ---- Édition in-place des cellules ---- */
+.cell-edit-input {
+  width: 100%;
+  border: 2px solid var(--color-primary);
+  border-radius: 3px;
+  padding: 2px 4px;
+  font-size: inherit;
+  font-family: inherit;
+  background: var(--color-surface);
+  color: var(--color-text);
+  outline: none;
+}
+
+td.editing {
+  padding: 0 !important;
+  background: var(--color-surface) !important;
+  position: relative;
+}
+
+/* Indicateur cellule modifiée manuellement */
+td.cell-edited {
+  border-left: 3px solid var(--color-primary) !important;
+  position: relative;
+}
+td.cell-edited::after {
+  content: "✎";
+  position: absolute;
+  top: 1px;
+  right: 2px;
+  font-size: 0.7em;
+  color: var(--color-primary);
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* Dark mode — input lisible */
+[data-theme="dark"] .cell-edit-input {
+  background: #0f172a;
+  border-color: #3b82f6;
+  color: #f1f5f9;
+}
+
+/* position: relative sur les td du tableau d'aperçu pour le ::after */
+#preview-body td {
+  position: relative;
+}
+
+/* ---- Bandeau "cellules modifiées" (étape Configurer) ---- */
+.cells-edited-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  color: var(--color-primary);
+  margin-bottom: 0.75rem;
+}
+.cells-edited-banner a,
+.cells-edited-banner button {
+  background: none;
+  border: none;
+  color: var(--color-primary);
+  cursor: pointer;
+  font-size: 0.9rem;
+  text-decoration: underline;
+  padding: 0;
+  font-weight: 600;
+}
+[data-theme="dark"] .cells-edited-banner {
+  background: #172554;
+  border-color: #1e40af;
+  color: #93c5fd;
+}
+[data-theme="dark"] .cells-edited-banner a,
+[data-theme="dark"] .cells-edited-banner button {
+  color: #93c5fd;
+}
+
+/* ---- Sélecteur de sous-ensemble vocabulaire NAKALA ---- */
+.vocab-selector {
+  margin-top: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface);
+  overflow: hidden;
+}
+.vocab-selector-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.85rem;
+}
+.vocab-selector-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+.vocab-search-input {
+  width: 100%;
+  margin-top: 4px;
+  font-size: 0.85rem;
+}
+.vocab-selector-list {
+  max-height: 250px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+.vocab-selector-list label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  word-break: break-all;
+}
+.vocab-selector-list label:hover {
+  background: var(--color-primary-light, #eff6ff);
+}
+.vocab-selector-list label:nth-child(even) {
+  background: var(--color-bg);
+}
+.vocab-selector-list label:nth-child(even):hover {
+  background: var(--color-primary-light, #eff6ff);
+}
+.vocab-truncate-note {
+  padding: 6px 10px;
+  font-size: 0.8rem;
+  color: var(--color-text-muted, #64748b);
+  font-style: italic;
+  margin: 0;
+}
+.vocab-selector-footer {
+  padding: 5px 10px;
+  border-top: 1px solid var(--color-border);
+  font-size: 0.82rem;
+  color: var(--color-text-muted, #64748b);
+}
+[data-theme="dark"] .vocab-selector {
+  background: #1e293b;
+  border-color: #334155;
+}
+[data-theme="dark"] .vocab-selector-header {
+  background: #0f172a;
+  border-color: #334155;
+}
+[data-theme="dark"] .vocab-selector-list label:hover,
+[data-theme="dark"] .vocab-selector-list label:nth-child(even):hover {
+  background: #1e3a5f;
+}
+[data-theme="dark"] .vocab-selector-list label:nth-child(even) {
+  background: #0f172a;
+}
+[data-theme="dark"] .vocab-selector-footer {
+  border-color: #334155;
+}
 
 /* ---- Responsive ---- */
 @media (max-width: 640px) {

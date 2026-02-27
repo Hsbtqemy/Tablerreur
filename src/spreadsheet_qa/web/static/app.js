@@ -17,35 +17,37 @@ const state = {
   // Configure step
   columnConfig: {},     // { colName: { content_type, unique, ... } }
   activeColumn: null,   // name of the currently open config panel
+  loadedVocabs: {},       // cache { vocabName: [...values] } to restore selector on panel reopen
+  loadedVocabLabels: {},  // cache { vocabName: {uri: labelFR} } for datatypes display
 };
 
 // ---------------------------------------------------------------------------
 // Navigation entre étapes
 // ---------------------------------------------------------------------------
 function goToStep(step) {
-  // Hide all sections
-  document.querySelectorAll('.step-section').forEach(el => el.hidden = true);
-  document.querySelectorAll('.step-btn').forEach(el => el.classList.remove('active'));
+  // Hide all sections (scope: Tablerreur only, avoid touching Mapala)
+  document.querySelectorAll('#app-tablerreur .step-section').forEach(el => el.hidden = true);
+  document.querySelectorAll('#step-nav .step-btn').forEach(el => el.classList.remove('active'));
 
   // Show target section
   const section = document.getElementById('step-' + step);
   if (section) section.hidden = false;
 
-  // Activate nav button
-  const btn = document.querySelector(`[data-step="${step}"]`);
+  // Activate nav button (scope: Tablerreur step nav only)
+  const btn = document.querySelector(`#step-nav [data-step="${step}"]`);
   if (btn) btn.classList.add('active');
 
   state.currentStep = step;
 
   // Step-specific init
-  if (step === 'configure') loadPreview();
+  if (step === 'configure') { loadPreview(); updateUndoRedoButtons(); }
   if (step === 'fixes') updateUndoRedoButtons();
   if (step === 'validate') runValidation();
   if (step === 'results') loadProblems(1);
 }
 
 function enableStep(step) {
-  const btn = document.querySelector(`[data-step="${step}"]`);
+  const btn = document.querySelector(`#step-nav [data-step="${step}"]`);
   if (btn) btn.disabled = false;
 }
 
@@ -57,17 +59,27 @@ function switchApp(appName) {
   const mapala = document.getElementById('app-mapala');
   const tabT = document.getElementById('tab-tablerreur');
   const tabM = document.getElementById('tab-mapala');
+  // Header : id prioritaire, fallback par classe (compat WebView / ancien bundle)
+  const header = document.getElementById('app-header') || document.querySelector('.app-header');
   if (!tablerreur || !mapala) return;
   if (appName === 'mapala') {
     tablerreur.hidden = true;
     mapala.hidden = false;
     tabT.classList.remove('active');
     tabM.classList.add('active');
+    if (header) {
+      header.classList.remove('app-header--tablerreur');
+      header.classList.add('app-header--mapala');
+    }
   } else {
     mapala.hidden = true;
     tablerreur.hidden = false;
     tabT.classList.add('active');
     tabM.classList.remove('active');
+    if (header) {
+      header.classList.remove('app-header--mapala');
+      header.classList.add('app-header--tablerreur');
+    }
   }
 }
 
@@ -127,10 +139,12 @@ async function doUpload() {
   formData.append('header_row', document.getElementById('header-row').value);
   formData.append('delimiter', document.getElementById('delimiter').value);
   formData.append('encoding', document.getElementById('encoding').value);
-  // Le modèle importé manuellement a priorité sur le sélecteur builtin
-  formData.append('template_id', _pendingTemplateFile
-    ? 'generic_default'
-    : document.getElementById('template-id').value);
+  // Le modèle importé manuellement a priorité sur le sélecteur builtin.
+  // Pour les templates NAKALA, on envoie template_id=generic_default + overlay_id=nakala_*.
+  const _tplSelect = document.getElementById('template-id');
+  const _tplOpt = _tplSelect.selectedOptions[0];
+  formData.append('template_id', _pendingTemplateFile ? 'generic_default' : (_tplOpt?.value || 'generic_default'));
+  formData.append('overlay_id', _pendingTemplateFile ? '' : (_tplOpt?.dataset.overlay || ''));
 
   try {
     const resp = await fetch('/api/jobs', { method: 'POST', body: formData });
@@ -200,11 +214,20 @@ const FORMAT_PRESETS = {
   orcid:        { regex: '^\\d{4}-\\d{4}-\\d{4}-\\d{3}[\\dX]$', hint: 'Accepte : 0000-0002-1825-0097, 0000-0001-5109-3700. Rejette : sans tirets, trop court.' },
   ark:          { regex: '^ark:/\\d{5}/.+$',                    hint: 'Accepte : ark:/67375/ABC-123. Rejette : ark:67375 (manque le /), texte libre.' },
   issn:         { regex: '^\\d{4}-\\d{3}[\\dX]$',              hint: 'Accepte : 0317-8471, 1234-567X. Rejette : sans tiret, trop court.' },
+  isbn13:       { regex: '^97[89][\\d\\- ]{10,14}$',            hint: 'Accepte : 9781234567890, 978-1-23-456789-0. Rejette : 123456789, trop court.' },
+  isbn10:       { regex: '^[\\dX\\- ]{10,13}$',                hint: 'Accepte : 0123456789, 012345678X, 0-12-345678-9. Rejette : trop court, lettres.' },
+  email_preset: { regex: '^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$',     hint: 'Accepte : user@example.com, a.b@c.fr. Rejette : user@, @domain, texte libre.' },
   // Dates
   w3cdtf:       { regex: '^\\d{4}(-\\d{2}(-\\d{2})?)?$',       hint: 'Accepte : 2024, 2024-01, 2024-01-15. Rejette : 15/01/2024, 24.' },
   iso_date:     { regex: '^\\d{4}-\\d{2}-\\d{2}$',             hint: 'Accepte : 2024-01-15. Rejette : 2024, 15/01/2024, 2024-1-5.' },
+  date_fr:      { regex: '^\\d{2}/\\d{2}/\\d{4}$',             hint: 'Accepte : 15/01/2024, 01/12/1999. Rejette : 2024-01-15 (format ISO), 1/1/2024 (sans zéros).' },
   // Codes & référentiels
   lang_iso639:  { regex: '(?i)^[a-z]{2,3}$',                   hint: 'Accepte : fr, en, de, ita, oci. Rejette : français, FR-fr, french.' },
+  bcp47:        { regex: '^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8})*$', hint: 'Accepte : fr, fr-FR, en-GB, oc, pt-BR. Rejette : français, FRA (trop long sans subtag).' },
+  country_iso:  { regex: '^[A-Z]{2}$',                         hint: 'Accepte : FR, DE, US, IT. Rejette : fra (3 lettres), France (nom complet), fr (minuscules).' },
+  // Nombres & mesures
+  latitude:     { regex: '^-?([0-8]?\\d(\\.\\d+)?|90(\\.0+)?)$',                        hint: 'Accepte : 48.8566, -33.8688, 0, 90, -90. Rejette : 91, -91, texte.' },
+  longitude:    { regex: '^-?(1[0-7]\\d(\\.\\d+)?|180(\\.0+)?|[0-9]{1,2}(\\.\\d+)?)$',  hint: 'Accepte : 2.3522, -122.4194, 0, 180, -180. Rejette : 181, -181, texte.' },
 };
 
 // Default Oui/Non values
@@ -363,13 +386,15 @@ async function loadPreview() {
     });
 
     // Build body rows
-    preview.rows.forEach(row => {
+    preview.rows.forEach((row, rowIdx) => {
       const tr = document.createElement('tr');
       row.forEach((cell, i) => {
         const td = document.createElement('td');
         const rawVal = cell ?? '';
         td.dataset.rawText = rawVal;
         td.dataset.colIdx = i;
+        td.dataset.row = rowIdx;
+        td.dataset.col = preview.columns[i] || '';
         if (state.showSpecialChars) {
           td.innerHTML = renderVisibleChars(rawVal);
         } else {
@@ -521,6 +546,19 @@ function openColumnConfig(colName) {
   nakalaStatusEl.hidden = true;
   nakalaStatusEl.textContent = '';
   nakalaStatusEl.className = 'format-hint';
+
+  // Restaurer le sélecteur de sous-ensemble si le vocabulaire est en cache
+  const vocabSelectorEl = document.getElementById('cfg-vocab-selector');
+  const cachedVocab = cfg.nakala_vocabulary ? state.loadedVocabs[cfg.nakala_vocabulary] : null;
+  const cachedLabels = cfg.nakala_vocabulary ? (state.loadedVocabLabels[cfg.nakala_vocabulary] || {}) : {};
+  if (cachedVocab && cachedVocab.length > 0) {
+    const savedSelection = Array.isArray(cfg.allowed_values) && cfg.allowed_values.length > 0
+      ? cfg.allowed_values : null;
+    _buildVocabSelector(cachedVocab, savedSelection, cachedLabels);
+  } else {
+    vocabSelectorEl.hidden = true;
+    document.getElementById('vocab-selector-list').innerHTML = '';
+  }
 
   // Reset saved indicator
   const savedEl = document.getElementById('col-config-saved');
@@ -853,8 +891,12 @@ async function undoFix() {
     const resp = await fetch(`/api/jobs/${state.jobId}/undo`, { method: 'POST' });
     const data = await resp.json();
     if (data.success) {
-      _showToast('↩ Correctif annulé', 'success');
-      await previewFixes();
+      _showToast('↩ Modification annulée', 'success');
+      if (state.currentStep === 'configure') {
+        await loadPreview();
+      } else {
+        await previewFixes();
+      }
     } else {
       _showToast(data.message || 'Rien à annuler.', 'warning');
     }
@@ -871,8 +913,12 @@ async function redoFix() {
     const resp = await fetch(`/api/jobs/${state.jobId}/redo`, { method: 'POST' });
     const data = await resp.json();
     if (data.success) {
-      _showToast('↪ Correctif rétabli', 'success');
-      await previewFixes();
+      _showToast('↪ Modification rétablie', 'success');
+      if (state.currentStep === 'configure') {
+        await loadPreview();
+      } else {
+        await previewFixes();
+      }
     } else {
       _showToast(data.message || 'Rien à rétablir.', 'warning');
     }
@@ -898,6 +944,11 @@ function _syncUndoRedoButtons(canUndo, canRedo) {
   const btnRedo = document.getElementById('btn-redo');
   if (btnUndo) btnUndo.disabled = !canUndo;
   if (btnRedo) btnRedo.disabled = !canRedo;
+  // Also sync the configure-step undo/redo buttons
+  const btnUndoConf = document.getElementById('btn-undo-configure');
+  const btnRedoConf = document.getElementById('btn-redo-configure');
+  if (btnUndoConf) btnUndoConf.disabled = !canUndo;
+  if (btnRedoConf) btnRedoConf.disabled = !canRedo;
 }
 
 function skipFixes() {
@@ -1066,7 +1117,98 @@ async function loadProblems(page) {
         tr.appendChild(tdAct);
 
         const tdNav = document.createElement('td');
-        tdNav.innerHTML = '<span class="problem-nav-icon" title="Localiser dans le tableau">→</span>';
+        tdNav.style.whiteSpace = 'nowrap';
+        const navSpan = document.createElement('span');
+        navSpan.className = 'problem-nav-icon';
+        navSpan.title = 'Localiser dans le tableau';
+        navSpan.textContent = '→';
+        navSpan.style.cursor = 'pointer';
+        navSpan.addEventListener('click', (e) => {
+          e.stopPropagation();
+          navigateToCell(parseInt(tr.dataset.row), tr.dataset.col);
+        });
+        tdNav.appendChild(navSpan);
+
+        // Bouton "Corriger"
+        const bFix = document.createElement('button');
+        bFix.className = 'btn-status';
+        bFix.style.marginLeft = '4px';
+        bFix.textContent = '✏️';
+        bFix.title = 'Corriger cette cellule';
+        bFix.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const suggestion = p['suggestion'] || '';
+          const rowNum = parseInt(tr.dataset.row);
+          const colName = tr.dataset.col;
+
+          if (suggestion && rowNum <= 30) {
+            // Afficher un dialogue inline
+            const existing = tdNav.querySelector('.fix-inline-dialog');
+            if (existing) { existing.remove(); return; }
+            const dialog = document.createElement('div');
+            dialog.className = 'fix-inline-dialog';
+            dialog.style.cssText = 'position:absolute;z-index:100;background:var(--color-surface);border:1px solid var(--color-border);border-radius:6px;padding:0.5rem 0.75rem;box-shadow:0 4px 16px rgba(0,0,0,.15);font-size:0.85rem;min-width:200px;right:0;top:1.5rem;';
+            dialog.innerHTML = `<div style="margin-bottom:0.4rem;">Appliquer <strong>${esc(suggestion)}</strong> ?</div>`;
+            const btnApply = document.createElement('button');
+            btnApply.className = 'btn btn-primary btn-sm';
+            btnApply.style.fontSize = '0.8rem';
+            btnApply.style.padding = '3px 10px';
+            btnApply.textContent = 'Appliquer';
+            btnApply.onclick = async () => {
+              dialog.remove();
+              if (!state.jobId) return;
+              try {
+                const resp = await fetch(`/api/jobs/${state.jobId}/edit-cell`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ row: rowNum - 1, column: colName, value: suggestion }),
+                });
+                if (resp.ok) {
+                  _manualEditsCount++;
+                  _showCellsEditedBanner();
+                  updateUndoRedoButtons();
+                  _showToastWithRevalidateLink('Cellule modifiée.');
+                }
+              } catch (_) { /* non-bloquant */ }
+            };
+            const btnEdit = document.createElement('button');
+            btnEdit.className = 'btn btn-secondary btn-sm';
+            btnEdit.style.fontSize = '0.8rem';
+            btnEdit.style.padding = '3px 10px';
+            btnEdit.style.marginLeft = '4px';
+            btnEdit.textContent = 'Modifier';
+            btnEdit.onclick = () => {
+              dialog.remove();
+              navigateToCell(rowNum, colName);
+              setTimeout(() => {
+                const colIdx = state.columns.indexOf(colName);
+                if (colIdx < 0) return;
+                const rows = document.querySelectorAll('#preview-body tr');
+                const tdTarget = rows[rowNum - 1]?.querySelectorAll('td')[colIdx];
+                if (tdTarget) startCellEdit(tdTarget);
+              }, 300);
+            };
+            dialog.appendChild(btnApply);
+            dialog.appendChild(btnEdit);
+            // Fermer en cliquant ailleurs
+            setTimeout(() => document.addEventListener('click', function _close(ev) {
+              if (!dialog.contains(ev.target)) { dialog.remove(); document.removeEventListener('click', _close); }
+            }), 50);
+            tdNav.style.position = 'relative';
+            tdNav.appendChild(dialog);
+          } else {
+            // Pas de suggestion — naviguer + éditer directement
+            navigateToCell(rowNum, colName);
+            setTimeout(() => {
+              const colIdx = state.columns.indexOf(colName);
+              if (colIdx < 0) return;
+              const rows = document.querySelectorAll('#preview-body tr');
+              const tdTarget = rows[rowNum - 1]?.querySelectorAll('td')[colIdx];
+              if (tdTarget) startCellEdit(tdTarget);
+            }, 300);
+          }
+        });
+        tdNav.appendChild(bFix);
         tr.appendChild(tdNav);
 
         tbody.appendChild(tr);
@@ -1335,6 +1477,7 @@ async function loadNakalaVocabulary() {
   statusEl.textContent = 'Chargement du vocabulaire…';
   statusEl.className = 'format-hint';
   statusEl.hidden = false;
+  document.getElementById('cfg-vocab-selector').hidden = true;
 
   try {
     const resp = await fetch(`/api/nakala/vocabulary/${vocabName}`);
@@ -1347,8 +1490,13 @@ async function loadNakalaVocabulary() {
     }
 
     const values = data.values || [];
+    const labels = data.labels || {};
 
-    // Lock the allowed-values textarea and populate it
+    // Cache for panel-reopen restore
+    state.loadedVocabs[vocabName] = values;
+    state.loadedVocabLabels[vocabName] = labels;
+
+    // Lock the allowed-values textarea and populate it (all values by default)
     const avEl = document.getElementById('cfg-allowed-values');
     avEl.readOnly = true;
     avEl.classList.add('av-locked');
@@ -1357,52 +1505,150 @@ async function loadNakalaVocabulary() {
     const countEl = document.getElementById('cfg-av-count-msg');
     countEl.textContent = `${values.length} valeurs chargées depuis NAKALA`;
     countEl.hidden = false;
+    document.getElementById('cfg-av-voir-tout').hidden = true;
 
-    const allStr = values.join('\n');
-    if (values.length > 20) {
-      avEl.value = values.slice(0, 20).join('\n');
-      const btn = document.getElementById('cfg-av-voir-tout');
-      btn.hidden = false;
-      btn.textContent = 'Voir tout';
-      btn.dataset.full = allStr;
-    } else {
-      avEl.value = allStr;
-      document.getElementById('cfg-av-voir-tout').hidden = true;
-    }
+    // Build selector — all selected by default (first load)
+    _buildVocabSelector(values, null, labels);
 
-    // Update local state directly (bypass _readPanelValues for locked values)
-    if (state.activeColumn) {
-      if (!state.columnConfig[state.activeColumn]) state.columnConfig[state.activeColumn] = {};
-      state.columnConfig[state.activeColumn].allowed_values = values;
-      state.columnConfig[state.activeColumn].allowed_values_locked = true;
-      state.columnConfig[state.activeColumn].nakala_vocabulary = vocabName;
-    }
-
-    statusEl.textContent = `${values.length} valeurs chargées depuis NAKALA.`;
+    statusEl.textContent = `${values.length} valeurs chargées. Affinez la sélection ci-dessous.`;
     statusEl.className = 'format-hint msg-success';
+    statusEl.hidden = false;
 
-    // Auto-save to server
-    if (state.jobId && state.activeColumn) {
-      try {
-        await fetch(`/api/jobs/${state.jobId}/column-config`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            columns: {
-              [state.activeColumn]: {
-                allowed_values: values,
-                allowed_values_locked: true,
-                nakala_vocabulary: vocabName,
-              },
-            },
-          }),
-        });
-        _updateColumnBadges();
-      } catch (_) { /* non-bloquant */ }
-    }
   } catch (err) {
     statusEl.textContent = 'Erreur : ' + err.message;
     statusEl.className = 'format-hint msg-error';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Sélecteur de sous-ensemble vocabulaire
+// ---------------------------------------------------------------------------
+
+/** Build (or rebuild) the vocabulary selector.
+ *  @param {string[]} allValues  – full vocabulary list
+ *  @param {string[]|null} selectedValues – subset to pre-check (null = all)
+ *  @param {Object} [labels={}] – optional {uri: labelFR} for datatypes display
+ */
+function _buildVocabSelector(allValues, selectedValues, labels) {
+  labels = labels || {};
+  const selectorEl = document.getElementById('cfg-vocab-selector');
+  const listEl     = document.getElementById('vocab-selector-list');
+  const countEl    = document.getElementById('vocab-selector-count');
+  const searchEl   = document.getElementById('vocab-search');
+
+  const selectedSet = selectedValues ? new Set(selectedValues) : null;
+
+  // For large vocabularies, show only first 100 + note
+  const LIMIT = 100;
+  const displayValues = allValues.length > LIMIT ? allValues.slice(0, LIMIT) : allValues;
+  const truncated = allValues.length > LIMIT;
+
+  countEl.textContent = `${allValues.length} valeur${allValues.length > 1 ? 's' : ''} chargée${allValues.length > 1 ? 's' : ''}`;
+  searchEl.value = '';
+
+  listEl.innerHTML = '';
+  displayValues.forEach(val => {
+    const labelEl = document.createElement('label');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = val;
+    cb.checked = selectedSet === null || selectedSet.has(val);
+    cb.addEventListener('change', _onVocabCheckChange);
+    labelEl.appendChild(cb);
+    // Si un libellé FR est disponible, afficher "Libellé (URI)" ; sinon juste la valeur
+    const labelText = labels[val] ? `${labels[val]} (${val})` : val;
+    labelEl.appendChild(document.createTextNode(' ' + labelText));
+    // Stocker le texte de recherche combiné sur l'élément pour le filtre
+    labelEl.dataset.searchText = labelText.toLowerCase();
+    listEl.appendChild(labelEl);
+  });
+
+  if (truncated) {
+    const note = document.createElement('p');
+    note.className = 'vocab-truncate-note';
+    note.textContent = `Affichage limité aux ${LIMIT} premières valeurs. Utilisez la recherche pour trouver d'autres valeurs.`;
+    listEl.appendChild(note);
+  }
+
+  selectorEl.hidden = false;
+  _updateVocabCounters(allValues.length);
+  _syncVocabToState();
+}
+
+function _filterVocabSearch() {
+  const query = document.getElementById('vocab-search').value.toLowerCase();
+  document.querySelectorAll('#vocab-selector-list label').forEach(label => {
+    // Recherche sur searchText (libellé + URI combinés) stocké en data-attribute
+    const searchText = label.dataset.searchText || label.querySelector('input[type=checkbox]')?.value?.toLowerCase() || '';
+    label.hidden = query !== '' && !searchText.includes(query);
+  });
+}
+
+function _vocabSelectAll() {
+  document.querySelectorAll('#vocab-selector-list label').forEach(label => {
+    if (!label.hidden) {
+      const cb = label.querySelector('input[type=checkbox]');
+      if (cb) cb.checked = true;
+    }
+  });
+  _onVocabCheckChange();
+}
+
+function _vocabSelectNone() {
+  document.querySelectorAll('#vocab-selector-list label').forEach(label => {
+    if (!label.hidden) {
+      const cb = label.querySelector('input[type=checkbox]');
+      if (cb) cb.checked = false;
+    }
+  });
+  _onVocabCheckChange();
+}
+
+function _onVocabCheckChange() {
+  const vocabName = document.getElementById('cfg-nakala-vocabulary').value;
+  const allCached = vocabName ? (state.loadedVocabs[vocabName] || []) : [];
+  _updateVocabCounters(allCached.length);
+  _syncVocabToState();
+}
+
+function _updateVocabCounters(totalCount) {
+  const checked = document.querySelectorAll('#vocab-selector-list input[type=checkbox]:checked');
+  document.getElementById('vocab-selected-count').textContent =
+    `${checked.length} / ${totalCount} sélectionnée${checked.length > 1 ? 's' : ''}`;
+}
+
+/** Write current checkbox selection back to state and update the locked textarea. */
+function _syncVocabToState() {
+  const checkedValues = Array.from(
+    document.querySelectorAll('#vocab-selector-list input[type=checkbox]:checked')
+  ).map(cb => cb.value);
+
+  const vocabName = document.getElementById('cfg-nakala-vocabulary').value;
+  const avEl = document.getElementById('cfg-allowed-values');
+  avEl.value = checkedValues.slice(0, 20).join('\n') + (checkedValues.length > 20 ? '\n…' : '');
+
+  if (state.activeColumn) {
+    if (!state.columnConfig[state.activeColumn]) state.columnConfig[state.activeColumn] = {};
+    state.columnConfig[state.activeColumn].allowed_values = checkedValues;
+    state.columnConfig[state.activeColumn].allowed_values_locked = true;
+    state.columnConfig[state.activeColumn].nakala_vocabulary = vocabName;
+  }
+
+  // Auto-save to server (non-blocking)
+  if (state.jobId && state.activeColumn) {
+    fetch(`/api/jobs/${state.jobId}/column-config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        columns: {
+          [state.activeColumn]: {
+            allowed_values: checkedValues,
+            allowed_values_locked: true,
+            nakala_vocabulary: vocabName,
+          },
+        },
+      }),
+    }).then(() => _updateColumnBadges()).catch(() => {});
   }
 }
 
@@ -1492,9 +1738,9 @@ function resetApp() {
   const rstSimilarThresh = document.getElementById('cfg-similar-threshold');
   if (rstSimilarThresh) rstSimilarThresh.value = 85;
 
-  // Reset step buttons
+  // Reset step buttons (scope: Tablerreur step nav only)
   ['configure','fixes','validate','results'].forEach(step => {
-    const btn = document.querySelector(`[data-step="${step}"]`);
+    const btn = document.querySelector(`#step-nav [data-step="${step}"]`);
     if (btn) btn.disabled = true;
   });
   _syncUndoRedoButtons(false, false);
@@ -1770,6 +2016,23 @@ function _showToast(message, type) {
   }, 4000);
 }
 
+/**
+ * Toast avec lien "Re-valider" cliquable pour inciter à re-valider après édition.
+ */
+function _showToastWithRevalidateLink(message) {
+  const el = document.getElementById('template-toast');
+  if (!el) return;
+  clearTimeout(_toastTimer);
+  el.innerHTML = `${esc(message)} <button onclick="revalidate()" style="background:none;border:none;color:inherit;font-weight:700;text-decoration:underline;cursor:pointer;font-size:inherit;">Re-valider →</button>`;
+  el.className = 'template-toast toast-success';
+  el.hidden = false;
+  _toastTimer = setTimeout(() => {
+    el.style.animation = 'none';
+    el.hidden = true;
+    el.style.animation = '';
+  }, 6000);
+}
+
 // ---------------------------------------------------------------------------
 // Import de vocabulaire — panneau de config colonne (étape Configurer)
 // ---------------------------------------------------------------------------
@@ -1894,11 +2157,162 @@ function toggleTheme() {
 })();
 
 // ---------------------------------------------------------------------------
+// Curation — édition in-place des cellules du tableau d'aperçu
+// ---------------------------------------------------------------------------
+
+/** Nombre de cellules modifiées manuellement depuis la dernière validation. */
+let _manualEditsCount = 0;
+
+/**
+ * Active le mode édition sur une cellule <td> du tableau d'aperçu.
+ * Appelé par dblclick.
+ */
+function startCellEdit(td) {
+  if (td.classList.contains('editing')) return;
+  const row = parseInt(td.dataset.row);
+  const col = td.dataset.col;
+  if (!col || isNaN(row)) return;
+
+  const currentValue = td.dataset.rawText ?? td.textContent;
+
+  td.classList.add('editing');
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = currentValue;
+  input.className = 'cell-edit-input';
+
+  td.textContent = '';
+  td.appendChild(input);
+  input.focus();
+  input.select();
+
+  async function save() {
+    const newValue = input.value;
+    td.classList.remove('editing');
+    td.textContent = newValue;
+    td.dataset.rawText = newValue;
+
+    if (state.showSpecialChars) {
+      td.innerHTML = renderVisibleChars(newValue);
+    }
+
+    if (newValue !== currentValue && state.jobId) {
+      try {
+        const resp = await fetch(`/api/jobs/${state.jobId}/edit-cell`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ row, column: col, value: newValue }),
+        });
+        if (resp.ok) {
+          td.classList.add('cell-edited');
+          _manualEditsCount++;
+          _showCellsEditedBanner();
+          updateUndoRedoButtons();
+        }
+      } catch (_) { /* non-bloquant */ }
+    }
+  }
+
+  function cancel() {
+    td.classList.remove('editing');
+    td.textContent = currentValue;
+    td.dataset.rawText = currentValue;
+    if (state.showSpecialChars) {
+      td.innerHTML = renderVisibleChars(currentValue);
+    }
+  }
+
+  input.addEventListener('blur', save);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    if (e.key === 'Escape') { input.removeEventListener('blur', save); cancel(); }
+  });
+}
+
+/** Affiche le bandeau "Des cellules ont été modifiées". */
+function _showCellsEditedBanner() {
+  const banner = document.getElementById('cells-edited-banner');
+  if (banner) banner.hidden = false;
+}
+
+/** Masque le bandeau de modification. */
+function _hideCellsEditedBanner() {
+  const banner = document.getElementById('cells-edited-banner');
+  if (banner) banner.hidden = true;
+  _manualEditsCount = 0;
+}
+
+/** Activer le double-clic sur les cellules du tableau d'aperçu. */
+document.getElementById('preview-body')?.addEventListener('dblclick', (e) => {
+  const td = e.target.closest('td');
+  if (td && td.closest('#preview-body')) {
+    startCellEdit(td);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Re-validation après éditions manuelles
+// ---------------------------------------------------------------------------
+
+/**
+ * Re-lance la validation sur le DataFrame actuel.
+ * Met à jour la liste des problèmes si on est à l'étape Résultats.
+ */
+async function revalidate() {
+  if (!state.jobId) return;
+  const oldTotal = _currentProblemsTotal;
+  const btn = document.getElementById('btn-revalidate');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Validation…'; }
+
+  try {
+    const resp = await fetch(`/api/jobs/${state.jobId}/revalidate`, { method: 'POST' });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.detail || 'Erreur de re-validation');
+    }
+    const data = await resp.json();
+    const résumé = data['résumé'] || {};
+    const newTotal = résumé['total'] ?? 0;
+
+    state.validationDone = true;
+    _hideCellsEditedBanner();
+
+    // Update summary counters if present
+    const sumErrors = document.getElementById('sum-errors');
+    if (sumErrors) sumErrors.textContent = résumé['erreurs'] ?? 0;
+    const sumWarnings = document.getElementById('sum-warnings');
+    if (sumWarnings) sumWarnings.textContent = résumé['avertissements'] ?? 0;
+    const sumSuspicions = document.getElementById('sum-suspicions');
+    if (sumSuspicions) sumSuspicions.textContent = résumé['suspicions'] ?? 0;
+    const sumTotal = document.getElementById('sum-total');
+    if (sumTotal) sumTotal.textContent = newTotal;
+
+    const msg = newTotal === 0
+      ? '✓ Re-validation terminée : aucun problème restant'
+      : `✓ Re-validation terminée : ${newTotal} problème${newTotal > 1 ? 's' : ''} restant${newTotal > 1 ? 's' : ''} (était ${oldTotal})`;
+    _showToast(msg, newTotal < oldTotal ? 'success' : 'warning');
+
+    // Refresh problems table if at results step
+    if (state.currentStep === 'results') {
+      loadProblems(1);
+    }
+    // Refresh cell highlights if at configure step
+    if (state.currentStep === 'configure') {
+      _applyCellIssueHighlights();
+    }
+  } catch (err) {
+    _showToast('Erreur : ' + err.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🔄 Re-valider'; }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Raccourcis clavier undo/redo (Ctrl+Z / Ctrl+Shift+Z ou Cmd+Z / Cmd+Shift+Z)
 // Actifs uniquement à l'étape Correctifs, hors champs de saisie.
 // ---------------------------------------------------------------------------
 document.addEventListener('keydown', (e) => {
-  if (state.currentStep !== 'fixes') return;
+  if (state.currentStep !== 'fixes' && state.currentStep !== 'configure') return;
   const tag = document.activeElement?.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 
