@@ -1,17 +1,28 @@
 # Tablerreur — NAKALA Baseline overlay
-# Activates NAKALA-specific validation on the 5 required NAKALA fields.
-# Merge this on top of a generic template via TemplateManager.
+# Valide les 5 champs OBLIGATOIRES d'un dépôt NAKALA.
+# Fusionner sur un template générique via TemplateManager.
 #
-# Two complementary validation layers:
-#   1. nakala.* rules   → dynamic validation via NakalaClient (online, preferred)
-#   2. allowed_values   → static offline fallback (locked, from API snapshot 2026-02)
+# Deux couches de validation complémentaires :
+#   1. Règles nakala.*   → validation dynamique via NakalaClient (en ligne, préféré)
+#   2. allowed_values    → repli hors-ligne statique (verrouillé, snapshot API 2026-02)
+#
+# Inventaire des champs NAKALA (5 obligatoires, préfixe nakala:) :
+#   nakala:type     — Type de ressource (vocabulaire COAR, 29 URIs)
+#   nakala:title    — Titre (texte libre)
+#   nakala:creator  — Créateur ("Nom, Prénom" ou "Anonyme")
+#   nakala:created  — Date de création (W3C-DTF AAAA/AAAA-MM/AAAA-MM-JJ ou "Inconnue")
+#   nakala:license  — Licence (vocabulaire NAKALA SPDX)
+#
+# Équivalents dcterms:* (optionnels, validés s'ils sont présents dans le CSV) :
+#   dcterms:type, dcterms:title, dcterms:creator, dcterms:created, dcterms:license
 version: 1
 id: nakala_baseline
-name: "NAKALA Baseline"
+name: "NAKALA — Référence"
+description: "Colonnes obligatoires pour un dépôt NAKALA (overlay sur Générique)"
 scope: builtin
 type: overlay
 
-# Required NAKALA columns (must be present in the dataset)
+# Colonnes NAKALA obligatoires (doivent être présentes dans le jeu de données)
 required_columns:
   - "nakala:type"
   - "nakala:title"
@@ -20,7 +31,7 @@ required_columns:
   - "nakala:license"
 
 rules:
-  # NAKALA-specific rules (implemented in core/rules/nakala_rules.py)
+  # Règles NAKALA (implémentées dans core/rules/nakala_rules.py)
   nakala.deposit_type:
     enabled: true
     severity: ERROR
@@ -29,11 +40,13 @@ rules:
     enabled: true
     severity: ERROR
 
+  # nakala.created_format activé globalement ; désactivé colonne par colonne
+  # pour les champs non-date (rule_overrides: nakala.created_format: enabled: false).
   nakala.created_format:
     enabled: true
     severity: ERROR
 
-  # Keep generic hygiene active
+  # Hygiène générique maintenue
   generic.hygiene.leading_trailing_space:
     enabled: true
     severity: WARNING
@@ -42,13 +55,16 @@ rules:
     enabled: true
     severity: WARNING
 
-# Per-column configurations for NAKALA required fields
+# Configurations par colonne pour les champs NAKALA obligatoires
 columns:
+  # ── CHAMPS OBLIGATOIRES (nakala:*) ────────────────────────────────────────
+
   "nakala:type":
     kind: controlled
     required: true
-    # Offline fallback: full list of COAR resource type URIs (29 values, snapshot 2026-02)
-    # NakalaClient (when available) also validates dynamically via nakala.deposit_type rule.
+    # Repli hors-ligne : liste complète des URIs COAR (29 valeurs, snapshot 2026-02)
+    # NakalaClient (si disponible) valide aussi dynamiquement via nakala.deposit_type.
+    nakala_vocabulary: "datatypes"
     allowed_values:
       - "http://purl.org/coar/resource_type/c_c513"
       - "http://purl.org/coar/resource_type/c_12ce"
@@ -83,6 +99,8 @@ columns:
     rule_overrides:
       nakala.deposit_type:
         enabled: true
+      nakala.created_format:
+        enabled: false
 
   "nakala:title":
     kind: free_text_short
@@ -91,18 +109,24 @@ columns:
       generic.pseudo_missing:
         enabled: true
         severity: ERROR
+      nakala.created_format:
+        enabled: false
 
   "nakala:creator":
     kind: structured
     required: true
     # Format attendu : "Nom, Prénom" (optionnellement suivi d'un ORCID)
     regex: "^[^,]+,\\s*.+"
-    # Warn when | used in-cell (suggest split to repeated columns)
+    # Avertit si | utilisé en cellule (suggère de scinder en colonnes répétées)
     pipe_in_cell_warning: true
+    list_separator: "|"
+    list_trim: true
     # "Anonyme" est accepté inconditionnellement (bypass regex)
     special_values: ["Anonyme"]
     rule_overrides:
       generic.unexpected_multiline:
+        enabled: false
+      nakala.created_format:
         enabled: false
 
   "nakala:created":
@@ -117,11 +141,96 @@ columns:
   "nakala:license":
     kind: controlled
     required: true
-    # NakalaClient validates dynamically (620 SPDX codes) when available.
-    # No offline fallback here: the list is too large and changes frequently.
+    nakala_vocabulary: "licenses"
+    allowed_values_locked: true
+    # NakalaClient valide dynamiquement (620 codes SPDX) quand disponible.
+    # Pas de repli hors-ligne : la liste est trop grande et change fréquemment.
     rule_overrides:
       nakala.license:
         enabled: true
+      nakala.created_format:
+        enabled: false
+
+  # ── ÉQUIVALENTS dcterms:* (optionnels, activés si présents dans le CSV) ──
+
+  "dcterms:type":
+    kind: controlled
+    required: false
+    # Même vocabulaire COAR que nakala:type
+    nakala_vocabulary: "datatypes"
+    allowed_values:
+      - "http://purl.org/coar/resource_type/c_c513"
+      - "http://purl.org/coar/resource_type/c_12ce"
+      - "http://purl.org/coar/resource_type/c_18cc"
+      - "http://purl.org/coar/resource_type/c_6501"
+      - "http://purl.org/coar/resource_type/c_6670"
+      - "http://purl.org/coar/resource_type/c_c94f"
+      - "http://purl.org/coar/resource_type/c_e059"
+      - "http://purl.org/coar/resource_type/c_2f33"
+      - "http://purl.org/coar/resource_type/c_12cd"
+      - "http://purl.org/coar/resource_type/c_ddb1"
+      - "http://purl.org/coar/resource_type/c_5ce6"
+      - "http://purl.org/coar/resource_type/c_1843"
+      - "http://purl.org/coar/resource_type/YC9F-HGCF"
+      - "http://purl.org/coar/resource_type/F8RT-TJK0"
+      - "http://purl.org/coar/resource_type/c_86bc"
+      - "http://purl.org/coar/resource_type/c_ba08"
+      - "http://purl.org/coar/resource_type/c_0040"
+      - "http://purl.org/coar/resource_type/c_0857"
+      - "http://purl.org/coar/resource_type/c_93fc"
+      - "http://purl.org/coar/resource_type/c_2fe3"
+      - "http://purl.org/coar/resource_type/c_816b"
+      - "http://purl.org/coar/resource_type/c_efa0"
+      - "http://purl.org/coar/resource_type/c_18cw"
+      - "http://purl.org/coar/resource_type/NHD0-W6SY"
+      - "http://purl.org/coar/resource_type/c_18cf"
+      - "http://purl.org/coar/resource_type/c_46ec"
+      - "http://purl.org/coar/resource_type/c_7ad9"
+      - "http://purl.org/coar/resource_type/c_beb9"
+      - "http://purl.org/coar/resource_type/c_e9a0"
+    allowed_values_locked: true
+    rule_overrides:
+      nakala.deposit_type:
+        enabled: true
+      nakala.created_format:
+        enabled: false
+
+  "dcterms:title":
+    kind: free_text_short
+    required: false
+    rule_overrides:
+      nakala.created_format:
+        enabled: false
+
+  "dcterms:creator":
+    kind: structured
+    required: false
+    regex: "^[^,]+,\\s*.+"
+    special_values: ["Anonyme"]
+    list_separator: "|"
+    list_trim: true
+    rule_overrides:
+      nakala.created_format:
+        enabled: false
+
+  "dcterms:created":
+    kind: structured
+    required: false
+    special_values: ["Inconnue"]
+    rule_overrides:
+      nakala.created_format:
+        enabled: true
+
+  "dcterms:license":
+    kind: controlled
+    required: false
+    nakala_vocabulary: "licenses"
+    allowed_values_locked: true
+    rule_overrides:
+      nakala.license:
+        enabled: true
+      nakala.created_format:
+        enabled: false
 
 policies:
   warn_pipe_in_repeatable_fields: true

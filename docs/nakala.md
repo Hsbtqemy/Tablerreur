@@ -1,142 +1,169 @@
-# NAKALA Overlay
+# Overlay NAKALA
 
-## Overview
+## Vue d'ensemble
 
-The NAKALA overlay adds field-specific validation rules for datasets intended for
-deposit in the [NAKALA](https://nakala.fr) research data repository.
+L'overlay NAKALA ajoute des règles de validation spécifiques aux jeux de données destinés au dépôt sur [NAKALA](https://nakala.fr), la plateforme de données de recherche de Huma-Num.
 
-Enable it via: **Templates… → Apply template → Overlay → NAKALA Baseline or Extended**.
+Deux overlays sont disponibles, à appliquer par-dessus le template générique via `TemplateManager` :
+- **NAKALA — Référence** (`nakala_baseline`) — valide les 5 champs obligatoires uniquement.
+- **NAKALA — Étendu** (`nakala_extended`) — valide les 5 champs obligatoires + 20 champs recommandés `dcterms:*`.
 
-**Référence complète (validation / formats acceptés) :** voir **[docs/nakala-validation-formats.md](nakala-validation-formats.md)** — 5 propriétés NAKALA obligatoires, dcterms, encodages (W3CDTF, LCSH, Box, Point, etc.), relations DataCite (RelationType), vocabulaires API (`/vocabularies/properties`, `/vocabularies/metadatatypes`, etc.), spécificité collections.
+Activation dans l'UI : **Modèles… → Appliquer un modèle → Overlay → NAKALA — Référence** ou **NAKALA — Étendu**.
 
-## Required NAKALA fields
+**Référence complète (formats de validation) :** voir [docs/nakala-validation-formats.md](nakala-validation-formats.md) — W3C-DTF, LCSH, Box, Point, RelationType, endpoints API, etc.
 
-| Field | Kind | Rule |
-|-------|------|------|
-| `nakala:type` | controlled | Must match COAR deposit types from API |
-| `nakala:title` | free_text_short | Required, non-empty |
-| `nakala:creator` | structured | Format: `Lastname, Firstname` |
-| `nakala:created` | structured | W3C-DTF: `YYYY`, `YYYY-MM`, or `YYYY-MM-DD` |
-| `nakala:license` | controlled | Must match NAKALA license vocabulary |
+---
 
-## Recommended fields
+## Champs obligatoires (nakala:\*)
 
-| Field | Kind | Notes |
-|-------|------|-------|
-| `dcterms:description` | free_text_long | Multiline OK; `\|` allowed in text |
-| `dcterms:subject` | list | Prefer repeated columns `keywords_*_1..n` |
-| `dcterms:language` | controlled | RFC5646 code from API |
+Ces 5 champs sont requis dans les deux overlays.
 
-## Champs à intégrer (dcterms / alignement NAKALA)
+| Champ | Kind | Règle principale | Notes |
+|-------|------|-----------------|-------|
+| `nakala:type` | controlled | `nakala.deposit_type` | 29 URIs COAR ; repli statique si hors-ligne |
+| `nakala:title` | free_text_short | `generic.required` | Valeurs pseudo-manquantes → ERROR |
+| `nakala:creator` | structured | `generic.regex` | Format `Nom, Prénom` ; `Anonyme` accepté ; `|` pour multi-auteurs |
+| `nakala:created` | structured | `nakala.created_format` | W3C-DTF : `AAAA`, `AAAA-MM`, `AAAA-MM-JJ` ; `Inconnue` accepté |
+| `nakala:license` | controlled | `nakala.license` | Codes SPDX (ex. `CC-BY-4.0`) ; validation dynamique via API |
 
-### Vérification via la doc officielle NAKALA (documentation.huma-num.fr)
+---
 
-La description NAKALA repose sur **Dublin Core qualifié (dcterms)**. Outre les 5 champs obligatoires (Title, Author, Date, Type, License), il est possible d’ajouter **tout autre champ du vocabulaire Dublin Core qualifié**.
+## Champs recommandés — équivalents dcterms:\* des obligatoires
 
-**Termes confirmés par le guide NAKALA :**
-- **dcterms:creator** — explicitement cité (créateur ; peut compléter ou dupliquer le champ Author).
-- **dcterms:contributor** — explicitement cité (« Other fields relate to the description of a role… »).
-- **dcterms:publisher** — explicitement cité (éditeur).
-- **dcterms:rightsHolder** — correspond au « rightsholder » du Dublin Core qualifié (cité dans les « additional headings » : audience, provenance, **rightsholder**).
+Présents dans les deux overlays (optionnels, validés si la colonne existe dans le CSV).
 
-**Terme à considérer (vocabulaire DC, non cité explicitement dans le guide) :**
-- **dcterms:mediator** — entité qui médiatise l’accès à la ressource (ex. enseignant pour une ressource pédagogique) ; terme valide en dcterms, à intégrer si besoin métier.
+| Champ | Kind | Règle | Notes |
+|-------|------|-------|-------|
+| `dcterms:type` | controlled | `nakala.deposit_type` | Mêmes 29 URIs COAR que `nakala:type` |
+| `dcterms:title` | free_text_short | — | Équivalent dcterms |
+| `dcterms:creator` | structured | `generic.regex` | Format `Nom, Prénom` ; `Anonyme` accepté |
+| `dcterms:created` | structured | `nakala.created_format` | Même format W3C-DTF |
+| `dcterms:license` | controlled | `nakala.license` | Même vocabulaire SPDX |
 
-**Autres champs dcterms mentionnés ou utiles** (non encore dans nos templates) :  
-dcterms:alternative (titre secondaire), dcterms:tableOfContents (sommaire), dcterms:abstract (résumé), dcterms:coverage (couverture), dcterms:provenance, dcterms:audience, et les qualificateurs de date (available, modified, issued, etc.). La liste complète est celle du [qualified Dublin Core](https://www.dublincore.org/specifications/dublin-core/dcmi-terms/).
+---
 
-À prendre en compte dans les templates ou la config NAKALA :
+## Champs recommandés supplémentaires (nakala_extended uniquement)
 
-- **dcterms:creator**
-- **dcterms:contributor**
-- **dcterms:mediator** (optionnel, selon besoin)
-- **dcterms:publisher**
-- **dcterms:rightsHolder**
+| Champ | Kind | Validation | Notes |
+|-------|------|-----------|-------|
+| `dcterms:description` | free_text_long | — | Multilignes OK ; `|` autorisé comme texte |
+| `dcterms:language` | controlled | `nakala.language` | Code ISO 639-3 (ex. `fra`, `eng`, `deu`) ; `|` pour multi-langues |
+| `dcterms:subject` | list | — | Mots-clés ; séparateur `|` ; suggère colonnes répétées |
+| `dcterms:publisher` | free_text_short | — | Éditeur (texte libre) |
+| `dcterms:contributor` | structured | `generic.regex` | Format `Nom, Prénom` ; `Anonyme` accepté |
+| `dcterms:rights` | free_text_short | — | Mention de droits (texte libre) |
+| `dcterms:rightsHolder` | free_text_short | — | Titulaire des droits |
+| `dcterms:relation` | free_text_short | — | URI ou texte libre |
+| `dcterms:source` | free_text_short | — | URI ou texte libre |
+| `dcterms:spatial` | free_text_short | — | Couverture spatiale (texte libre, `dcterms:Point/Box`) |
+| `dcterms:available` | structured | `generic.regex` | Format W3C-DTF : `^\\d{4}(-\\d{2}(-\\d{2})?)?$` |
+| `dcterms:modified` | structured | `generic.regex` | Format W3C-DTF |
+| `dcterms:format` | structured | `generic.regex` | Type MIME : `^[a-z]+/[a-z0-9\\.\\-\\+]+$` (ex. `application/pdf`) |
+| `dcterms:abstract` | free_text_long | — | Résumé long ; multilignes OK ; `|` autorisé comme texte |
+| `dcterms:mediator` | free_text_short | — | Entité médiatisant l'accès (ex. enseignant) |
 
-Référence **schéma d’export NAKALA** (colonnes possibles, avec préfixes `nakala.fr/terms#` ou `purl.org/dc/terms/`) :
+---
 
-| Colonne / URI | Note |
-|---------------|------|
-| DOI, Status donnee | Métadonnées dépôt |
-| http://nakala.fr/terms#title, langTitle | Titre(s) |
-| http://nakala.fr/terms#creator | Créateur |
-| http://nakala.fr/terms#created | Date création |
-| http://nakala.fr/terms#type | Type COAR |
-| http://nakala.fr/terms#license | Licence |
-| Embargoed | Embargo |
-| http://purl.org/dc/terms/created | dcterms:created |
-| http://purl.org/dc/terms/creator | dcterms:creator |
-| http://purl.org/dc/terms/contributor | dcterms:contributor |
-| http://purl.org/dc/terms/description, langDescription | Description(s) |
-| http://purl.org/dc/terms/language | Langue |
-| http://purl.org/dc/terms/relation | Relation(s) |
-| http://purl.org/dc/terms/rightsHolder | Titulaire des droits |
-| http://purl.org/dc/terms/spatial | Couverture spatiale |
-| http://purl.org/dc/terms/available | Disponibilité |
-| http://purl.org/dc/terms/modified | Date modification |
-| http://purl.org/dc/terms/rights | Droits |
-| http://purl.org/dc/terms/isVersionOf | Version de |
-| http://purl.org/dc/terms/format | Format |
-| http://purl.org/dc/terms/bibliographicCitation | Citation |
-| http://purl.org/dc/terms/abstract | Résumé |
-| http://purl.org/dc/terms/source | Source |
-| http://purl.org/dc/terms/subject, langSubject | Sujet(s) |
-| http://purl.org/dc/terms/medium | Support |
-| http://purl.org/dc/terms/publisher | Éditeur |
-| dcterms:mediator | Optionnel (médiateur ; dcterms valide, non cité explicitement dans le guide NAKALA) |
-| IsDescribedBy, IsIdenticalTo, IsDerivedFrom, IsPublishedIn | Relations |
-| sha1:files_to_delete, files_names_to_add, new_collectionsIds, collectionsIdsToDelete | Gestion technique dépôt |
+## Règles NAKALA (`nakala_rules.py`)
 
-Les templates actuels utilisent des noms courts (`nakala:creator`, `dcterms:description`). Un mapping ou des alias vers les URIs complètes (`http://purl.org/dc/terms/creator`, etc.) peuvent être nécessaires pour l’export / l’alignement avec l’API NAKALA.
+| rule_id | Colonne(s) cible | Description |
+|---------|-----------------|-------------|
+| `nakala.deposit_type` | `nakala:type`, `dcterms:type` | Vérifie que la valeur est une URI COAR valide. Si libellé reconnu (ex. `article`), suggère l'URI COAR. |
+| `nakala.license` | `nakala:license`, `dcterms:license` | Vérifie que la valeur est un code SPDX valide (via API ou fallback vide hors-ligne). |
+| `nakala.created_format` | `nakala:created`, `dcterms:created` | Vérifie le format W3C-DTF. Activé globalement, désactivé par `rule_overrides` sur les colonnes non-date. |
+| `nakala.language` | `dcterms:language` | Vérifie que la valeur est un code ISO 639-3 valide (via API). |
 
-## API vocabulary sources
+### Comportement de `nakala.created_format`
 
-Vocabularies sont récupérés via l’API NAKALA et mis en cache dans `nakala_cache.json`. Vérification 2026 : les endpoints ci‑dessous répondent (demander `Accept: application/json` pour le JSON). La fiche [nakala-validation-formats.md](nakala-validation-formats.md) détaille la règle « propriété ∈ properties, type ∈ metadatatypes ».
+La règle `nakala.created_format` est **activée globalement** dans les templates mais **désactivée par `rule_overrides`** sur toutes les colonnes non-date. Seules `nakala:created` et `dcterms:created` la conservent active :
 
-**Utilisés actuellement par Tablerreur :**
+```yaml
+# Colonne date : règle activée explicitement
+"nakala:created":
+  rule_overrides:
+    nakala.created_format:
+      enabled: true
 
-| Vocab | Endpoint | Réponse |
-|-------|----------|---------|
-| Types de ressource (COAR) | `https://api.nakala.fr/vocabularies/datatypes` | Liste d’URIs COAR. Le [guide NAKALA](https://documentation.huma-num.fr/en/nakala-guide-de-description-en/) fournit le **mapping libellé → URI** (image, video, sound, text, dataset, etc.) pour affichage utilisateur. |
-| Licences | `https://api.nakala.fr/vocabularies/licenses` | `[{"code": "CC-BY-4.0", "name": "..."}, ...]` |
-| Langues | `https://api.nakala.fr/vocabularies/languages?limit=10000` | `[{"id": "fra", "label": "..."}, ...]` |
+# Toutes les autres colonnes : règle désactivée
+"nakala:title":
+  rule_overrides:
+    nakala.created_format:
+      enabled: false
+```
 
-**Endpoints recommandés par la fiche validation (à intégrer si besoin) :**
+Cela est nécessaire car le moteur de validation n'autorise pas la ré-activation par colonne d'une règle globalement désactivée.
 
-| Vocab | Endpoint | Usage |
-|-------|----------|--------|
-| Propriétés acceptées | `/vocabularies/properties` (+ `.../details`) | Valider que toute propriété dcterms utilisée est acceptée ; types/encodages par propriété. |
-| Types/encodages métadonnées | `/vocabularies/metadatatypes` (+ `.../details`) | W3CDTF, URI, LCSH, TGN, Box, Point, Period, ISO3166, RFC5646, DCMIType, etc. |
-| Types DCMI | `/vocabularies/dcmitypes` | dcterms:type (Collection, Dataset, Image, Text, …). |
-| Codes pays | `/vocabularies/countryCodes` | dcterms:spatial / subject (ISO3166). |
-| LCSH | `/vocabularies/lcsh` | dcterms:subject (Library of Congress). |
-| Statuts | `/vocabularies/dataStatuses`, `/vocabularies/collectionStatuses` | Statut donnée ; collections : privé/public. |
+---
 
-## Separator policy
+## Mapping COAR libellé → URI (`core/coar_mapping.py`)
 
-- `|` is the multi-value in-cell separator for the tool.
-- For NAKALA `description` fields: `|` is allowed as text content (not interpreted as list separator).
-- For repeatable fields (`nakala:creator`, `dcterms:subject`): using `|` in-cell triggers a **WARNING** with a suggestion to split to repeated columns.
-- Export in NAKALA mode defaults to `multivalues_mode: expanded` (columns `creator_1`, `creator_2`, …).
+Le module `coar_mapping.py` fournit un dictionnaire bilingue (FR/EN) libellé → URI COAR pour les 29 types de ressource NAKALA.
 
-## Baseline vs Extended comparison
+```python
+from spreadsheet_qa.core.coar_mapping import (
+    label_to_coar_uri,    # "article" → "http://purl.org/coar/resource_type/c_6501"
+    coar_uri_to_label,    # URI → libellé FR
+    suggest_coar_uri,     # correspondance approchée (exact puis inclusion)
+    COAR_URI_TO_LABEL_FR, # dict URI → libellé FR
+    COAR_LABEL_TO_URI,    # dict libellé (minuscules) → URI
+)
+```
 
-| Feature | NAKALA Baseline | NAKALA Extended |
-|---------|----------------|-----------------|
-| Required columns (5) | ✅ | ✅ |
-| `nakala.deposit_type` rule | ✅ | ✅ |
-| `nakala.license` rule | ✅ | ✅ |
-| `nakala.created_format` rule | ✅ | ✅ |
-| `nakala.language` rule | — | ✅ |
-| Recommended fields (`dcterms:*`) | — | ✅ |
-| Multilingual column groups (`title_*`) | — | ✅ |
-| Keyword columns (`keywords_*`) | — | ✅ |
-| Creator format structured check | — | ✅ |
-| Identifier/relation URI columns | — | ✅ |
+Quand `nakala.deposit_type` reçoit une valeur non-URI mais reconnue comme libellé (ex. `article`, `Jeu de données`, `dataset`), elle génère une issue avec le message « Type reconnu — utilisez l'URI COAR : … » et une **suggestion automatique**.
 
-## rule_overrides example
+### Exemples de correspondances
 
-In a template YAML you can override a specific rule for a specific column:
+| Valeur saisie | URI suggérée |
+|---------------|-------------|
+| `article` / `Article de journal` | `http://purl.org/coar/resource_type/c_6501` |
+| `jeu de données` / `dataset` | `http://purl.org/coar/resource_type/c_ddb1` |
+| `logiciel` / `software` | `http://purl.org/coar/resource_type/c_5ce6` |
+| `rapport` / `report` | `http://purl.org/coar/resource_type/c_93fc` |
+| `vidéo` / `video` | `http://purl.org/coar/resource_type/c_12ce` |
+
+---
+
+## Sources de vocabulaires API NAKALA
+
+Les vocabulaires sont récupérés via l'API NAKALA et mis en cache dans `nakala_cache.json`.
+
+| Vocabulaire | Endpoint | Utilisation dans Tablerreur |
+|-------------|----------|-----------------------------|
+| Types de ressource (COAR) | `https://api.nakala.fr/vocabularies/datatypes` | `nakala.deposit_type` ; labels FR via `coar_mapping.py` |
+| Licences (SPDX) | `https://api.nakala.fr/vocabularies/licenses` | `nakala.license` (620 codes) |
+| Langues (ISO 639-3) | `https://api.nakala.fr/vocabularies/languages?limit=10000` | `nakala.language` (8 039 codes) |
+
+Si hors-ligne : les règles basées sur l'API (`nakala.deposit_type`, `nakala.license`, `nakala.language`) passent silencieusement. `nakala.created_format` est purement regex et fonctionne sans connexion.
+
+---
+
+## Politique séparateur `|`
+
+- `|` est le séparateur multi-valeur en cellule pour les champs répétables.
+- Pour `dcterms:description` et `dcterms:abstract` : `|` est autorisé comme contenu textuel (`pipe_is_text: true`).
+- Pour `nakala:creator`, `dcterms:subject` : `|` en cellule déclenche un **WARNING** suggérant de scinder en colonnes répétées (`creator_1`, `creator_2`, …).
+- Export NAKALA : `multivalues_mode: expanded` par défaut (colonnes `creator_1`, `creator_2`, …).
+
+---
+
+## Comparaison Baseline vs Extended
+
+| Fonctionnalité | NAKALA — Référence | NAKALA — Étendu |
+|----------------|-------------------|-----------------|
+| 5 champs obligatoires `nakala:*` | ✅ | ✅ |
+| Règle `nakala.deposit_type` | ✅ | ✅ |
+| Règle `nakala.license` | ✅ | ✅ |
+| Règle `nakala.created_format` | ✅ | ✅ |
+| Règle `nakala.language` | — | ✅ |
+| Équivalents `dcterms:*` des obligatoires | ✅ | ✅ |
+| 15 champs recommandés supplémentaires `dcterms:*` | — | ✅ |
+| Groupes de colonnes multilingues (`title_*`, `description_*`) | — | ✅ |
+| Colonnes mots-clés (`keywords_*`) | — | ✅ |
+| Colonnes identifiant/relation (regex URI) | — | ✅ |
+
+---
+
+## Exemple `rule_overrides` dans un template YAML
 
 ```yaml
 columns:
@@ -146,33 +173,43 @@ columns:
     rule_overrides:
       generic.pseudo_missing:
         enabled: true
-        severity: ERROR    # escalate from WARNING to ERROR for this column
-      generic.soft_typing:
-        enabled: false     # disable soft typing for this column entirely
+        severity: ERROR    # escalade de WARNING → ERROR pour cette colonne
+      nakala.created_format:
+        enabled: false     # désactivé car ce n'est pas une colonne date
 ```
 
-The `rule_overrides` block is per-column and per-rule. It does NOT affect
-other columns. The engine applies: `base_rule_config < col_meta < rule_override`.
+Le bloc `rule_overrides` est par colonne et par règle. Il ne s'applique pas aux autres colonnes. Le moteur applique : `config_règle_globale < métadonnées_colonne < rule_override`.
 
-## Column mapping wizard
+---
 
-The Template Library (Templates… toolbar button) lets you:
-1. Select a base template (Generic Default or Generic Strict).
-2. Select an overlay (NAKALA Baseline or NAKALA Extended).
-3. Apply & Validate — immediately runs validation with the new config.
+## Mapping colonnes CSV → URI NAKALA (export)
 
-Column-to-field mapping is handled in the Template Editor (Edit… button):
-- Select the column in the left pane.
-- Set `kind: controlled` and optionally `preset` for structured formats.
-- Rule overrides can disable/escalate specific rules per column.
+Les templates utilisent des noms courts (`nakala:creator`, `dcterms:description`). Voici la correspondance avec les URIs complètes utilisées dans l'API NAKALA :
 
-Vocabulary fetching from the NAKALA API is handled transparently:
-- Vocabularies are fetched once and cached to `nakala_cache.json`.
-- If offline: vocabulary-based rules (`nakala.deposit_type`, `nakala.license`,
-  `nakala.language`) skip silently (no false positives).
-- `nakala.created_format` is purely regex-based and works offline.
-
-## Backlog — libellés et champs dcterms
-
-- **Transformation libellé → URI** : aujourd’hui les vocabulaires NAKALA (types COAR, licences SPDX, langues) attendent des **valeurs canoniques** (URIs ou codes), pas des libellés (« texte », « image »). Idée : permettre de saisir un libellé et de le convertir en URI (correctif ou mapping), avec un dictionnaire libellé (FR/EN) → URI.
-- **Type selon le champ dcterms/nakala** : en config de colonne, pouvoir choisir « Cette colonne = nakala:type » (ou dcterms:type, nakala:license, dcterms:language, etc.) pour que l’interface applique automatiquement le bon vocabulaire et la bonne règle, avec éventuellement une liste déroulante libellé/URI. Voir BACKLOG.md §7.
+| Colonne template | URI NAKALA / Dublin Core |
+|-----------------|--------------------------|
+| `nakala:type` | `http://nakala.fr/terms#type` |
+| `nakala:title` | `http://nakala.fr/terms#title` |
+| `nakala:creator` | `http://nakala.fr/terms#creator` |
+| `nakala:created` | `http://nakala.fr/terms#created` |
+| `nakala:license` | `http://nakala.fr/terms#license` |
+| `dcterms:type` | `http://purl.org/dc/terms/type` |
+| `dcterms:title` | `http://purl.org/dc/terms/title` |
+| `dcterms:creator` | `http://purl.org/dc/terms/creator` |
+| `dcterms:created` | `http://purl.org/dc/terms/created` |
+| `dcterms:license` | `http://purl.org/dc/terms/license` |
+| `dcterms:description` | `http://purl.org/dc/terms/description` |
+| `dcterms:language` | `http://purl.org/dc/terms/language` |
+| `dcterms:subject` | `http://purl.org/dc/terms/subject` |
+| `dcterms:publisher` | `http://purl.org/dc/terms/publisher` |
+| `dcterms:contributor` | `http://purl.org/dc/terms/contributor` |
+| `dcterms:rights` | `http://purl.org/dc/terms/rights` |
+| `dcterms:rightsHolder` | `http://purl.org/dc/terms/rightsHolder` |
+| `dcterms:relation` | `http://purl.org/dc/terms/relation` |
+| `dcterms:source` | `http://purl.org/dc/terms/source` |
+| `dcterms:spatial` | `http://purl.org/dc/terms/spatial` |
+| `dcterms:available` | `http://purl.org/dc/terms/available` |
+| `dcterms:modified` | `http://purl.org/dc/terms/modified` |
+| `dcterms:format` | `http://purl.org/dc/terms/format` |
+| `dcterms:abstract` | `http://purl.org/dc/terms/abstract` |
+| `dcterms:mediator` | `http://purl.org/dc/terms/mediator` |
