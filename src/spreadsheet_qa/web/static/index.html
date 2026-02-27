@@ -13,6 +13,14 @@
     <button id="theme-toggle" class="btn-icon btn-theme-toggle" onclick="toggleTheme()" title="Basculer le thème sombre / clair">🌙</button>
   </header>
 
+  <!-- Navigation principale : onglets Tablerreur / Mapala -->
+  <nav class="app-tabs">
+    <button id="tab-tablerreur" class="app-tab active" onclick="switchApp('tablerreur')">🔍 Tablerreur</button>
+    <button id="tab-mapala" class="app-tab" onclick="switchApp('mapala')">🗺️ Mapala</button>
+  </nav>
+
+  <div id="app-tablerreur">
+
   <!-- Step navigation -->
   <nav class="step-nav" id="step-nav">
     <button class="step-btn active" data-step="upload" onclick="goToStep('upload')">
@@ -135,6 +143,9 @@
       <div id="template-toast" class="template-toast" hidden role="status" aria-live="polite"></div>
 
       <div class="card preview-table-wrapper">
+        <div class="preview-table-toolbar">
+          <button class="btn btn-secondary btn-sm btn-toggle-special-chars" onclick="toggleSpecialChars()" title="Rendre visibles les espaces et caractères invisibles">¶ Caractères spéciaux</button>
+        </div>
         <div id="preview-scroll-top" class="preview-scroll-top" hidden aria-hidden="true">
           <div id="preview-scroll-top-inner" class="preview-scroll-top-inner"></div>
         </div>
@@ -540,6 +551,7 @@
               <option value="EXCEPTED">Exclus</option>
             </select>
           </label>
+          <button class="btn btn-secondary btn-sm btn-toggle-special-chars" onclick="toggleSpecialChars()" title="Rendre visibles les espaces et caractères invisibles">¶ Caractères spéciaux</button>
         </div>
 
         <div id="bulk-action-bar" class="bulk-action-bar" hidden>
@@ -557,6 +569,7 @@
                 <th>Sévérité</th>
                 <th>Colonne</th>
                 <th>Ligne</th>
+                <th>Valeur</th>
                 <th>Message</th>
                 <th>Suggestion</th>
                 <th class="th-actions">Actions</th>
@@ -579,10 +592,194 @@
 
   </main>
 
+  </div><!-- #app-tablerreur -->
+
+  <!-- ================================================================
+       APPLICATION MAPALA — Mapping de tableurs
+       ================================================================ -->
+  <div id="app-mapala" hidden>
+
+    <!-- Step navigation Mapala -->
+    <nav class="step-nav" id="mapala-step-nav">
+      <button class="step-btn active" id="mapala-nav-upload" data-step="upload">
+        <span class="step-num">1</span> Charger
+      </button>
+      <span class="step-sep">›</span>
+      <button class="step-btn" id="mapala-nav-mapping" data-step="mapping" disabled>
+        <span class="step-num">2</span> Mapper
+      </button>
+      <span class="step-sep">›</span>
+      <button class="step-btn" id="mapala-nav-result" data-step="result" disabled>
+        <span class="step-num">3</span> Résultat
+      </button>
+    </nav>
+
+    <main class="main-content">
+
+      <!-- ============================================================
+           MAPALA ÉTAPE 1 : CHARGEMENT DES FICHIERS
+           ============================================================ -->
+      <section id="mapala-step-upload" class="step-section active">
+        <h2>1. Chargez vos fichiers</h2>
+        <p class="step-desc">Sélectionnez le fichier template (modèle cible) et le fichier source (données à mapper).</p>
+
+        <div class="mapala-upload-zone">
+          <div class="card mapala-upload-card">
+            <h3>Fichier template <span class="mapala-badge">cible</span></h3>
+            <p class="step-desc">Le modèle avec les colonnes à produire.</p>
+            <div class="upload-zone" id="mapala-template-drop" ondragover="event.preventDefault()" ondrop="mapalaHandleDrop(event,'template')">
+              <div class="upload-inner">
+                <div class="upload-icon">📋</div>
+                <label class="btn btn-secondary" for="mapala-template-file">Parcourir…</label>
+                <input type="file" id="mapala-template-file" accept=".xlsx,.xls,.ods,.csv" hidden onchange="mapalaFileSelected('template')" />
+                <p class="upload-hint">XLSX, XLS, ODS, CSV</p>
+              </div>
+              <div class="upload-file-info" id="mapala-template-info" hidden>
+                <span id="mapala-template-name"></span>
+                <button class="btn-icon" onclick="malalaClearFile('template')" title="Changer">✕</button>
+              </div>
+            </div>
+            <div class="mapala-sheet-row" id="mapala-template-sheet-row" hidden>
+              <label for="mapala-template-sheet">Feuille :</label>
+              <select id="mapala-template-sheet" class="input-sm"></select>
+            </div>
+          </div>
+
+          <div class="mapala-upload-arrow">→</div>
+
+          <div class="card mapala-upload-card">
+            <h3>Fichier source <span class="mapala-badge mapala-badge-source">données</span></h3>
+            <p class="step-desc">Les données à mapper vers le template.</p>
+            <div class="upload-zone" id="mapala-source-drop" ondragover="event.preventDefault()" ondrop="mapalaHandleDrop(event,'source')">
+              <div class="upload-inner">
+                <div class="upload-icon">📄</div>
+                <label class="btn btn-secondary" for="mapala-source-file">Parcourir…</label>
+                <input type="file" id="mapala-source-file" accept=".xlsx,.xls,.ods,.csv" hidden onchange="mapalaFileSelected('source')" />
+                <p class="upload-hint">XLSX, XLS, ODS, CSV</p>
+              </div>
+              <div class="upload-file-info" id="mapala-source-info" hidden>
+                <span id="mapala-source-name"></span>
+                <button class="btn-icon" onclick="malalaClearFile('source')" title="Changer">✕</button>
+              </div>
+            </div>
+            <div class="mapala-sheet-row" id="mapala-source-sheet-row" hidden>
+              <label for="mapala-source-sheet">Feuille :</label>
+              <select id="mapala-source-sheet" class="input-sm"></select>
+            </div>
+          </div>
+        </div>
+
+        <div class="action-row mt-2">
+          <div id="mapala-upload-error" class="msg-error" hidden></div>
+          <div id="mapala-upload-progress" class="msg-info" hidden>Téléversement en cours…</div>
+          <button class="btn btn-primary mapala-btn-primary" onclick="mapalaUpload()">Charger l'aperçu →</button>
+        </div>
+      </section>
+
+      <!-- ============================================================
+           MAPALA ÉTAPE 2 : APERÇU + MAPPING
+           ============================================================ -->
+      <section id="mapala-step-mapping" class="step-section" hidden>
+        <h2>2. Mappez les colonnes</h2>
+        <p class="step-desc">Associez chaque colonne du template à une colonne source (ou une valeur fixe).</p>
+
+        <!-- Aperçu des deux fichiers -->
+        <div class="mapala-preview-split">
+          <div class="mapala-preview-panel card">
+            <h3>Template <span class="mapala-badge">cible</span></h3>
+            <div style="overflow-x:auto; max-height:260px;">
+              <table class="preview-table mapala-preview-table" id="mapala-template-table">
+                <thead><tr id="mapala-template-thead"></tr></thead>
+                <tbody id="mapala-template-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="mapala-preview-panel card">
+            <h3>Source <span class="mapala-badge mapala-badge-source">données</span></h3>
+            <div style="overflow-x:auto; max-height:260px;">
+              <table class="preview-table mapala-preview-table" id="mapala-source-table">
+                <thead><tr id="mapala-source-thead"></tr></thead>
+                <tbody id="mapala-source-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Configuration du mapping -->
+        <div class="card mt-2">
+          <h3>Configuration du mapping</h3>
+          <p class="step-desc" id="mapala-mapping-hint">Pour chaque colonne template, choisissez la colonne source correspondante.</p>
+          <div id="mapala-mapping-config">
+            <!-- Généré dynamiquement par mapala.js -->
+          </div>
+        </div>
+
+        <div class="card mt-2">
+          <h3>Format de sortie</h3>
+          <div class="form-grid">
+            <label for="mapala-output-format">Format :</label>
+            <select id="mapala-output-format" class="input-sm">
+              <option value="xlsx">Excel (.xlsx)</option>
+              <option value="ods">ODS (.ods)</option>
+              <option value="csv">CSV (.csv)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="action-row mt-2">
+          <div id="mapala-build-error" class="msg-error" hidden></div>
+          <div id="mapala-build-progress" class="msg-info" hidden>Construction en cours…</div>
+          <button class="btn btn-secondary" onclick="mapalaGoToStep('upload')">← Retour</button>
+          <button class="btn btn-primary mapala-btn-primary" onclick="mapalaBuild()">Construire le fichier →</button>
+        </div>
+      </section>
+
+      <!-- ============================================================
+           MAPALA ÉTAPE 3 : RÉSULTAT
+           ============================================================ -->
+      <section id="mapala-step-result" class="step-section" hidden>
+        <h2>3. Résultat du mapping</h2>
+
+        <div class="card">
+          <div class="summary-cards">
+            <div class="summary-card" style="--card-color: var(--mapala-accent);">
+              <div class="summary-count" id="mapala-rows-count">0</div>
+              <div class="summary-label">Lignes mappées</div>
+            </div>
+            <div class="summary-card" style="--card-color: var(--mapala-accent);">
+              <div class="summary-count" id="mapala-cols-count">0</div>
+              <div class="summary-label">Colonnes mappées</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card mt-2">
+          <h3>Aperçu du résultat</h3>
+          <div style="overflow-x:auto; max-height:300px;">
+            <table class="preview-table" id="mapala-result-table">
+              <thead><tr id="mapala-result-thead"></tr></thead>
+              <tbody id="mapala-result-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="action-row mt-2">
+          <button class="btn btn-secondary" onclick="mapalaGoToStep('mapping')">← Modifier</button>
+          <button class="btn btn-download mapala-btn-primary" onclick="mapalaDownload()">💾 Télécharger</button>
+          <button class="btn btn-primary" onclick="mapalaValidate()">🔍 Valider avec Tablerreur →</button>
+        </div>
+
+        <div id="mapala-result-error" class="msg-error mt-2" hidden></div>
+      </section>
+
+    </main>
+  </div><!-- #app-mapala -->
+
   <footer class="app-footer">
     <p>Tablerreur — Contrôle qualité tableurs · <a href="https://github.com/anthropics/claude-code" target="_blank">Open source</a></p>
   </footer>
 
   <script src="/static/app.js"></script>
+  <script src="/static/mapala.js"></script>
 </body>
 </html>

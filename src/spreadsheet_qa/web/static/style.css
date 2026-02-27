@@ -1,6 +1,8 @@
 /* Tablerreur Web App — Styles */
 
 :root {
+  --mapala-accent: #059669;
+  --mapala-accent-dark: #047857;
   --color-primary: #2563eb;
   --color-primary-dark: #1d4ed8;
   --color-secondary: #475569;
@@ -1006,3 +1008,297 @@ textarea.av-locked {
   color: var(--color-text-muted);
 }
 .app-footer a { color: var(--color-primary); text-decoration: none; }
+
+/* ---- Colonne Valeur dans la liste des problèmes ---- */
+.td-cell-value {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: monospace;
+  font-size: 0.88em;
+}
+
+/* ---- Barre d'outils du tableau d'aperçu ---- */
+.preview-table-toolbar {
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+[data-theme="dark"] .preview-table-toolbar { border-color: #334155; }
+
+/* ---- Caractères spéciaux rendus visibles ---- */
+.char-space {
+  background: #fef9c3;
+  color: #92400e;
+  border-radius: 2px;
+  font-size: 0.85em;
+}
+.char-space-multi {
+  background: #fde68a;
+  color: #92400e;
+  border-radius: 2px;
+  font-size: 0.85em;
+}
+.char-nbsp {
+  background: #fed7aa;
+  color: #9a3412;
+  border-radius: 2px;
+  padding: 0 2px;
+  font-size: 0.85em;
+}
+.char-tab {
+  background: #fed7aa;
+  color: #9a3412;
+  border-radius: 2px;
+  padding: 0 2px;
+}
+.char-zwsp, .char-bom {
+  background: #fecaca;
+  color: #991b1b;
+  border-radius: 2px;
+  padding: 0 2px;
+  font-size: 0.75em;
+  font-weight: bold;
+}
+.char-shy {
+  background: #fed7aa;
+  color: #9a3412;
+  border-radius: 2px;
+  padding: 0 2px;
+  font-size: 0.75em;
+}
+.char-newline {
+  background: #dbeafe;
+  color: #1e40af;
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+/* Toggle actif */
+.btn-special-chars-active {
+  background: #fef3c7 !important;
+  border-color: #d97706 !important;
+  color: #92400e !important;
+}
+
+/* Dark mode special chars */
+[data-theme="dark"] .char-space       { background: #3d2d00; color: #fcd34d; }
+[data-theme="dark"] .char-space-multi { background: #4d3a00; color: #fcd34d; }
+[data-theme="dark"] .char-nbsp        { background: #431407; color: #fdba74; }
+[data-theme="dark"] .char-tab         { background: #431407; color: #fdba74; }
+[data-theme="dark"] .char-zwsp,
+[data-theme="dark"] .char-bom         { background: #450a0a; color: #fca5a5; }
+[data-theme="dark"] .char-shy         { background: #431407; color: #fdba74; }
+[data-theme="dark"] .char-newline     { background: #172554; color: #93c5fd; }
+[data-theme="dark"] .btn-special-chars-active {
+  background: #3d2d00 !important;
+  border-color: #d97706 !important;
+  color: #fcd34d !important;
+}
+
+/* ==========================================================================
+   MAPALA — Styles de l'onglet Mapping
+   ========================================================================== */
+
+/* ---- Barre d'onglets principale ---- */
+.app-tabs {
+  display: flex;
+  background: var(--color-surface);
+  border-bottom: 2px solid var(--color-border);
+  padding: 0 1.5rem;
+  gap: 0;
+}
+.app-tab {
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  padding: 0.65rem 1.25rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  transition: color .15s, border-color .15s;
+}
+.app-tab:hover { color: var(--color-text); }
+#tab-tablerreur.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+  font-weight: 600;
+}
+#tab-mapala.active {
+  color: var(--mapala-accent);
+  border-bottom-color: var(--mapala-accent);
+  font-weight: 600;
+}
+
+/* ---- Boutons Mapala ---- */
+.mapala-btn-primary {
+  background: var(--mapala-accent) !important;
+  border-color: var(--mapala-accent) !important;
+}
+.mapala-btn-primary:hover {
+  background: var(--mapala-accent-dark) !important;
+  border-color: var(--mapala-accent-dark) !important;
+}
+
+/* ---- Zone upload Mapala ---- */
+.mapala-upload-zone {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.mapala-upload-card {
+  flex: 1 1 280px;
+  min-width: 0;
+}
+.mapala-upload-arrow {
+  font-size: 1.5rem;
+  color: var(--color-text-muted);
+  align-self: center;
+  padding: 0 0.25rem;
+  flex-shrink: 0;
+}
+.mapala-sheet-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+/* ---- Badges Mapala ---- */
+.mapala-badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: var(--mapala-accent);
+  color: #fff;
+  border-radius: 10px;
+  padding: 1px 8px;
+  margin-left: 4px;
+  vertical-align: middle;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.mapala-badge-source {
+  background: #6366f1;
+}
+
+/* ---- Aperçu split ---- */
+.mapala-preview-split {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.mapala-preview-panel {
+  flex: 1 1 300px;
+  min-width: 0;
+}
+.mapala-preview-table {
+  font-size: 0.82rem;
+}
+
+/* ---- Lignes de mapping ---- */
+.mapala-mapping-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 4px;
+  flex-wrap: wrap;
+}
+.mapala-mapping-row:nth-child(even) {
+  background: var(--color-bg);
+}
+.mapala-col-name {
+  font-weight: 600;
+  min-width: 160px;
+  flex-shrink: 0;
+  font-size: 0.9rem;
+  color: var(--mapala-accent);
+}
+.mapala-arrow {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+  font-size: 1rem;
+}
+.mapala-source-select {
+  width: 200px;
+  flex-shrink: 0;
+}
+.mapala-fixed-input {
+  width: 160px;
+  flex-shrink: 0;
+}
+.mapala-concat-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  flex: 1;
+}
+.mapala-concat-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.mapala-separator-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.83rem;
+  color: var(--color-text-muted);
+}
+.mapala-separator-input {
+  width: 60px;
+}
+.mapala-btn-concat,
+.mapala-btn-remove-concat {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 1px 7px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+  transition: background .12s, color .12s;
+}
+.mapala-btn-concat:hover { background: var(--mapala-accent); color: #fff; border-color: var(--mapala-accent); }
+.mapala-btn-remove-concat:hover { background: var(--color-error); color: #fff; border-color: var(--color-error); }
+.mapala-mapping-mode-toggle {
+  font-size: 0.78rem;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  text-decoration: underline;
+  background: none;
+  border: none;
+  padding: 0;
+}
+.mapala-mode-fixed-label {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+/* ---- Dark mode ---- */
+[data-theme="dark"] .app-tabs {
+  background: var(--color-surface);
+  border-bottom-color: var(--color-border);
+}
+[data-theme="dark"] .mapala-mapping-row:nth-child(even) {
+  background: rgba(255,255,255,.04);
+}
+[data-theme="dark"] .mapala-badge { background: var(--mapala-accent); }
+
+/* ---- Responsive ---- */
+@media (max-width: 640px) {
+  .mapala-upload-arrow { display: none; }
+  .mapala-source-select { width: 100%; }
+  .mapala-fixed-input { width: 100%; }
+  .mapala-col-name { min-width: 100%; }
+}

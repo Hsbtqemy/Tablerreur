@@ -64,6 +64,13 @@ def get_target_triple() -> str:
 # + uvicorn/anyio internals loaded at runtime
 # ---------------------------------------------------------------------------
 HIDDEN_IMPORTS = [
+    # --- mapala core (mapping tableurs) ---
+    "spreadsheet_qa.core.mapala",
+    "spreadsheet_qa.core.mapala.config",
+    "spreadsheet_qa.core.mapala.io_excel",
+    "spreadsheet_qa.core.mapala.template_builder",
+    # --- mapala routes FastAPI ---
+    "spreadsheet_qa.web.mapala_routes",
     # --- core rules (dynamically registered) ---
     "spreadsheet_qa.core.rules.allowed_values",
     "spreadsheet_qa.core.rules.case_rule",

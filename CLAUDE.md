@@ -37,7 +37,7 @@ Tablerreur/
 │   │   │   ├── case_rule.py       # generic.case
 │   │   │   ├── list_items.py      # generic.list_items
 │   │   │   ├── rare_values.py     # generic.rare_values
-│   │   │   ├── similar_values.py  # generic.similar_values
+│   │   │   ├── similar_values.py  # generic.similar_values (rapidfuzz)
 │   │   │   └── nakala_rules.py    # nakala.* (4 règles NAKALA)
 │   │   ├── issue_store.py   # Stockage issues en mémoire
 │   │   ├── dataset.py       # DatasetLoader (CSV/XLSX, encodage, délimiteur)
@@ -49,7 +49,7 @@ Tablerreur/
 │   │   ├── history.py       # CommandHistory (undo/redo, max 500)
 │   │   ├── exporters.py     # XLSX, CSV (;), TXT rapport, issues.csv
 │   │   ├── text_utils.py    # INVISIBLE_RE, UNICODE_SUSPECTS
-│   │   └── nakala_api.py    # Client vocabulaires NAKALA
+│   │   └── nakala_api.py    # Client vocabulaires NAKALA (3 bugs corrigés)
 │   ├── ui/                  # PySide6 — ABANDONNÉ (ne pas y toucher)
 │   │   ├── app.py           # create_app(), stylesheet
 │   │   ├── signals.py       # AppSignals singleton
@@ -70,6 +70,11 @@ Tablerreur/
 │   │       ├── style.css    # Styles (CSS pur, variables cohérentes)
 │   │       └── fr.json      # Chaînes FR (réservé pour i18n future)
 │   └── resources/templates/ # YAML builtin (generic_default, generic_strict, nakala_*)
+│       └── builtin/
+│           ├── generic_default.yml
+│           ├── generic_strict.yml
+│           ├── nakala_baseline.yml
+│           └── nakala_extended.yml
 ├── src-tauri/               # App desktop Tauri v2
 │   ├── Cargo.toml           # Dépendances Rust (tauri, tauri-plugin-shell, …)
 │   ├── Cargo.lock
@@ -83,12 +88,20 @@ Tablerreur/
 │   │   └── index.html       # Splash screen FR (include_str! → data URI)
 │   ├── icons/               # Icônes toutes tailles (.icns, .ico, PNG)
 │   └── binaries/
-│       └── tablerreur-backend-aarch64-apple-darwin  # Sidecar PyInstaller
+│       └── tablerreur-backend-x86_64-pc-windows-msvc/  # Sidecar PyInstaller (onedir)
+│           ├── tablerreur-backend.exe
+│           └── _internal/   # Libs Python (onedir — pas d'extraction au démarrage)
 ├── scripts/
-│   ├── generate_icon.py     # Génère les icônes PNG (lettre T, fond bleu)
-│   └── build_sidecar.py     # Package le sidecar PyInstaller
-├── tests/                   # pytest (core uniquement, pas de Qt)
+│   ├── generate_icon.py        # Génère les icônes PNG (lettre T, fond bleu)
+│   ├── build_sidecar.py        # Package le sidecar PyInstaller
+│   ├── build_portable_exe.py   # Bundle portable (zip + exe si 7-Zip disponible)
+│   └── check_english_strings.py # Détecte les chaînes anglaises dans l'UI
+├── tests/                   # pytest (~290 tests, core uniquement, pas de Qt)
 ├── docs/                    # architecture.md, formats.md, nakala.md, AGENT_README.md
+│                            # nakala-validation-formats.md, type-format-mapping.md
+├── Dockerfile               # Image multi-stage (sans PySide6)
+├── docker-compose.yml       # Compose pour déploiement online
+├── .dockerignore
 ├── run.py                   # Lancement dev Qt sans install (legacy)
 ├── tablerreur-backend.spec  # Spec PyInstaller pour le sidecar
 └── pyproject.toml           # Hatch, dépendances
@@ -109,7 +122,7 @@ Le **core** est headless (Python pur, sans Qt, sans framework web). Il est impor
 ### Contexte
 L'app Qt souffrait de segfaults (PySide6) et de difficultés de packaging. Migration vers :
 1. **Tauri** (app desktop) : fenêtre native embarquant l'UI web, backend Python en sidecar
-2. **Déploiement online** : même UI web + FastAPI sur serveur (Phase D, pas encore faite)
+2. **Déploiement online** : même UI web + FastAPI sur serveur (Phase D, désormais possible)
 
 ### Statut des phases
 
@@ -125,32 +138,40 @@ L'app Qt souffrait de segfaults (PySide6) et de difficultés de packaging. Migra
 - Splash screen HTML FR (data URI via `include_str!`, sans dépendance fichier)
 - Menu natif : Fichier (Quitter Cmd+Q) + Aide (Vérifier les mises à jour)
 - Icône : lettre T sur fond bleu #2563eb (`.icns`, `.ico`, PNG toutes tailles)
-- `.dmg` généré en mode debug (non signé)
+- `.dmg` / `.exe` / `.msi` générés (non signés macOS)
 
-**Phase C — Parité online/offline** EN COURS
+**Phase C — Parité online/offline** ✅ FAIT
 - ✅ Config par colonne complète (13 presets, Oui/Non, listes, regex, etc.)
 - ✅ Aperçu temps réel dans le panneau de config
 - ✅ Badges sur colonnes configurées, résumé avant étape suivante
 - ✅ Surlignage cellules en erreur dans l'aperçu
-- 📋 Import YAML de template custom depuis l'UI
-- 📋 Sélection de modèle depuis l'UI (actuellement dans le formulaire upload)
+- ✅ Import/export de template YAML depuis l'UI
+- ✅ Import de vocabulaire personnalisé
+- ✅ Undo/redo des correctifs (Ctrl+Z / Ctrl+Y)
+- ✅ Ignorer/exclure des problèmes (individuel + en masse)
+- ✅ Mode sombre (toggle 🌙/☀️, cookie, prefers-color-scheme)
+- ✅ Navigation vers la cellule depuis un problème (flash cellule)
+- ✅ Détection valeurs similaires exposée dans l'UI
 
-**Phase D — Déploiement online** PAS ENCORE FAIT
-- Dockerfile à créer
-- Limites upload (taille, types MIME)
+**Phase D — Déploiement online** ✅ POSSIBLE
+- ✅ Dockerfile multi-stage (sans PySide6)
+- ✅ docker-compose.yml
+- ✅ Limites upload configurables (`TABLERREUR_MAX_UPLOAD_MB`)
+- ✅ CORS configurable (`TABLERREUR_CORS_ORIGINS`)
+- ✅ Variable d'environnement `TABLERREUR_ENV` (dev/prod)
 - TTL/purge déjà présent dans `jobs.py`
 
 ### Ce qui reste à faire
 
 - Signing macOS (certificat Apple Developer pour distribuer le .dmg)
 - Auto-update Tauri (Tauri updater plugin)
-- Vocabulaires distants NAKALA (nakala_api.py existe, pas encore intégré aux règles)
-- Dockerfile + déploiement online
-- Menu Aide → ouvrir URL GitHub releases (actuellement item présent mais non câblé)
+- Menu Aide → ouvrir URL GitHub releases (item présent mais non câblé)
+- Curation manuelle (édition in-place des cellules)
+- Sélection d'un sous-ensemble dans le vocabulaire NAKALA chargé
 
 ---
 
-## Règles de validation disponibles
+## Règles de validation disponibles (~20 règles)
 
 ### Règles génériques — Hygiène (`hygiene.py`)
 
@@ -171,7 +192,7 @@ L'app Qt souffrait de segfaults (PySide6) et de difficultés de packaging. Migra
 | `generic.unexpected_multiline` | `multiline.py` | Retours à la ligne dans une colonne non marquée `multiline_ok` |
 | `generic.pseudo_missing` | `pseudo_missing.py` | Valeurs pseudo-manquantes (NA, N/A, null, -, …) |
 
-### Règles génériques — Contraintes par colonne (nouvelles)
+### Règles génériques — Contraintes par colonne
 
 | rule_id | Fichier | Description |
 |---|---|---|
@@ -184,14 +205,14 @@ L'app Qt souffrait de segfaults (PySide6) et de difficultés de packaging. Migra
 | `generic.case` | `case_rule.py` | Casse non conforme (`upper`, `lower`, `title`) |
 | `generic.list_items` | `list_items.py` | Éléments d'une liste (séparateur configurable) : vides, non-uniques, hors bornes, hors valeurs autorisées |
 | `generic.rare_values` | `rare_values.py` | Valeur apparaissant moins souvent que le seuil (suspicion de faute de saisie) |
-| `generic.similar_values` | `similar_values.py` | Groupes de valeurs très proches (variantes probables) |
+| `generic.similar_values` | `similar_values.py` | Groupes de valeurs très proches (variantes probables, via rapidfuzz) — exposé dans l'UI web |
 
 ### Règles NAKALA (`nakala_rules.py`)
 
 | rule_id | Description |
 |---|---|
 | `nakala.created_format` | Format de date W3C-DTF pour le champ dcterms:created |
-| `nakala.deposit_type` | Type de dépôt NAKALA valide |
+| `nakala.deposit_type` | Type de dépôt NAKALA valide (29 URI COAR en fallback) |
 | `nakala.language` | Code langue ISO 639 valide |
 | `nakala.license` | Licence NAKALA valide |
 
@@ -201,11 +222,11 @@ L'app Qt souffrait de segfaults (PySide6) et de difficultés de packaging. Migra
 
 ### Workflow en 5 étapes
 
-1. **Téléverser** — upload CSV/XLSX, options d'import (encodage, délimiteur, ligne d'en-tête), choix du modèle de validation
-2. **Configurer** — configuration par colonne, tableau d'aperçu interactif, panneau inline
-3. **Correctifs** — application des correctifs d'hygiène (trim, espaces, NBSP, invisibles, Unicode, retours ligne), aperçu avant application
+1. **Téléverser** — upload CSV/XLSX, options d'import (encodage, délimiteur, ligne d'en-tête), choix du modèle de validation, import de template YAML custom
+2. **Configurer** — configuration par colonne, tableau d'aperçu interactif, panneau inline, import/export YAML template
+3. **Correctifs** — application des correctifs d'hygiène (trim, espaces, NBSP, invisibles, Unicode, retours ligne), aperçu avant application, undo/redo (Ctrl+Z/Y)
 4. **Valider** — lancement de la validation, résumé par sévérité
-5. **Résultats** — liste paginée/filtrée des problèmes, téléchargement des exports
+5. **Résultats** — liste paginée/filtrée des problèmes, gestion des statuts (ignorer/exclure), navigation vers cellule, téléchargement des exports
 
 ### Configuration par colonne
 
@@ -221,17 +242,53 @@ L'app Qt souffrait de segfaults (PySide6) et de difficultés de packaging. Migra
 - Liste (séparateur configurable) avec options : éléments uniques, interdire vides, min/max items
 - Valeurs autorisées verrouillées (`allowed_values_locked`) — liste non modifiable depuis template
 - Détection de valeurs rares (seuil configurable)
+- Détection de valeurs similaires (checkbox + seuil, via rapidfuzz)
+- Chargeur de vocabulaire NAKALA intégré au panneau de config colonne
 
 ### Fonctionnalités UX avancées
 
-- **Aperçu temps réel** : 3 exemples OK / 3 exemples en erreur avec message, debounce 300ms, endpoint `POST /preview-rule`
+- **Aperçu temps réel** : 3 exemples OK / 3 exemples en erreur avec message, debounce 300ms, endpoint `POST /api/jobs/{id}/preview-rule`
 - **Badges sur colonnes configurées** : point vert `●` sur les `<th>`, tooltip avec résumé de la config
 - **Résumé de configuration** : tableau récapitulatif avant passage à l'étape suivante, avec bouton Modifier / Continuer
-- **Surlignage des cellules en erreur** : si validation déjà effectuée, les `<td>` en erreur sont colorés par sévérité (rouge/orange/violet) avec tooltip message, endpoint `GET /preview-issues`
+- **Surlignage des cellules en erreur** : les `<td>` en erreur sont colorés par sévérité (rouge/orange/violet) avec tooltip message, endpoint `GET /api/jobs/{id}/preview-issues`
+- **Undo/redo des correctifs** : boutons + raccourcis Ctrl+Z / Ctrl+Y, endpoints `POST /undo`, `POST /redo`, `GET /history`
+- **Gestion des statuts** : ignorer (`IGNORED`) ou exclure (`EXCEPTED`) un problème ou une sélection, endpoint `PUT /issues/{id}/status` + `PUT /issues/bulk-status`
+- **Filtres statut** : afficher Ouverts / Ignorés / Exclus / Corrigés dans la liste des problèmes
+- **Navigation cellule** : clic sur un problème → flash de la cellule correspondante dans le tableau
+- **Mode sombre** : toggle 🌙/☀️, persistance cookie, respect de `prefers-color-scheme`
+- **Import/export YAML** : exporter la config courante en `.yaml`, importer un template custom (étapes Upload et Configurer), endpoint `GET /export-template` + `POST /import-template`
+- **Import vocabulaire** : charger un fichier YAML de vocabulaire personnalisé, endpoint `POST /import-vocabulary`
+
+### Endpoints API (résumé)
+
+| Méthode | Endpoint | Description |
+|---|---|---|
+| `GET` | `/health` | Statut serveur + version |
+| `POST` | `/api/jobs` | Créer un job (upload fichier) |
+| `GET` | `/api/jobs/{id}` | État du job |
+| `GET` | `/api/jobs/{id}/preview` | Aperçu données (premières lignes) |
+| `GET/PUT` | `/api/jobs/{id}/column-config` | Lire/écrire la config par colonne |
+| `POST` | `/api/jobs/{id}/preview-rule` | Aperçu temps réel d'une règle |
+| `POST` | `/api/jobs/{id}/fixes` | Appliquer des correctifs |
+| `POST` | `/api/jobs/{id}/fixes/preview` | Prévisualiser les correctifs |
+| `GET` | `/api/jobs/{id}/history` | État undo/redo |
+| `POST` | `/api/jobs/{id}/undo` | Annuler dernier correctif |
+| `POST` | `/api/jobs/{id}/redo` | Refaire dernier correctif |
+| `POST` | `/api/jobs/{id}/validate` | Lancer la validation |
+| `GET` | `/api/jobs/{id}/problems` | Liste des problèmes (paginée, filtrée) |
+| `GET` | `/api/jobs/{id}/preview-issues` | Issues par cellule (pour surlignage) |
+| `PUT` | `/api/jobs/{id}/issues/{issue_id}/status` | Changer statut d'un problème |
+| `PUT` | `/api/jobs/{id}/issues/bulk-status` | Changer statut en masse |
+| `GET` | `/api/jobs/{id}/download/{filename}` | Télécharger un export |
+| `GET` | `/api/jobs/{id}/export-template` | Exporter la config en YAML |
+| `POST` | `/api/jobs/{id}/import-template` | Importer un template YAML |
+| `POST` | `/api/jobs/{id}/import-vocabulary` | Importer un vocabulaire YAML |
+| `GET` | `/api/nakala/vocabulary/{vocab_name}` | Charger un vocabulaire NAKALA |
 
 ### Design CSS
 
 - Variables CSS cohérentes (primary, success, error, warning, suspicion, bg, surface, border, text)
+- Support mode sombre (variables `--bg`, `--surface`, `--text`, etc. inversées)
 - Typographie : system-ui, 15px, line-height 1.6
 - Boutons : border-radius 6px, transitions 0.15s
 - Tableaux : zebra striping, en-têtes #f1f5f9
@@ -241,33 +298,32 @@ L'app Qt souffrait de segfaults (PySide6) et de difficultés de packaging. Migra
 
 ## Tauri — état actuel
 
-- **App desktop macOS** (aarch64-apple-darwin) via Tauri v2
-- **Sidecar Python** packagé avec PyInstaller (~38 Mo, script `scripts/build_sidecar.py`)
-- **Splash screen** HTML FR embarqué en `data:` URI via `include_str!` (évite les problèmes de chemin en dev)
-- **Menu natif macOS** : Fichier → Quitter (Cmd+Q) ; Aide → Vérifier les mises à jour (non câblé)
+- **App desktop** (Windows x86_64, macOS aarch64 en option) via Tauri v2
+- **Sidecar Python** packagé avec PyInstaller en mode **onedir** (dossier `_internal/`, ~37 Mo, démarrage ~1,4s)
+- **Splash screen** HTML FR embarqué en `data:` URI via `include_str!` (adapté mode sombre)
+- **Menu natif** : Fichier → Quitter (Cmd+Q / Alt+F4) ; Aide → Vérifier les mises à jour (non câblé)
 - **Port dynamique** : Tauri cherche un port libre entre 8400 et 8500, le passe au sidecar
 - **Health check** : poll TCP toutes les 200ms jusqu'à ce que le sidecar réponde, timeout configurable
 - **Icône** : lettre T blanche sur fond bleu #2563eb (générée par `scripts/generate_icon.py`)
-- **Distribution** : `.dmg` (macOS) ; sur Windows : installateur NSIS (`.exe`) et MSI (`.msi`), langue WiX en français (fr-FR)
-- **Distribution macOS** : `.dmg` généré en mode debug — **non signé** (signing macOS à faire)
-- **Démarrage** : ~25–37s (extraction PyInstaller onefile + init Python + chargement pandas)
+- **Distribution** : `.dmg` (macOS, non signé) ; sur Windows : installateur NSIS (`.exe`) et MSI (`.msi`), langue WiX en français (fr-FR)
+- **Démarrage** : ~1,4s (mode onedir, pas d'extraction PyInstaller)
 - **Identifiant** : `com.tablerreur.desktop`, version 0.1.0
 
 ### Release Windows (installateur)
 
 Pour produire une release Windows avec installateur :
 
-1. **Sur une machine Windows** : installer les prérequis (Rust, Node.js, Python 3, Visual Studio Build Tools ou équivalent pour le toolchain MSVC).
+1. **Sur une machine Windows** : installer les prérequis (Rust, Node.js, Python 3, Visual Studio Build Tools).
 2. À la racine du dépôt : `npm install` puis `npm run build:windows`.
-   - Le script exécute `python scripts/build_sidecar.py`, puis `npm run tauri build`, puis `python scripts/build_portable_exe.py` (bundle portable : zip + exe tout-en-un si 7-Zip disponible).
+   - Le script exécute `python scripts/build_sidecar.py`, puis `npm run tauri build`, puis `python scripts/build_portable_exe.py`.
 3. Les artefacts sont dans `src-tauri/target/release/bundle/` :
-   - **NSIS** : `nsis/Tablerreur_0.1.0_x64-setup.exe` (installateur classique)
-   - **MSI** : `msi/Tablerreur_0.1.0_x64_fr-FR.msi` (installateur MSI, langue française)
-   - **Portable** : `portable/Tablerreur_0.1.0_x64_portable.zip` (à extraire puis lancer `tablerreur.exe`) et éventuellement `portable/Tablerreur_0.1.0_x64_portable.exe` (un seul .exe qui embarque tout, si 7-Zip est installé)
+   - **NSIS** : `nsis/Tablerreur_0.1.0_x64-setup.exe`
+   - **MSI** : `msi/Tablerreur_0.1.0_x64_fr-FR.msi`
+   - **Portable** : `portable/Tablerreur_0.1.0_x64_portable.zip`
 
-L’installateur NSIS télécharge WebView2 au besoin (connexion internet requise lors de l’installation sauf si mode offline configuré). Voir `docs/build-windows.md` pour les détails.
+L'installateur NSIS télécharge WebView2 au besoin. Voir `docs/build-windows.md` pour les détails.
 
-**Publication sur GitHub** : en créant une release (tag, ex. `v0.1.0`), le workflow `.github/workflows/release-windows.yml` build l’app Windows et attache les .exe/.msi/.zip à la release ; les utilisateurs peuvent alors télécharger le .exe directement depuis GitHub (onglet Releases → Assets).
+**Publication sur GitHub** : en créant une release (tag, ex. `v0.1.0`), le workflow `.github/workflows/release-windows.yml` build l'app Windows et attache les artefacts à la release.
 
 ---
 
@@ -284,12 +340,13 @@ L’installateur NSIS télécharge WebView2 au besoin (connexion internet requis
 - **Tout texte visible par l'utilisateur** (UI, messages, exports, rapports) : français
 - **Glossaire FR** : voir `ui/i18n.py` — utiliser `t(key)` pour toute chaîne affichée dans l'UI Qt (legacy)
 - Ne jamais laisser de chaîne anglaise dans l'interface web
+- Script de vérification : `scripts/check_english_strings.py`
 
 ### Architecture
 - `core/` : Python pur. Pas d'import Qt, pas d'import FastAPI. Testable unitairement.
 - `web/` : FastAPI. Importe `core/`. Gère HTTP, jobs, fichiers statiques.
 - `ui/` : PySide6 (legacy). **Ne pas y ajouter de fonctionnalités.**
-- Tests : `pytest`. Fixtures dans `conftest.py`. Tester le core en priorité.
+- Tests : `pytest`. Fixtures dans `conftest.py`. Tester le core en priorité. (~290 tests)
 
 ### Données
 - DataFrame pandas, dtype string pour toutes les cellules
@@ -298,6 +355,12 @@ L’installateur NSIS télécharge WebView2 au besoin (connexion internet requis
 - Patches : JSON (work/patches/*.json)
 - Actions log : JSONL (work/actions_log.jsonl)
 - Jobs web : en mémoire (TTL 1h), DataFrame sérialisé en pickle
+
+### Variables d'environnement (web)
+- `TABLERREUR_ENV` : `dev` (défaut) ou `prod`
+- `TABLERREUR_MAX_UPLOAD_MB` : taille max upload en Mo (défaut : 50)
+- `TABLERREUR_CORS_ORIGINS` : origines CORS autorisées (défaut : `*`)
+- `TABLERREUR_NAKALA_CACHE` : durée de cache des vocabulaires NAKALA
 
 ---
 
@@ -349,8 +412,14 @@ npm run build:windows
 # Générer les icônes (à relancer si l'icône change)
 python scripts/generate_icon.py
 
-# Packager le sidecar Python (PyInstaller)
+# Packager le sidecar Python (PyInstaller, mode onedir)
 python scripts/build_sidecar.py
+
+# Vérifier les chaînes anglaises dans l'UI
+python scripts/check_english_strings.py
+
+# Lancer l'app avec Docker (déploiement online)
+docker compose up
 
 # Lancer l'app Qt (legacy — debug uniquement)
 python run.py
@@ -367,6 +436,8 @@ python run.py
 | Build release Windows         | docs/build-windows.md                |
 | Formats (CSV, patches…)       | docs/formats.md                      |
 | Overlay NAKALA                | docs/nakala.md                       |
+| Validation NAKALA (formats)   | docs/nakala-validation-formats.md    |
+| Mapping types/formats         | docs/type-format-mapping.md          |
 | Guide agent complet           | docs/AGENT_README.md                 |
 | Liste des règles              | core/rules/*.py                      |
 | Glossaire FR (legacy Qt)      | ui/i18n.py                           |

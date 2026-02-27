@@ -49,6 +49,7 @@ class ProblemRow:
     message: str
     suggestion: str
     issue_id: str = ""
+    valeur: str = ""
 
 
 @dataclass

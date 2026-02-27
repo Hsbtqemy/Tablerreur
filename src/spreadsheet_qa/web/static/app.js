@@ -13,6 +13,7 @@ const state = {
   currentPage: 1,
   currentStep: 'upload',
   validationDone: false,  // true once validation has been run for this job
+  showSpecialChars: false, // toggle for visible special-char rendering
   // Configure step
   columnConfig: {},     // { colName: { content_type, unique, ... } }
   activeColumn: null,   // name of the currently open config panel
@@ -46,6 +47,28 @@ function goToStep(step) {
 function enableStep(step) {
   const btn = document.querySelector(`[data-step="${step}"]`);
   if (btn) btn.disabled = false;
+}
+
+// ---------------------------------------------------------------------------
+// Navigation par onglet : Tablerreur ↔ Mapala
+// ---------------------------------------------------------------------------
+function switchApp(appName) {
+  const tablerreur = document.getElementById('app-tablerreur');
+  const mapala = document.getElementById('app-mapala');
+  const tabT = document.getElementById('tab-tablerreur');
+  const tabM = document.getElementById('tab-mapala');
+  if (!tablerreur || !mapala) return;
+  if (appName === 'mapala') {
+    tablerreur.hidden = true;
+    mapala.hidden = false;
+    tabT.classList.remove('active');
+    tabM.classList.add('active');
+  } else {
+    mapala.hidden = true;
+    tablerreur.hidden = false;
+    tabT.classList.add('active');
+    tabM.classList.remove('active');
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -344,8 +367,14 @@ async function loadPreview() {
       const tr = document.createElement('tr');
       row.forEach((cell, i) => {
         const td = document.createElement('td');
-        td.textContent = cell;
+        const rawVal = cell ?? '';
+        td.dataset.rawText = rawVal;
         td.dataset.colIdx = i;
+        if (state.showSpecialChars) {
+          td.innerHTML = renderVisibleChars(rawVal);
+        } else {
+          td.textContent = rawVal;
+        }
         tr.appendChild(td);
       });
       body.appendChild(tr);
@@ -393,7 +422,7 @@ async function _applyCellIssueHighlights() {
       const td = tr.querySelectorAll('td')[colIdx];
       if (!td) return;
       td.classList.add(`cell-${issue.severity}`);
-      td.title = issue.message;
+      td.title = renderVisibleCharsText(issue.message);
     });
   } catch (_) { /* non-bloquant */ }
 }
@@ -991,6 +1020,17 @@ async function loadProblems(page) {
         tdLig.textContent = p['ligne'];
         tr.appendChild(tdLig);
 
+        const tdVal = document.createElement('td');
+        tdVal.className = 'td-cell-value';
+        const rawVal = p['valeur'] || '';
+        tdVal.dataset.rawText = rawVal;
+        if (state.showSpecialChars) {
+          tdVal.innerHTML = renderVisibleChars(rawVal);
+        } else {
+          tdVal.textContent = rawVal;
+        }
+        tr.appendChild(tdVal);
+
         const tdMsg = document.createElement('td');
         tdMsg.textContent = p['message'];
         tr.appendChild(tdMsg);
@@ -1521,6 +1561,93 @@ function esc(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+// ---------------------------------------------------------------------------
+// Rendu des caractères spéciaux invisibles — toggle "¶ Caractères spéciaux"
+// ---------------------------------------------------------------------------
+
+/**
+ * Converts invisible/ambiguous characters in `text` to visible HTML spans.
+ * Must be called with raw cell text (before any HTML escaping).
+ */
+function renderVisibleChars(text) {
+  if (text == null) return '';
+  // Escape HTML first so that < > & in data are safe
+  let html = esc(String(text));
+
+  // Zero-width and BOM characters (most invisible — render first)
+  html = html.replace(/\u200B/g, '<span class="char-zwsp">[ZWS]</span>');
+  html = html.replace(/\u200D/g, '<span class="char-zwsp">[ZWJ]</span>');
+  html = html.replace(/\u200C/g, '<span class="char-zwsp">[ZWNJ]</span>');
+  html = html.replace(/\uFEFF/g, '<span class="char-bom">[BOM]</span>');
+  html = html.replace(/\u00AD/g, '<span class="char-shy">[SHY]</span>');
+
+  // NBSP (non-breaking space)
+  html = html.replace(/\u00A0/g, '<span class="char-nbsp">⍽</span>');
+
+  // Tabs
+  html = html.replace(/\t/g, '<span class="char-tab">→</span>');
+
+  // Line endings (CR before LF to avoid double-marking \r\n)
+  html = html.replace(/\r/g, '<span class="char-newline">[CR]</span>');
+  html = html.replace(/\n/g, '<span class="char-newline">↵</span>');
+
+  // Leading spaces
+  html = html.replace(/^( +)/, m => '<span class="char-space">' + '·'.repeat(m.length) + '</span>');
+
+  // Trailing spaces
+  html = html.replace(/( +)$/, m => '<span class="char-space">' + '·'.repeat(m.length) + '</span>');
+
+  // Multiple consecutive spaces in the middle
+  html = html.replace(/ {2,}/g, m => '<span class="char-space-multi">' + '·'.repeat(m.length) + '</span>');
+
+  return html;
+}
+
+/**
+ * Plain-text version of renderVisibleChars — for use in tooltip title attributes.
+ */
+function renderVisibleCharsText(text) {
+  if (text == null) return '';
+  let t = String(text);
+  t = t.replace(/\u200B/g, '[ZWS]');
+  t = t.replace(/\u200D/g, '[ZWJ]');
+  t = t.replace(/\u200C/g, '[ZWNJ]');
+  t = t.replace(/\uFEFF/g, '[BOM]');
+  t = t.replace(/\u00AD/g, '[SHY]');
+  t = t.replace(/\u00A0/g, '⍽');
+  t = t.replace(/\t/g, '→');
+  t = t.replace(/\r/g, '[CR]');
+  t = t.replace(/\n/g, '↵');
+  t = t.replace(/^( +)/, m => '·'.repeat(m.length));
+  t = t.replace(/( +)$/, m => '·'.repeat(m.length));
+  t = t.replace(/ {2,}/g, m => '·'.repeat(m.length));
+  return t;
+}
+
+/** Toggle the special-chars display mode; syncs both toggle buttons. */
+function toggleSpecialChars() {
+  state.showSpecialChars = !state.showSpecialChars;
+  document.querySelectorAll('.btn-toggle-special-chars').forEach(btn => {
+    btn.classList.toggle('btn-special-chars-active', state.showSpecialChars);
+  });
+  _applySpecialCharsToPreview();
+  // Re-render problems table if currently visible (to update the Valeur column)
+  if (state.currentStep === 'results') loadProblems(state.currentPage);
+}
+
+/** Re-renders all preview table cells according to the current showSpecialChars state. */
+function _applySpecialCharsToPreview() {
+  document.querySelectorAll('#preview-body td').forEach(td => {
+    const raw = td.dataset.rawText;
+    if (raw === undefined) return;
+    if (state.showSpecialChars) {
+      td.innerHTML = renderVisibleChars(raw);
+    } else {
+      td.textContent = raw;
+    }
+  });
 }
 
 // ---------------------------------------------------------------------------

@@ -157,6 +157,10 @@ app.add_middleware(
 _static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
 
+# Mapala routes
+from spreadsheet_qa.web.mapala_routes import router as mapala_router  # noqa: E402
+app.include_router(mapala_router)
+
 
 @app.on_event("startup")
 async def _log_startup() -> None:
@@ -715,6 +719,21 @@ async def validate_job(job_id: str):
         total=len(issues),
     )
 
+    # Helper to extract a cell value as a plain string (empty if missing/NA)
+    def _cell_str(row_idx, col_name):
+        if row_idx is None or not col_name:
+            return ""
+        try:
+            if 0 <= row_idx < len(df) and col_name in df.columns:
+                v = df.at[row_idx, col_name]
+                if v is None:
+                    return ""
+                s = str(v)
+                return "" if s in ("<NA>", "nan") else s
+        except Exception:
+            pass
+        return ""
+
     # Store problems
     job.problems = [
         ProblemRow(
@@ -725,6 +744,7 @@ async def validate_job(job_id: str):
             message=issue.message,
             suggestion=str(issue.suggestion) if issue.suggestion is not None else "",
             issue_id=issue.id,
+            valeur=_cell_str(issue.row, issue.col),
         )
         for issue in issues
     ]
@@ -887,6 +907,7 @@ async def get_problems(
                 "statut": p.status,
                 "colonne": p.column,
                 "ligne": p.row,
+                "valeur": p.valeur,
                 "message": p.message,
                 "suggestion": p.suggestion,
             }
