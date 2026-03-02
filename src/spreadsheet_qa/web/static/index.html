@@ -13,6 +13,7 @@
       <span class="app-header-name app-header-name--right">Mapala</span>
     </div>
     <p class="app-subtitle">Contrôle qualité et mapping de tableurs CSV/XLSX</p>
+    <button id="shortcuts-help-btn" class="btn-icon btn-shortcuts-help" onclick="showShortcutsHelp()" title="Afficher les raccourcis clavier (?)">?</button>
     <button id="theme-toggle" class="btn-icon btn-theme-toggle" onclick="toggleTheme()" title="Basculer le thème sombre / clair">🌙</button>
   </header>
 
@@ -46,6 +47,10 @@
       <span class="step-num">5</span> Résultats
     </button>
   </nav>
+  <div id="step-coach" class="step-coach" hidden>
+    <div id="step-coach-text"></div>
+    <button id="step-coach-action" class="btn btn-secondary btn-sm" hidden></button>
+  </div>
 
   <main class="main-content">
 

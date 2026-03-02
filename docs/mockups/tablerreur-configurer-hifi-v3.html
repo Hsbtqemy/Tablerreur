@@ -1,0 +1,435 @@
+﻿<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tablerreur Configurer Mockup Hifi V3</title>
+  <style>
+    :root {
+      --primary:#2f6fed; --primary-hover:#255ed0; --bg:#f6f8fb; --surface:#fff; --line:#d9e3f1;
+      --text:#1f2d43; --muted:#60708a; --radius:10px; --shadow:0 4px 12px rgba(15,23,42,.06);
+      --mapala-accent:#059669;
+      --ok:#15803d; --todo:#64748b; --prog:#1d4ed8; --lock:#7c3aed;
+      --colw:178px; --st2w:170px;
+      --font:"Segoe UI",sans-serif;
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:var(--font);font-size:14px;color:var(--text);background:var(--bg);padding:16px}
+    .shell{max-width:1580px;margin:0 auto;background:var(--surface);border:2px solid #3b414a;border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+    .header{background:linear-gradient(90deg,var(--primary) 0,var(--primary-hover) 100%);color:#fff;padding:14px 16px 12px}
+    .header-top{display:flex;justify-content:space-between;gap:10px;align-items:center}
+    .brand{font-size:1.2rem;font-weight:700;display:flex;gap:14px}.brand span:last-child{opacity:.92}
+    .pills{display:flex;gap:7px;flex-wrap:wrap}.pill{border:1px solid rgba(255,255,255,.35);padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.14);font-size:.78rem;font-weight:700}
+    .sub{margin-top:3px;color:#e8efff;font-size:.86rem}
+    .app-tabs{display:flex;align-items:stretch;min-height:44px;background:var(--surface);border-bottom:2px solid #c6d6eb;padding:0 14px;gap:0}
+    .app-tab{appearance:none;background:transparent;border:none;border-bottom:3px solid transparent;margin:0;margin-bottom:-2px;padding:10px 16px;font-family:inherit;font-size:.92rem;font-weight:600;line-height:1.4;cursor:pointer;color:var(--muted);transition:color .15s,border-color .15s}
+    .app-tab:hover{color:var(--text)}
+    #tab-tablerreur.active{color:var(--primary);border-bottom-color:var(--primary);font-weight:700}
+    #tab-mapala.active{color:var(--mapala-accent);border-bottom-color:var(--mapala-accent);font-weight:700}
+    .step-nav{display:flex;align-items:center;gap:6px;background:var(--surface);border-bottom:2px solid #ccdaec;padding:10px 14px;flex-wrap:wrap}
+    .step-btn{background:none;border:none;cursor:pointer;font-size:.85rem;color:var(--muted);padding:4px 10px;border-radius:20px;display:flex;align-items:center;gap:6px;transition:background .15s,color .15s}
+    .step-btn:disabled{opacity:.45;cursor:default}
+    .step-btn.active{color:#fff;font-weight:700;background:var(--primary)}
+    .step-btn:not(:disabled):hover{background:#f0f4f8}
+    .step-num{background:#e2e8f0;border-radius:50%;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700}
+    .step-btn.active .step-num{background:rgba(255,255,255,.25);color:#fff}
+    .step-sep{color:var(--muted);font-size:.8rem}
+    .step-status{margin-left:auto;display:flex;align-items:center;gap:8px;padding:4px 10px;border:1px solid var(--line);border-radius:999px;background:#f2f6ff;color:#2f4667;font-size:.78rem}
+    .step-status b{font-weight:700;color:#1f3f6a}
+    .layout{padding:10px 14px 14px;display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:12px;align-items:start}
+    .layout > *{min-width:0}
+    .left-col{display:grid;gap:10px;align-content:start;min-width:0}
+    .main-col{min-width:0}
+    .table-col{min-width:0}
+    .card{border:2px solid #3b414a;border-radius:var(--radius);background:#fff;box-shadow:var(--shadow);overflow:hidden;min-width:0}
+    .head{padding:8px 10px;border-bottom:2px solid #d0ddef;background:#ecf3ff;font-size:.76rem;font-weight:700;color:#244a82;display:flex;justify-content:space-between;gap:8px;align-items:center}
+    .body{padding:10px;font-size:.74rem;color:var(--muted)}
+
+    /* contexte compact */
+    .context-compact{margin-bottom:10px}
+    .context-line{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:.72rem;color:var(--muted);min-width:0}
+    .ctx-badge{border:1px solid var(--line);border-radius:999px;padding:3px 9px;background:#fff;font-weight:700;white-space:nowrap;max-width:100%;overflow-wrap:anywhere}
+    .ctx-badge b{color:var(--text)}
+
+    .tools{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;min-width:0}
+    .search{display:flex;gap:6px;min-width:0}.search input{width:100%;border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:.76rem;color:var(--text);min-width:0}
+    .btn{border:1px solid var(--line);background:#fff;color:var(--text);border-radius:8px;padding:5px 8px;font-size:.69rem;font-weight:600;white-space:nowrap}
+    .btn.primary{border-color:var(--primary);background:var(--primary);color:#fff}
+    .btn.success{border-color:#b8d5c2;background:#fff;color:var(--text)}
+    .quick{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;min-width:0}
+
+    .chips-wrap{overflow:auto;padding:8px 0 3px;max-width:100%;margin-top:2px;border-top:2px solid #d4e0f0}.chips{display:flex;gap:6px;min-width:100%;width:max-content}
+    .chip{border:1px solid var(--line);border-radius:999px;padding:5px 9px;background:#fff;color:var(--text);font-size:.73rem;font-weight:700;display:flex;gap:6px;align-items:center;cursor:pointer;white-space:nowrap;transition:background .15s,border-color .15s,box-shadow .15s}
+    .chip:hover{background:#f4f8ff;border-color:#bfd2f2}
+    .chip .c{border:1px solid #e2e8f0;border-radius:999px;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-size:.64rem;line-height:1;font-weight:800}
+    .chip[data-s='todo'] .c{background:#f8fafc;color:var(--todo);border-color:#d7dee8}
+    .chip[data-s='progress'] .c{background:#edf3ff;color:var(--prog);border-color:#cfe0ff}
+    .chip[data-s='done'] .c{background:var(--primary);color:#fff;border-color:var(--primary-hover)}
+    .chip[data-s='locked'] .c{background:#f7f3ff;color:var(--lock);border-color:#ddd0fb}
+    .chip.active{border-color:var(--primary);background:#eef4ff;color:var(--text);box-shadow:inset 0 0 0 1px #c6d8ff}
+    .chip.active:hover{background:#e2ecff;border-color:var(--primary-hover);box-shadow:inset 0 0 0 1px #aac5f9}
+
+    .map{border:2px solid #d3dfef;border-radius:8px;padding:7px;background:#fff}.map .label{font-size:.68rem;color:var(--muted);font-weight:700;margin-bottom:5px}
+    .track{position:relative;height:14px;border:1px solid var(--line);border-radius:999px;background:#f4f7fc;overflow:hidden;cursor:pointer}
+    .segs{display:grid;height:100%}.seg{border-right:1px solid #e8eef8;background:#e2e8f0}
+    .seg.progress{background:#d8e6ff}.seg.done{background:#d9f4e3}.seg.locked{background:#e8ddff}.seg.active{box-shadow:inset 0 0 0 2px var(--primary)}
+    .window{position:absolute;top:1px;height:calc(100% - 2px);border:2px solid var(--primary);background:rgba(47,111,237,.15);border-radius:999px;pointer-events:none}
+
+    .table-card .body{padding:0}.table-tools{padding:8px 10px;border-bottom:2px solid #d3dfef;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;background:#fff;font-size:.71rem;color:var(--muted)}
+    .table-wrap{overflow:auto;max-height:min(60vh,530px);background:#fff}
+    table{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%;font-size:.71rem}
+    th,td{padding:6px 8px;border-right:1px solid #e7edf8;border-bottom:1px solid #e7edf8;white-space:nowrap;background:#fff;color:var(--text);text-align:left}
+    th{position:sticky;top:0;z-index:4;background:#eff4fb;font-size:.67rem;font-weight:700;color:#345078;cursor:pointer;transition:background .15s,color .15s}
+    th:hover{background:#dce9f8}
+    .hcol{min-width:var(--colw);max-width:var(--colw)}.first{min-width:54px;max-width:54px;text-align:right;color:var(--muted);background:#f8fafc}
+    .st1{position:sticky;left:0;z-index:6;background:#f8fafc}.st2{position:sticky;left:54px;z-index:6;background:#f8fbff;min-width:var(--st2w);max-width:var(--st2w)}
+    th.st1,th.st2{z-index:8;background:#e8f0fb}
+    th.sel{background:var(--primary) !important;color:#fff;box-shadow:none}
+    th.sel:hover{background:var(--primary-hover) !important;color:#fff}
+    td.sel{background:#e8f4fd !important;box-shadow:none}
+
+    .right-col{display:grid;gap:10px;align-items:start;min-width:0}
+    .right-col > .card{border-color:#3b414a;box-shadow:none}
+    .right-col .context-compact{margin-bottom:0}
+    .panel{position:sticky;top:10px;max-height:calc(100vh - 48px);display:flex;flex-direction:column;min-width:0}
+    .panel .head{display:grid;gap:5px;min-width:0;background:#fff;border-bottom:2px solid #d0ddef}.panel h3{font-size:.94rem;color:var(--text);overflow-wrap:anywhere}.panel h3 #pCol{color:var(--primary);font-weight:800}.meta{display:flex;gap:7px;flex-wrap:wrap;font-size:.72rem;color:var(--muted);min-width:0}
+    .panel-body{flex:1 1 auto;min-height:0;overflow:auto;padding:10px;display:grid;gap:12px;min-width:0;overscroll-behavior:contain}
+    .sec{border:none;border-radius:0;overflow:visible;background:transparent;min-width:0}
+    .panel-body .sec + .sec{border-top:2px solid #d5dfed;padding-top:10px}
+    .sec h4{padding:0;background:transparent;border:none;font-size:.74rem;color:#1f3f6f;font-weight:700}
+    .sec .in{padding:0;display:grid;gap:8px;font-size:.72rem;color:var(--muted);min-width:0}
+    .hint{font-size:.68rem;color:var(--muted);background:transparent;border:none;padding:0}
+    .tag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:999px;font-size:.62rem;font-weight:700;border:none;margin-left:4px}
+    .tag.req{background:#eef4ff;color:#1f4da8}
+    .tag.opt{background:#f3f6fa;color:#475569}
+    .tag.neutral{background:#f3f4f6;color:#64748b}
+    .block{border:none;border-radius:0;background:transparent;overflow:visible;padding:0}
+    .block>summary{cursor:pointer;list-style:none;padding:4px 0;background:transparent;color:#345078;font-size:.7rem;font-weight:700;display:flex;justify-content:space-between;align-items:center;border:none;border-bottom:2px dashed #d1dced;border-radius:0}
+    .block>summary::-webkit-details-marker{display:none}
+    .block>summary::after{content:'+';font-weight:700;color:#5d7497}
+    .block[open]>summary{background:transparent}
+    .block[open]>summary::after{content:'-'}
+    .subin{padding:6px 0 2px;display:grid;gap:7px}
+    .subhelp{font-size:.66rem;color:var(--muted);margin-top:-2px}
+    .rule{display:grid;gap:3px;padding:2px 0;border:none;border-radius:0;background:transparent}
+    .preset-row{align-items:center}
+    .field{display:grid;gap:4px}.field label{font-size:.67rem;color:var(--muted);font-weight:600}
+    input[type='text'],input[type='number'],select,textarea{width:100%;border:1px solid var(--line);border-radius:7px;padding:5px 7px;font-size:.71rem;color:var(--text);font-family:inherit}
+    textarea{min-height:52px;resize:vertical}.checks{display:grid;gap:4px}.check{display:flex;gap:6px;align-items:center;color:var(--text)}
+    .split{display:grid;grid-template-columns:1fr 1fr;gap:6px;min-width:0}.arow{display:flex;gap:6px;flex-wrap:wrap;min-width:0}
+    .samples{display:grid;grid-template-columns:1fr 1fr;gap:6px;min-width:0}.samples ul{list-style:none;display:grid;gap:5px}
+    .samples li{border:none;border-radius:0;padding:2px 0;background:transparent;font-size:.68rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .samples .ok li{color:#1f7a3e}.samples .ko li{color:#b42318}
+
+    .foot{padding:8px 14px 12px;border-top:2px solid #d0ddef;background:#fff;font-size:.7rem;color:var(--muted);display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+    @media (max-width:1280px){
+      :root{--colw:160px;--st2w:152px}
+      .layout{grid-template-columns:1fr;gap:10px}
+      .panel{position:static;max-height:none}
+      .table-wrap{max-height:50vh}
+    }
+    @media (max-width:900px){
+      :root{--colw:142px;--st2w:134px}
+      body{padding:10px}
+      .layout{padding:10px}
+      .tools{grid-template-columns:1fr}
+      .quick{justify-content:flex-start;flex-wrap:wrap;overflow:visible}
+      .quick .btn{flex:0 0 auto}
+      .table-wrap{max-height:46vh}
+      .arow{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+      .arow .btn{width:100%;white-space:normal}
+    }
+    @media (max-width:680px){
+      :root{--colw:124px;--st2w:116px}
+      .split,.samples{grid-template-columns:1fr}
+      .arow{grid-template-columns:1fr}
+      .header-top{flex-direction:column;align-items:flex-start}
+      .brand{font-size:1.06rem}
+      .context-line{gap:6px}
+      .ctx-badge{white-space:normal}
+      .app-tabs,.step-nav{padding:8px 10px}
+      .step-status{margin-left:0;width:100%;border-radius:8px}
+      .table-tools{font-size:.67rem}
+      .table-wrap{max-height:42vh}
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="header">
+      <div class="header-top"><div class="brand"><span>Tablerreur</span><span>Mapala</span></div><div class="pills"><span class="pill">Mockup Hifi V3</span><span class="pill">Palette harmonisee</span></div></div>
+      <div class="sub">Controle qualite et mapping de tableurs CSV/XLSX</div>
+    </header>
+    <nav class="app-tabs">
+      <button id="tab-tablerreur" class="app-tab active">Tablerreur</button>
+      <button id="tab-mapala" class="app-tab">Mapala</button>
+    </nav>
+    <nav class="step-nav">
+      <button class="step-btn"><span class="step-num">1</span> Televerser</button>
+      <span class="step-sep">></span>
+      <button class="step-btn active"><span class="step-num">2</span> Configurer</button>
+      <span class="step-sep">></span>
+      <button class="step-btn" disabled><span class="step-num">3</span> Correctifs</button>
+      <span class="step-sep">></span>
+      <button class="step-btn" disabled><span class="step-num">4</span> Valider</button>
+      <span class="step-sep">></span>
+      <button class="step-btn" disabled><span class="step-num">5</span> Resultats</button>
+      <span class="step-status"><b>Etape 2/5</b> Recuperation des en-tetes et parametrage des criteres</span>
+    </nav>
+
+    <main class="layout">
+      <section class="left-col">
+        <section class="main-col">
+          <div class="card">
+            <div class="head"><span>Navigateur de colonnes</span><span id="visibleCount">35 colonnes visibles</span></div>
+            <div class="body" style="display:grid;gap:8px">
+              <div class="tools">
+                <div class="search"><input id="search" type="text" placeholder="Rechercher un en-tete (date, langue, licence, id...)" /><button class="btn" id="clear">Reset</button></div>
+                <div class="quick"><button class="btn" id="prev">Colonne prec.</button><button class="btn" id="next">Colonne suiv.</button></div>
+              </div>
+              <div class="chips-wrap"><div class="chips" id="chips"></div></div>
+              <div class="map"><div class="label">Mini-map des 35 colonnes par statut de configuration</div><div class="track" id="track"><div class="segs" id="segs"></div><div class="window" id="window"></div></div></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="table-col">
+          <div class="card table-card">
+            <div class="head"><span>Apercu table (30 premieres lignes)</span><span id="meta">Mode neutre: pas de signalement d'erreur en configuration</span></div>
+            <div class="body">
+              <div class="table-tools"><span>Cliquer un en-tete pour charger sa configuration. Double-clic cellule pour edition manuelle.</span><span id="pos">Position horizontale: 0%</span></div>
+              <div class="table-wrap" id="tableWrap"><table id="tbl"></table></div>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <aside class="right-col">
+        <div class="card context-compact">
+          <div class="head"><span>Contexte dataset (compact)</span><span>Session active</span></div>
+          <div class="body context-line">
+            <span class="ctx-badge"><b>Fichier:</b> depot_nakala_2026_v4.xlsx</span>
+            <span class="ctx-badge"><b>Taille:</b> 523 lignes x 35 colonnes</span>
+            <span class="ctx-badge"><b>Entete:</b> ligne 1</span>
+            <span class="ctx-badge"><b>Template:</b> nakala_baseline</span>
+            <span class="ctx-badge"><b>Colonne active:</b> <span id="topCol">Date_creation</span></span>
+            <span class="ctx-badge"><b>Statut:</b> <span id="topStatus">En cours</span></span>
+          </div>
+        </div>
+
+        <div class="panel card">
+          <div class="head"><h3>Configuration: <span id="pCol">Date_creation</span></h3><div class="meta"><span id="pKind">Type: Date</span><span id="pFmt">Format: W3C-DTF</span><span id="pStatus">Statut: En cours</span></div></div>
+          <div class="panel-body">
+            <section class="sec">
+              <h4>Essentiel <span class="tag req">A configurer</span></h4>
+              <div class="in">
+                <p class="hint">Commencez par ces parametres. Le reste est optionnel et peut rester par defaut.</p>
+                <div class="field">
+                  <label>Valeur obligatoire <span class="tag opt">Optionnel</span></label>
+                  <label class="check"><input type="checkbox" checked /> Exiger une valeur non vide</label>
+                </div>
+                <div class="field">
+                  <label>Type de contenu <span class="tag req">Recommande</span></label>
+                  <select>
+                    <option>Texte</option>
+                    <option selected>Date</option>
+                    <option>Nombre</option>
+                    <option>Identifiant</option>
+                    <option>Adresse</option>
+                    <option>NAKALA</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>Format attendu <span class="tag req">Recommande</span></label>
+                  <select>
+                    <option selected>Date W3C-DTF (YYYY, YYYY-MM, YYYY-MM-DD)</option>
+                    <option>Date ISO stricte</option>
+                    <option>Date francaise</option>
+                    <option>Annee</option>
+                    <option>Aucun format impose</option>
+                  </select>
+                </div>
+                <div class="split">
+                  <div class="field"><label>Exemple valide</label><input type="text" value="2026-01-14" /></div>
+                  <div class="field"><label>Exemple invalide</label><input type="text" value="14/01/2026" /></div>
+                </div>
+              </div>
+            </section>
+
+            <section class="sec">
+              <h4>Optionnel <span class="tag opt">Affinage</span></h4>
+              <div class="in">
+                <p class="hint">Activez uniquement ce qui est utile pour cette colonne.</p>
+
+                <details class="block" open>
+                  <summary>Qualite des valeurs</summary>
+                  <div class="subin">
+                    <p class="hint">Ces controles sont optionnels. Activez uniquement ce qui apporte une vraie valeur metier.</p>
+                    <div class="arow preset-row">
+                      <button class="btn">Aucun</button>
+                      <button class="btn">Standard</button>
+                      <button class="btn">Strict</button>
+                    </div>
+                    <div class="rule">
+                      <label class="check"><input type="checkbox" /> Exiger des valeurs uniques (pas de doublons)</label>
+                      <p class="subhelp">Utile pour ID, DOI, ARK, reference interne.</p>
+                    </div>
+                    <div class="rule">
+                      <label class="check"><input type="checkbox" /> Autoriser les retours a la ligne dans la cellule</label>
+                      <p class="subhelp">A activer pour resume/commentaire. A laisser desactive pour codes et identifiants.</p>
+                    </div>
+                    <div class="split" style="margin-top:7px">
+                      <div class="field">
+                        <label>Longueur minimale (caracteres) <span class="tag opt">Vide = inactif</span></label>
+                        <input type="number" placeholder="ex: 4" />
+                      </div>
+                      <div class="field">
+                        <label>Longueur maximale (caracteres) <span class="tag opt">Vide = inactif</span></label>
+                        <input type="number" placeholder="ex: 40" />
+                      </div>
+                    </div>
+                    <div class="field" style="margin-top:7px">
+                      <label>Caracteres interdits (optionnel) <span class="tag opt">ex: separateurs</span></label>
+                      <input type="text" placeholder="ex: ; | guillemets" />
+                    </div>
+                  </div>
+                </details>
+
+                <details class="block">
+                  <summary>Listes et vocabulaires</summary>
+                  <div class="subin">
+                    <p class="hint">Choisissez un seul mode principal pour cette colonne.</p>
+                    <div class="arow preset-row">
+                      <button class="btn">Aucune contrainte</button>
+                      <button class="btn">Liste locale</button>
+                      <button class="btn">Vocabulaire distant</button>
+                    </div>
+
+                    <div class="rule">
+                      <label class="check"><input type="radio" name="vocab-mode" checked /> Liste locale (maintenue dans le projet)</label>
+                      <p class="subhelp">Ideal pour une liste courte et stable: statut, niveau d'acces, type interne.</p>
+                      <div class="split" style="margin-top:5px">
+                        <div class="field"><label>Separateur si multivaleur</label><input type="text" value="|" /></div>
+                        <div class="field"><label>Nombre max d'elements <span class="tag opt">Vide = inactif</span></label><input type="number" placeholder="-" /></div>
+                      </div>
+                      <label class="check" style="margin-top:5px"><input type="checkbox" /> Interdire les valeurs hors liste</label>
+                      <div class="field" style="margin-top:5px"><label>Valeurs autorisees (une ligne = une valeur)</label><textarea placeholder="fr&#10;en&#10;es"></textarea></div>
+                    </div>
+
+                    <div class="rule">
+                      <label class="check"><input type="radio" name="vocab-mode" /> Vocabulaire distant (source externe)</label>
+                      <p class="subhelp">Utile quand la liste evolue et doit rester synchronisee (ISO, SPDX, etc.).</p>
+                      <div class="field" style="margin-top:5px">
+                        <label>Source</label>
+                        <select>
+                          <option>Aucune</option>
+                          <option>Datatypes (COAR)</option>
+                          <option>Licenses (SPDX)</option>
+                          <option selected>Languages (ISO 639-3)</option>
+                        </select>
+                      </div>
+                      <div class="arow" style="margin-top:6px">
+                        <button class="btn">Charger la liste</button>
+                        <button class="btn">Filtrer / sous-selectionner</button>
+                      </div>
+                    </div>
+
+                    <div class="arow" style="margin-top:2px"><button class="btn">Importer vocabulaire (.yml)</button><button class="btn">Exporter config</button></div>
+                  </div>
+                </details>
+              </div>
+            </section>
+
+            <section class="sec">
+              <h4>Avance <span class="tag neutral">Validation uniquement</span></h4>
+              <div class="in">
+                <details class="block">
+                  <summary>Detection de coherence</summary>
+                  <div class="subin">
+                    <p class="hint">Ces controles s'appliquent a la validation (etape 4). Ils n'empechent pas la configuration actuelle.</p>
+                    <div class="arow preset-row">
+                      <button class="btn">Desactive</button>
+                      <button class="btn">Standard</button>
+                      <button class="btn">Strict</button>
+                    </div>
+
+                    <div class="rule">
+                      <label class="check"><input type="checkbox" checked /> Detecter les valeurs rares</label>
+                      <p class="subhelp">Repere les valeurs peu frequentes qui peuvent cacher des fautes de frappe.</p>
+                      <div class="split" style="margin-top:5px">
+                        <div class="field"><label>Seuil rarete (%)</label><input type="number" value="1" /></div>
+                        <div class="field"><label>Min de cellules non vides</label><input type="number" value="10" /></div>
+                      </div>
+                    </div>
+
+                    <div class="rule">
+                      <label class="check"><input type="checkbox" checked /> Detecter les valeurs similaires</label>
+                      <p class="subhelp">Signale les variantes proches (ex: fr / fre / fra) pour harmoniser la colonne.</p>
+                      <div class="field"><label>Seuil similarite (%)</label><input type="number" value="85" /></div>
+                    </div>
+                  </div>
+                </details>
+
+                <details class="block">
+                  <summary>Apercu impact</summary>
+                  <div class="subin">
+                    <div class="samples">
+                      <div class="ok"><ul><li>2026-01-14</li><li>2026-01</li><li>2026</li></ul></div>
+                      <div class="ko"><ul><li>14/01/2026</li><li>Inconnue</li><li>2026-13-40</li></ul></div>
+                    </div>
+                    <div class="arow" style="margin-top:7px"><button class="btn">Previsualiser</button></div>
+                  </div>
+                </details>
+              </div>
+            </section>
+
+            <div class="arow">
+              <button class="btn primary">Appliquer la config</button>
+              <button class="btn">Dupliquer vers...</button>
+              <button class="btn">Reinitialiser cette colonne</button>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <div class="foot"><span>V3: palette harmonisee + panneau droit simplifie (essentiel / optionnel / avance).</span><span>Iteration demandee</span></div>
+  </div>
+
+  <script>
+    // statuts: todo, progress, done, locked
+    const cols=[
+      ["ID","done","Identifiant","Texte alphanumerique"],["Titre","progress","Texte","Texte libre court"],["Sous_titre","todo","Texte","Texte libre court"],["Resume","todo","Texte long","Multiligne"],["Mots_cles","progress","Liste","Separateur |"],["Type_ressource","done","NAKALA","COAR URI"],["Auteur_principal","done","Texte","Nom prenom"],["Co_auteurs","todo","Liste","Separateur ;"],["Contributeur","todo","Texte","Nom prenom"],["Date_creation","progress","Date","W3C-DTF"],["Date_publication","todo","Date","W3C-DTF"],["Langue","progress","Code","ISO 639"],["Licence","progress","NAKALA","SPDX"],["Droits","todo","Texte","Texte libre"],["Editeur","todo","Texte","Nom organisme"],["Collection","todo","Texte","Texte libre"],["Sujet","progress","Liste","Separateur |"],["Couverture_geo","todo","Texte","Pays ISO"],["Couverture_temporelle","todo","Date","Periode"],["Format_fichier","todo","Texte","MIME"],["Taille","todo","Nombre","Entier"],["URI","progress","Adresse","URL"],["DOI","locked","Identifiant","DOI"],["ARK","locked","Identifiant","ARK"],["ORCID","todo","Identifiant","ORCID"],["ISSN","todo","Identifiant","ISSN"],["ISBN","todo","Identifiant","ISBN"],["Numero_version","todo","Texte","vX.Y"],["Statut","progress","Selection","Liste fermee"],["Niveau_acces","todo","Selection","Oui/Non"],["Source","todo","Texte","URI/libre"],["Provenance","todo","Texte","Texte"],["Commentaire","todo","Texte long","Multiligne"],["Reference_interne","progress","Identifiant","Alphanumerique"],["Tag_projet","todo","Liste","Separateur ,"]
+    ].map((d)=>({label:d[0],status:d[1],kind:d[2],fmt:d[3]}));
+
+    const mapLabel={todo:'Non configuree',progress:'En cours',done:'Configuree',locked:'Verrouillee template'};
+    const score={todo:0,progress:1,done:2,locked:3};
+    const tbl=document.getElementById('tbl'),chips=document.getElementById('chips'),segs=document.getElementById('segs'),track=document.getElementById('track'),wrap=document.getElementById('tableWrap'),win=document.getElementById('window');
+    const search=document.getElementById('search'); let sel=9,q='';
+
+    const val=(r,l)=>({ID:`DOC-${1000+r}`,Titre:`Notice ${r}`,Type_ressource:'Article',Date_creation:r%3===0?'2026-01':'2026-01-14',Date_publication:'2026-02-21',Langue:'fr',Licence:'CC-BY-4.0',DOI:`10.5281/zenodo.${10000+r}`,ARK:`ark:/67375/${2000+r}`,URI:`https://exemple.org/data/${r}`,Taille:`${100+r}`,Mots_cles:'archives|SHS'})[l]??`${l}_${r}`;
+
+    function updateTop(){const c=cols[sel];document.getElementById('topCol').textContent=c.label;document.getElementById('topStatus').textContent=mapLabel[c.status];document.getElementById('pCol').textContent=c.label;document.getElementById('pKind').textContent=`Type: ${c.kind}`;document.getElementById('pFmt').textContent=`Format: ${c.fmt}`;document.getElementById('pStatus').textContent=`Statut: ${mapLabel[c.status]}`}
+
+    function buildChips(){chips.innerHTML='';let vis=0;cols.forEach((c,i)=>{if(q&&!c.label.toLowerCase().includes(q))return;vis++;const b=document.createElement('button');b.className='chip'+(i===sel?' active':'');b.dataset.s=c.status;b.dataset.i=i;const txt=c.status==='done'?'&#10003;':c.status==='progress'?'...':c.status==='locked'?'L':'-';b.innerHTML=`<span>${c.label}</span><span class='c'>${txt}</span>`;b.onclick=()=>pick(i,true);chips.appendChild(b)});document.getElementById('visibleCount').textContent=`${vis} colonnes visibles`}
+
+    function buildMap(){segs.innerHTML='';segs.style.gridTemplateColumns=`repeat(${cols.length},minmax(0,1fr))`;cols.forEach((c,i)=>{const s=document.createElement('div');s.className='seg '+(c.status==='progress'?'progress':c.status==='done'?'done':c.status==='locked'?'locked':'')+(i===sel?' active':'');s.dataset.i=i;segs.appendChild(s)});updWin()}
+
+    function buildTable(){const thead=document.createElement('thead'),trh=document.createElement('tr');const th0=document.createElement('th');th0.className='first st1';th0.textContent='#';trh.appendChild(th0);cols.forEach((c,i)=>{const th=document.createElement('th');th.className='hcol'+(i===0?' st2':'')+(i===sel?' sel':'');th.dataset.i=i;th.textContent=c.label;th.onclick=()=>pick(i,true);trh.appendChild(th)});thead.appendChild(trh);const tbody=document.createElement('tbody');for(let r=1;r<=18;r++){const tr=document.createElement('tr');const td0=document.createElement('td');td0.className='first st1';td0.textContent=String(r);tr.appendChild(td0);cols.forEach((c,i)=>{const td=document.createElement('td');td.dataset.i=i;if(i===0)td.classList.add('st2');if(i===sel)td.classList.add('sel');td.textContent=val(r,c.label);tr.appendChild(td)});tbody.appendChild(tr)}tbl.innerHTML='';tbl.appendChild(thead);tbl.appendChild(tbody)}
+
+    function sync(){document.querySelectorAll('.chip').forEach(e=>e.classList.toggle('active',Number(e.dataset.i)===sel));document.querySelectorAll('.seg').forEach(e=>e.classList.toggle('active',Number(e.dataset.i)===sel));tbl.querySelectorAll('[data-i]').forEach(e=>e.classList.toggle('sel',Number(e.dataset.i)===sel));updateTop()}
+    function pick(i,scroll){sel=Math.max(0,Math.min(cols.length-1,i));sync();if(scroll){const th=tbl.querySelector(`th[data-i='${sel}']`);if(th)th.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});const ch=chips.querySelector(`[data-i='${sel}']`);if(ch)ch.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'})}}
+
+    function updWin(){const max=Math.max(1,wrap.scrollWidth-wrap.clientWidth);const lr=wrap.scrollLeft/max;const wr=wrap.clientWidth/wrap.scrollWidth;const mw=track.clientWidth;const ww=Math.max(24,mw*wr);win.style.width=`${ww}px`;win.style.left=`${(mw-ww)*lr}px`;document.getElementById('pos').textContent=`Position horizontale: ${Math.round(lr*100)}%`}
+
+    function init(){buildChips();buildMap();buildTable();updateTop();updWin();
+      document.getElementById('prev').onclick=()=>pick(sel-1,true);document.getElementById('next').onclick=()=>pick(sel+1,true);
+      document.getElementById('clear').onclick=()=>{search.value='';q='';buildChips()};search.oninput=()=>{q=search.value.trim().toLowerCase();buildChips()};
+      wrap.addEventListener('scroll',updWin);window.addEventListener('resize',updWin);
+      document.addEventListener('keydown',(e)=>{const t=document.activeElement?.tagName;if(t==='INPUT'||t==='TEXTAREA'||t==='SELECT')return;if(e.key==='ArrowLeft'){e.preventDefault();pick(sel-1,true)}else if(e.key==='ArrowRight'){e.preventDefault();pick(sel+1,true)}});
+      track.addEventListener('click',(e)=>{const r=track.getBoundingClientRect();const x=e.clientX-r.left;const i=Math.min(cols.length-1,Math.floor((x/r.width)*cols.length));pick(i,true)});
+    }
+    init();
+  </script>
+</body>
+</html>

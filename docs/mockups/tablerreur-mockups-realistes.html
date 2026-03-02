@@ -1,0 +1,869 @@
+﻿<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tablerreur - Mockups realistes</title>
+  <style>
+    :root {
+      --bg: #f3f7fc;
+      --surface: #ffffff;
+      --surface-soft: #f8fbff;
+      --ink: #1f2a3d;
+      --muted: #607089;
+      --line: #d7e0ee;
+      --primary: #2563eb;
+      --primary-dark: #1e4fc0;
+      --success: #15803d;
+      --warning: #b45309;
+      --danger: #b91c1c;
+      --radius: 12px;
+      --shadow: 0 12px 24px rgba(20, 35, 65, 0.12);
+      --shadow-soft: 0 6px 12px rgba(20, 35, 65, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "IBM Plex Sans", "Helvetica Neue", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(900px 420px at 8% -6%, rgba(37, 99, 235, 0.14), transparent 45%),
+        radial-gradient(900px 420px at 98% 0%, rgba(21, 128, 61, 0.12), transparent 45%),
+        var(--bg);
+      min-height: 100vh;
+      line-height: 1.4;
+    }
+
+    .demo {
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 22px 16px 32px;
+    }
+
+    .hero {
+      background: linear-gradient(120deg, #16336a 0%, #2156b1 55%, #2b6fda 100%);
+      color: #f3f8ff;
+      border-radius: 16px;
+      padding: 16px 18px;
+      box-shadow: var(--shadow);
+    }
+
+    .hero h1 {
+      margin: 0 0 6px;
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+    }
+
+    .hero p {
+      margin: 0;
+      color: #d6e4ff;
+      font-size: 0.94rem;
+    }
+
+    .controls {
+      margin-top: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .group {
+      display: inline-flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      align-items: center;
+      padding: 5px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.14);
+      border: 1px solid rgba(255, 255, 255, 0.23);
+    }
+
+    .group .label {
+      font-size: 0.74rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #d8e6ff;
+      margin: 0 6px;
+    }
+
+    .chip {
+      border: 1px solid rgba(255, 255, 255, 0.32);
+      background: rgba(255, 255, 255, 0.08);
+      color: #f4f8ff;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .chip.active {
+      background: #ffffff;
+      color: #204178;
+      border-color: #ffffff;
+    }
+
+    .legend {
+      margin-top: 10px;
+      font-size: 0.8rem;
+      color: #e2edff;
+      opacity: 0.95;
+    }
+
+    .frame {
+      margin-top: 16px;
+      border-radius: 14px;
+      border: 1px solid #c8d4e7;
+      background: #dce6f6;
+      padding: 12px;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .viewport {
+      margin: 0 auto;
+      background: var(--surface-soft);
+      border: 1px solid #b8c8df;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.75);
+      transition: width 200ms ease;
+      width: 1380px;
+      min-height: 930px;
+    }
+
+    .viewport.tablet { width: 960px; }
+    .viewport.mobile { width: 390px; }
+
+    .mockup {
+      display: none;
+      min-height: 930px;
+      background: var(--surface-soft);
+    }
+
+    .mockup.active { display: block; }
+
+    .app-header {
+      background: linear-gradient(90deg, #3b82f6 0%, #1d4ed8 52%, #1e40af 100%);
+      color: #f6fbff;
+      padding: 12px 16px 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.22);
+    }
+
+    .brand-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .brand {
+      font-size: 1.16rem;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+      display: flex;
+      gap: 14px;
+    }
+
+    .brand .right { opacity: 0.9; }
+
+    .header-sub {
+      margin-top: 3px;
+      font-size: 0.82rem;
+      color: #dbe7ff;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      padding: 8px 12px;
+      background: #ffffff;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .tab {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 5px 10px;
+      font-size: 0.76rem;
+      color: #3d4c69;
+      background: #f5f8fd;
+      font-weight: 700;
+    }
+
+    .tab.active {
+      color: #ffffff;
+      background: var(--primary);
+      border-color: var(--primary);
+    }
+
+    .steps {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      padding: 8px 12px;
+      background: #ffffff;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .step {
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      padding: 4px 9px;
+      font-size: 0.75rem;
+      color: #4c5b75;
+      background: #f7fafd;
+      font-weight: 700;
+    }
+
+    .step.current {
+      color: #ffffff;
+      border-color: var(--primary);
+      background: var(--primary);
+    }
+
+    .coach {
+      margin: 10px 12px 0;
+      border: 1px solid #b9d3fb;
+      border-left: 4px solid var(--primary);
+      border-radius: 10px;
+      background: #ecf4ff;
+      color: #23457d;
+      padding: 8px 10px;
+      font-size: 0.78rem;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .coach button {
+      border: 1px solid #9bbef5;
+      background: #ffffff;
+      color: #2552a1;
+      font-size: 0.74rem;
+      border-radius: 8px;
+      padding: 4px 8px;
+      font-weight: 700;
+    }
+
+    .content {
+      padding: 10px 12px 14px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .grid-2 {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .grid-70-30 {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: 7fr 3fr;
+    }
+
+    .grid-60-40 {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: 6fr 4fr;
+    }
+
+    .grid-main {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: 2fr 1fr;
+      align-items: start;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: 0 2px 6px rgba(16, 30, 50, 0.05);
+      overflow: hidden;
+    }
+
+    .card-head {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--line);
+      background: #f9fbff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 0.76rem;
+      font-weight: 700;
+      color: #334560;
+    }
+
+    .card-body {
+      padding: 10px;
+      font-size: 0.76rem;
+      color: #425570;
+    }
+
+    .dropzone {
+      border: 2px dashed #a9bfde;
+      border-radius: 10px;
+      background: #f7fbff;
+      text-align: center;
+      padding: 22px 14px;
+      font-weight: 700;
+      color: #406196;
+    }
+
+    .meta {
+      margin-top: 8px;
+      font-size: 0.72rem;
+      color: #6780a6;
+    }
+
+    .list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 6px;
+    }
+
+    .row {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 6px 8px;
+      background: #ffffff;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .badge {
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      padding: 1px 7px;
+      font-size: 0.68rem;
+      font-weight: 700;
+      color: #405774;
+      background: #f5f8fd;
+      white-space: nowrap;
+    }
+
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.72rem;
+    }
+
+    .table th,
+    .table td {
+      border-bottom: 1px solid #e1e8f3;
+      border-right: 1px solid #edf2f8;
+      padding: 5px 6px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .table th:last-child,
+    .table td:last-child { border-right: none; }
+
+    .table th {
+      background: #f2f6fc;
+      color: #3f536f;
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .sev-error { background: #fef2f2; }
+    .sev-warning { background: #fffbeb; }
+    .sev-suspicion { background: #f5f3ff; }
+
+    .actions {
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+
+    .btn {
+      border: 1px solid var(--line);
+      background: #fff;
+      color: #3e4f6a;
+      border-radius: 8px;
+      padding: 4px 7px;
+      font-size: 0.69rem;
+      font-weight: 700;
+    }
+
+    .btn.primary {
+      border-color: var(--primary);
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .btn.warn { border-color: #f1cc8e; background: #fff6e8; color: #9a6305; }
+    .btn.ok { border-color: #b9e7c9; background: #effcf3; color: #12743b; }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+
+    .stat {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 8px;
+      background: #fff;
+      text-align: center;
+    }
+
+    .stat .n {
+      font-size: 1.08rem;
+      font-weight: 800;
+      margin-bottom: 1px;
+    }
+
+    .muted { color: var(--muted); }
+
+    .sticky-bar {
+      border: 1px solid #f0cc93;
+      border-left: 4px solid #f59e0b;
+      background: #fff8eb;
+      border-radius: 10px;
+      padding: 7px 9px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      font-size: 0.72rem;
+      color: #7d4f07;
+    }
+
+    .footer-note {
+      margin: 10px 12px 12px;
+      font-size: 0.7rem;
+      color: #6b7f9c;
+      text-align: right;
+    }
+
+    .variant-tag {
+      border-radius: 999px;
+      border: 1px solid #c9d6ea;
+      padding: 2px 8px;
+      font-size: 0.65rem;
+      color: #4a5f7f;
+      background: #ffffff;
+      font-weight: 700;
+    }
+
+    .viewport.mobile .grid-2,
+    .viewport.mobile .grid-70-30,
+    .viewport.mobile .grid-60-40,
+    .viewport.mobile .grid-main,
+    .viewport.mobile .stat-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .viewport.mobile .content { padding: 8px; gap: 8px; }
+    .viewport.mobile .coach { margin: 8px 8px 0; }
+
+    @media (max-width: 1200px) {
+      .viewport { width: 100%; }
+    }
+
+    @media (max-width: 900px) {
+      .grid-2,
+      .grid-70-30,
+      .grid-60-40,
+      .grid-main,
+      .stat-grid { grid-template-columns: 1fr; }
+      .content { padding: 8px; }
+      .coach { margin: 8px 8px 0; }
+    }
+  </style>
+</head>
+<body>
+  <main class="demo">
+    <section class="hero">
+      <h1>Tablerreur - 3 mockups realistes (contenu, couleurs, breakpoints)</h1>
+      <p>Prototype visuel proche du produit pour valider l'organisation des box avant integration.</p>
+      <div class="controls">
+        <div class="group" id="variant-controls">
+          <span class="label">Mockup</span>
+          <button class="chip active" data-variant="a">A - Equilibre</button>
+          <button class="chip" data-variant="b">B - Focus data</button>
+          <button class="chip" data-variant="c">C - Resolution</button>
+        </div>
+        <div class="group" id="viewport-controls">
+          <span class="label">Breakpoint</span>
+          <button class="chip active" data-view="desktop">Desktop 1380</button>
+          <button class="chip" data-view="tablet">Tablet 960</button>
+          <button class="chip" data-view="mobile">Mobile 390</button>
+        </div>
+      </div>
+      <div class="legend">Les donnees, labels et statuts reprennent le vocabulaire Tablerreur (televerser, configurer, correctifs, valider, resultats).</div>
+    </section>
+
+    <section class="frame">
+      <div class="viewport desktop" id="viewport">
+
+        <!-- MOCKUP A -->
+        <div class="mockup active" data-variant="a">
+          <div class="app-header">
+            <div class="brand-row">
+              <div class="brand"><span>Tablerreur</span><span class="right">Mapala</span></div>
+              <span class="variant-tag">Mockup A - Equilibre</span>
+            </div>
+            <div class="header-sub">Controle qualite et mapping de tableurs CSV/XLSX</div>
+          </div>
+          <div class="tabs"><span class="tab active">Tablerreur</span><span class="tab">Mapala</span></div>
+          <div class="steps">
+            <span class="step">1 Televerser</span><span class="step current">2 Configurer</span><span class="step">3 Correctifs</span><span class="step">4 Valider</span><span class="step">5 Resultats</span>
+          </div>
+          <div class="coach">
+            <span><strong>Etape 2/5.</strong> Cliquez sur un en-tete pour regler la colonne. Double-clic cellule pour edition manuelle.</span>
+            <button>Voir les raccourcis</button>
+          </div>
+          <div class="content">
+            <div class="card">
+              <div class="card-head"><span>Etape 1 - Televerser</span><span class="badge">Fichier charge: nakala_depot_2026.xlsx</span></div>
+              <div class="card-body">
+                <div class="dropzone">Glissez-deposez un fichier CSV/XLSX ou cliquez sur Parcourir</div>
+                <div class="meta">523 lignes x 12 colonnes - Encodage UTF-8 - Delimiteur auto</div>
+              </div>
+            </div>
+
+            <div class="grid-2">
+              <div class="card">
+                <div class="card-head">Options d import</div>
+                <div class="card-body">
+                  <ul class="list">
+                    <li class="row"><span>Ligne d en-tete</span><span class="badge">1</span></li>
+                    <li class="row"><span>Delimiteur</span><span class="badge">Auto (; detecte)</span></li>
+                    <li class="row"><span>Encodage</span><span class="badge">utf-8</span></li>
+                  </ul>
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-head">Modele de validation</div>
+                <div class="card-body">
+                  <ul class="list">
+                    <li class="row"><span>Modele actif</span><span class="badge">NAKALA - Reference</span></li>
+                    <li class="row"><span>Overlay</span><span class="badge">nakala_baseline</span></li>
+                    <li class="row"><span>Template utilisateur</span><span class="badge">depot_lab_v4.yml</span></li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid-70-30">
+              <div class="card">
+                <div class="card-head">Apercu tableau (30 premieres lignes)</div>
+                <div class="card-body">
+                  <table class="table">
+                    <thead>
+                      <tr><th>Titre</th><th>Type</th><th>Langue</th><th>Date</th><th>Licence</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr><td>Corpus SHS 2026</td><td>http://purl.org/coar/resource_type/c_18cf</td><td>fr</td><td>2026-01-14</td><td>CC-BY-4.0</td></tr>
+                      <tr class="sev-warning"><td>Notice 42 </td><td>Article</td><td>fr-FR</td><td>14/01/2026</td><td>CC BY 4.0</td></tr>
+                      <tr class="sev-suspicion"><td>Notice 43</td><td>Artcle</td><td>fre</td><td>2026-01</td><td>CC-BY-4.0</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-head">Panneau colonne - "Langue"</div>
+                <div class="card-body">
+                  <ul class="list">
+                    <li class="row"><span>Type contenu</span><span class="badge">Texte code</span></li>
+                    <li class="row"><span>Format attendu</span><span class="badge">Langue ISO 639</span></li>
+                    <li class="row"><span>Valeurs autorisees</span><span class="badge">NAKALA languages</span></li>
+                    <li class="row"><span>Detecter valeurs proches</span><span class="badge">ON (85%)</span></li>
+                  </ul>
+                  <div class="actions">
+                    <button class="btn">Previsualiser regle</button>
+                    <button class="btn primary">Appliquer</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid-60-40">
+              <div class="card">
+                <div class="card-head">Etape 3 - Correctifs d hygiene</div>
+                <div class="card-body">
+                  <ul class="list">
+                    <li class="row"><span>Supprimer espaces debut/fin</span><span class="badge">Actif</span></li>
+                    <li class="row"><span>Remplacer NBSP</span><span class="badge">Actif</span></li>
+                    <li class="row"><span>Supprimer caracteres invisibles</span><span class="badge">Actif</span></li>
+                  </ul>
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-head">Apercu modifications</div>
+                <div class="card-body muted">49 cellules seront modifiees - 3 colonnes impactees - Undo/Redo disponible</div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><span>Etape 5 - Resultats</span><span class="badge">Total problemes: 124</span></div>
+              <div class="card-body">
+                <div class="stat-grid">
+                  <div class="stat"><div class="n" style="color:#b91c1c;">27</div><div>Erreurs</div></div>
+                  <div class="stat"><div class="n" style="color:#b45309;">66</div><div>Avertissements</div></div>
+                  <div class="stat"><div class="n" style="color:#6d28d9;">31</div><div>Suspicions</div></div>
+                  <div class="stat"><div class="n" style="color:#1e4fc0;">124</div><div>Total</div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="footer-note">Desktop: boxes equilibrees et lecture lineaire des etapes.</div>
+        </div>
+
+        <!-- MOCKUP B -->
+        <div class="mockup" data-variant="b">
+          <div class="app-header">
+            <div class="brand-row">
+              <div class="brand"><span>Tablerreur</span><span class="right">Mapala</span></div>
+              <span class="variant-tag">Mockup B - Focus data</span>
+            </div>
+            <div class="header-sub">Controle qualite et mapping de tableurs CSV/XLSX</div>
+          </div>
+          <div class="tabs"><span class="tab active">Tablerreur</span><span class="tab">Mapala</span></div>
+          <div class="steps">
+            <span class="step">1 Televerser</span><span class="step current">2 Configurer</span><span class="step">3 Correctifs</span><span class="step">4 Valider</span><span class="step">5 Resultats</span>
+          </div>
+          <div class="coach">
+            <span><strong>Priorite aux donnees.</strong> Grand tableau central pour travailler sans perdre le contexte.</span>
+            <button>Ouvrir regles colonne</button>
+          </div>
+          <div class="content">
+            <div class="grid-main">
+              <div class="card">
+                <div class="card-head"><span>Grand apercu tableau</span><span class="badge">50 000 lignes supportees</span></div>
+                <div class="card-body">
+                  <table class="table">
+                    <thead>
+                      <tr><th>Titre</th><th>Creator</th><th>Type</th><th>Date</th><th>Langue</th><th>Licence</th><th>Identifiant</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr><td>Dataset oceanique 2025</td><td>Durand, Lea</td><td>Dataset</td><td>2025-11-04</td><td>fr</td><td>CC-BY-4.0</td><td>10.34847/nkl.88ab</td></tr>
+                      <tr class="sev-warning"><td>Dataset oceanique 2025 </td><td>Durand, Lea</td><td>Dataset</td><td>2025/11/04</td><td>FR</td><td>CC BY 4.0</td><td>10.34847/nkl.88ab</td></tr>
+                      <tr><td>Corpus oral occitan</td><td>Equipe LPL</td><td>Audio</td><td>2025-10</td><td>oci</td><td>CC-BY-SA-4.0</td><td>ark:/67375/a3f2-v89x</td></tr>
+                      <tr class="sev-suspicion"><td>Corpus oral occitan</td><td>Equipe LPL</td><td>Auido</td><td>2025-10</td><td>oc</td><td>CC-BY-SA-4.0</td><td>ark:/67375/a3f2-v89x</td></tr>
+                      <tr><td>Notice bibliographique 84</td><td>Martin, Jules</td><td>Article</td><td>2024-07-12</td><td>en</td><td>CC-BY-4.0</td><td>10.5281/zenodo.90001</td></tr>
+                      <tr class="sev-error"><td>Notice bibliographique 85</td><td></td><td>Article</td><td>12-07-2024</td><td>english</td><td></td><td>doi:10.5281/zenodo.90002</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-head">Rail configuration rapide</div>
+                <div class="card-body">
+                  <ul class="list">
+                    <li class="row"><span>Colonne active</span><span class="badge">Date</span></li>
+                    <li class="row"><span>Type</span><span class="badge">Date</span></li>
+                    <li class="row"><span>Format</span><span class="badge">W3C-DTF</span></li>
+                    <li class="row"><span>Obligatoire</span><span class="badge">Oui</span></li>
+                    <li class="row"><span>Rare values</span><span class="badge">OFF</span></li>
+                  </ul>
+                  <div class="actions">
+                    <button class="btn">Comparer impact</button>
+                    <button class="btn primary">Sauver la colonne</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid-2">
+              <div class="card">
+                <div class="card-head">Correctifs a appliquer</div>
+                <div class="card-body">
+                  <ul class="list">
+                    <li class="row"><span>Trim espaces</span><span class="badge">32 cellules</span></li>
+                    <li class="row"><span>Normalize unicode</span><span class="badge">8 cellules</span></li>
+                    <li class="row"><span>Strip invisibles</span><span class="badge">5 cellules</span></li>
+                  </ul>
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-head">Resume validation rapide</div>
+                <div class="card-body">
+                  <div class="stat-grid">
+                    <div class="stat"><div class="n" style="color:#b91c1c;">12</div><div>Erreurs</div></div>
+                    <div class="stat"><div class="n" style="color:#b45309;">44</div><div>Avertissements</div></div>
+                    <div class="stat"><div class="n" style="color:#6d28d9;">19</div><div>Suspicions</div></div>
+                    <div class="stat"><div class="n" style="color:#1e4fc0;">75</div><div>Total</div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head">Problemes detectes (vue compacte)</div>
+              <div class="card-body">
+                <table class="table">
+                  <thead>
+                    <tr><th>Sev</th><th>Colonne</th><th>Ligne</th><th>Valeur</th><th>Message</th><th>Action</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr class="sev-error"><td>Erreur</td><td>Date</td><td>145</td><td>12-07-2024</td><td>Format non W3C-DTF</td><td>Appliquer suggestion</td></tr>
+                    <tr class="sev-warning"><td>Warning</td><td>Titre</td><td>53</td><td>Notice 84 </td><td>Espace final detecte</td><td>Auto-fix</td></tr>
+                    <tr class="sev-suspicion"><td>Suspicion</td><td>Type</td><td>19</td><td>Auido</td><td>Valeur tres proche de Audio</td><td>Corriger</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <div class="footer-note">Desktop: la table reste au centre, la configuration suit sur le rail droit.</div>
+        </div>
+
+        <!-- MOCKUP C -->
+        <div class="mockup" data-variant="c">
+          <div class="app-header">
+            <div class="brand-row">
+              <div class="brand"><span>Tablerreur</span><span class="right">Mapala</span></div>
+              <span class="variant-tag">Mockup C - Resolution rapide</span>
+            </div>
+            <div class="header-sub">Controle qualite et mapping de tableurs CSV/XLSX</div>
+          </div>
+          <div class="tabs"><span class="tab active">Tablerreur</span><span class="tab">Mapala</span></div>
+          <div class="steps">
+            <span class="step">1 Televerser</span><span class="step">2 Configurer</span><span class="step">3 Correctifs</span><span class="step">4 Valider</span><span class="step current">5 Resultats</span>
+          </div>
+          <div class="coach">
+            <span><strong>Mode resolution.</strong> Priorite a la liste des problemes + actions en ligne.</span>
+            <button>Re-valider maintenant</button>
+          </div>
+          <div class="content">
+            <div class="grid-2">
+              <div class="card">
+                <div class="card-head">Telecharger</div>
+                <div class="card-body">
+                  <div class="actions">
+                    <button class="btn">Rapport TXT</button>
+                    <button class="btn">Problemes CSV</button>
+                    <button class="btn">Nettoye XLSX</button>
+                    <button class="btn">Nettoye CSV</button>
+                  </div>
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-head">Etat de session</div>
+                <div class="card-body muted">Session: active - 42 min restantes - 523 lignes - 12 colonnes</div>
+              </div>
+            </div>
+
+            <div class="sticky-bar">
+              <strong>Filtres</strong>
+              <span>Severite: ERROR + WARNING</span>
+              <span>Colonne: Date</span>
+              <span>Statut: OPEN</span>
+              <span>|</span>
+              <strong>Bulk:</strong>
+              <span>Ignorer selection</span>
+              <span>Exclure selection</span>
+              <span>Rouvrir selection</span>
+            </div>
+
+            <div class="grid-main">
+              <div class="card">
+                <div class="card-head"><span>Table problemes (prioritaire)</span><span class="badge">124 problemes - page 1/3</span></div>
+                <div class="card-body">
+                  <table class="table">
+                    <thead>
+                      <tr><th></th><th>Severite</th><th>Colonne</th><th>Ligne</th><th>Valeur</th><th>Message</th><th>Suggestion</th><th>Actions</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr class="sev-error"><td>[ ]</td><td>Erreur</td><td>Date</td><td>145</td><td>12-07-2024</td><td>Date invalide pour W3C-DTF</td><td>2024-07-12</td><td>Appliquer / Exclure</td></tr>
+                      <tr class="sev-warning"><td>[ ]</td><td>Warning</td><td>Titre</td><td>53</td><td>Notice 84 </td><td>Espace final detecte</td><td>Notice 84</td><td>Appliquer / Ignorer</td></tr>
+                      <tr class="sev-suspicion"><td>[ ]</td><td>Suspicion</td><td>Type</td><td>19</td><td>Auido</td><td>Valeur proche de Audio</td><td>Audio</td><td>Appliquer / Corriger</td></tr>
+                      <tr class="sev-warning"><td>[ ]</td><td>Warning</td><td>Langue</td><td>102</td><td>english</td><td>Code ISO 639 attendu</td><td>en</td><td>Appliquer / Ignorer</td></tr>
+                    </tbody>
+                  </table>
+                  <div class="actions">
+                    <button class="btn warn">Ignorer selection</button>
+                    <button class="btn">Exclure selection</button>
+                    <button class="btn ok">Appliquer suggestions valides</button>
+                  </div>
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-head">Cellule ciblee + navigation</div>
+                <div class="card-body">
+                  <ul class="list">
+                    <li class="row"><span>Ligne active</span><span class="badge">145</span></li>
+                    <li class="row"><span>Colonne</span><span class="badge">Date</span></li>
+                    <li class="row"><span>Valeur actuelle</span><span class="badge">12-07-2024</span></li>
+                    <li class="row"><span>Suggestion</span><span class="badge">2024-07-12</span></li>
+                  </ul>
+                  <div class="actions">
+                    <button class="btn primary">Appliquer suggestion</button>
+                    <button class="btn">Editer manuellement</button>
+                    <button class="btn">Probleme suivant</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head">Indicateurs de progression correction</div>
+              <div class="card-body">
+                <div class="stat-grid">
+                  <div class="stat"><div class="n" style="color:#b91c1c;">124</div><div>Open</div></div>
+                  <div class="stat"><div class="n" style="color:#15803d;">42</div><div>Fixed</div></div>
+                  <div class="stat"><div class="n" style="color:#8b5cf6;">11</div><div>Excepted</div></div>
+                  <div class="stat"><div class="n" style="color:#64748b;">19</div><div>Ignored</div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="footer-note">Desktop: etape 5 optimisee pour traiter vite les anomalies.</div>
+        </div>
+
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      const variantBtns = Array.from(document.querySelectorAll('#variant-controls .chip'));
+      const viewBtns = Array.from(document.querySelectorAll('#viewport-controls .chip'));
+      const mockups = Array.from(document.querySelectorAll('.mockup'));
+      const viewport = document.getElementById('viewport');
+
+      function activateVariant(variant) {
+        variantBtns.forEach((b) => b.classList.toggle('active', b.dataset.variant === variant));
+        mockups.forEach((m) => m.classList.toggle('active', m.dataset.variant === variant));
+      }
+
+      function activateView(view) {
+        viewBtns.forEach((b) => b.classList.toggle('active', b.dataset.view === view));
+        viewport.classList.remove('desktop', 'tablet', 'mobile');
+        viewport.classList.add(view);
+      }
+
+      variantBtns.forEach((btn) => {
+        btn.addEventListener('click', () => activateVariant(btn.dataset.variant));
+      });
+
+      viewBtns.forEach((btn) => {
+        btn.addEventListener('click', () => activateView(btn.dataset.view));
+      });
+
+      activateVariant('a');
+      activateView('desktop');
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tablerreur - Palette harmonisee</title>
+  <style>
+    :root {
+      /* Core palette */
+      --bg: #F6F8FB;
+      --surface: #FFFFFF;
+      --border: #D9E3F1;
+      --text: #1F2D43;
+      --muted: #60708A;
+      --primary: #2F6FED;
+      --primary-hover: #255ED0;
+
+      /* Status accents: micro-elements only */
+      --done: #15803D;
+      --progress: #1D4ED8;
+      --todo: #64748B;
+      --locked: #7C3AED;
+
+      --radius: 10px;
+      --font: "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font);
+      color: var(--text);
+      background: var(--bg);
+      padding: 24px;
+    }
+
+    .shell {
+      max-width: 1280px;
+      margin: 0 auto;
+      display: grid;
+      gap: 16px;
+    }
+
+    .hero {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: var(--surface);
+      overflow: hidden;
+    }
+    .hero-head {
+      background: linear-gradient(90deg, var(--primary), #1F5AD6);
+      color: #fff;
+      padding: 14px 16px;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: .2px;
+    }
+    .hero-body {
+      padding: 12px 16px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 16px;
+      min-width: 0;
+    }
+    .card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      min-width: 0;
+      overflow: hidden;
+    }
+    .card-head {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      background: #ECF3FF;
+      color: #244A82;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .35px;
+    }
+    .card-body { padding: 12px; display: grid; gap: 10px; }
+
+    .swatches {
+      display: grid;
+      gap: 8px;
+    }
+    .swatch {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      display: grid;
+      grid-template-columns: 72px 1fr;
+      overflow: hidden;
+    }
+    .color { min-height: 52px; }
+    .meta {
+      padding: 8px 10px;
+      font-size: 12px;
+      display: grid;
+      align-content: center;
+      gap: 2px;
+    }
+    .meta b { font-size: 13px; font-weight: 700; color: var(--text); }
+    .meta span { color: var(--muted); }
+
+    .status-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .chip {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 12px;
+      background: #fff;
+      color: var(--text);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .type-scale {
+      display: grid;
+      gap: 7px;
+      color: var(--muted);
+    }
+    .t16 { font-size: 16px; font-weight: 700; color: var(--text); }
+    .t14 { font-size: 14px; font-weight: 600; color: var(--text); }
+    .t13 { font-size: 13px; font-weight: 400; }
+    .t12 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .3px; }
+
+    .preview {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      background: #fff;
+    }
+    .preview-head {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      background: #ECF3FF;
+      color: #244A82;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .preview-body {
+      padding: 10px;
+      display: grid;
+      gap: 10px;
+      font-size: 13px;
+    }
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .btn {
+      border: 1px solid var(--border);
+      background: #fff;
+      color: var(--text);
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .btn-primary {
+      border-color: var(--primary);
+      background: var(--primary);
+      color: #fff;
+    }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .field {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 7px 8px;
+      min-width: 220px;
+      color: var(--muted);
+      font-size: 12px;
+      background: #fff;
+    }
+
+    .legend {
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+      background: #FAFCFF;
+    }
+
+    @media (max-width: 980px) {
+      body { padding: 12px; }
+      .grid { grid-template-columns: 1fr; }
+      .field { min-width: 0; width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <div class="hero-head">Tablerreur - Palette harmonisee (proposition sobre fonctionnelle)</div>
+      <div class="hero-body">Objectif: moins de textures visuelles, une hierarchie claire, et des couleurs de statut limitees aux micro-elements.</div>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <div class="card-head">Nuancier principal</div>
+        <div class="card-body">
+          <div class="swatches">
+            <div class="swatch"><div class="color" style="background:#F6F8FB"></div><div class="meta"><b>--bg</b><span>#F6F8FB</span></div></div>
+            <div class="swatch"><div class="color" style="background:#FFFFFF"></div><div class="meta"><b>--surface</b><span>#FFFFFF</span></div></div>
+            <div class="swatch"><div class="color" style="background:#D9E3F1"></div><div class="meta"><b>--border</b><span>#D9E3F1</span></div></div>
+            <div class="swatch"><div class="color" style="background:#1F2D43"></div><div class="meta"><b>--text</b><span>#1F2D43</span></div></div>
+            <div class="swatch"><div class="color" style="background:#60708A"></div><div class="meta"><b>--muted</b><span>#60708A</span></div></div>
+            <div class="swatch"><div class="color" style="background:#2F6FED"></div><div class="meta"><b>--primary</b><span>#2F6FED</span></div></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="card-head">Statuts (micro-elements)</div>
+        <div class="card-body">
+          <div class="status-row">
+            <span class="chip"><span class="dot" style="background:var(--done)"></span> Configuree</span>
+            <span class="chip"><span class="dot" style="background:var(--progress)"></span> En cours</span>
+            <span class="chip"><span class="dot" style="background:var(--todo)"></span> Non configuree</span>
+            <span class="chip"><span class="dot" style="background:var(--locked)"></span> Verrouillee</span>
+          </div>
+          <div class="legend">
+            Regle: pas de grands fonds verts/oranges/violets. Les statuts restent dans des pastilles, icones, mini-map ou bordures fines.
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <div class="card-head">Typographie harmonisee</div>
+        <div class="card-body type-scale">
+          <div class="t16">16px / 700 - Titres de page</div>
+          <div class="t14">14px / 600 - Titres de bloc</div>
+          <div class="t13">13px / 400 - Texte standard et aides</div>
+          <div class="t12">12px / 600 - Labels courts (uppercase limite)</div>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="card-head">Apercu composant</div>
+        <div class="card-body">
+          <div class="preview">
+            <div class="preview-head">Configuration: Date_creation</div>
+            <div class="preview-body">
+              <div class="row">
+                <div class="field">Type de contenu: Date</div>
+                <div class="field">Format: W3C-DTF</div>
+              </div>
+              <div class="row">
+                <button class="btn">Previsualiser</button>
+                <button class="btn">Dupliquer vers...</button>
+                <button class="btn btn-primary">Appliquer la config</button>
+              </div>
+              <div class="status-row">
+                <span class="chip"><span class="dot" style="background:var(--progress)"></span> Colonne active</span>
+                <span class="chip"><span class="dot" style="background:var(--todo)"></span> 17 restantes</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

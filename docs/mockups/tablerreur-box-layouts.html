@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tablerreur - Mockups Layout Boxes</title>
+  <style>
+    :root {
+      --bg-0: #f4f7fb;
+      --bg-1: #e6eef9;
+      --ink: #162033;
+      --muted: #5b687f;
+      --line: #d4deec;
+      --card: #ffffff;
+      --accent-a: #2f6fed;
+      --accent-b: #16a085;
+      --accent-c: #f59e0b;
+      --shadow: 0 10px 28px rgba(22, 32, 51, 0.09);
+      --radius: 16px;
+      --radius-sm: 10px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      font-family: "Space Grotesk", "IBM Plex Sans", "Trebuchet MS", sans-serif;
+      background:
+        radial-gradient(1200px 500px at 15% -5%, rgba(47, 111, 237, 0.10), transparent 45%),
+        radial-gradient(1000px 420px at 90% 0%, rgba(22, 160, 133, 0.10), transparent 45%),
+        linear-gradient(180deg, var(--bg-0), var(--bg-1));
+      min-height: 100vh;
+      line-height: 1.45;
+    }
+
+    .wrap {
+      max-width: 1300px;
+      margin: 0 auto;
+      padding: 28px 20px 44px;
+    }
+
+    .hero {
+      background: linear-gradient(110deg, #163469, #1f4d9d 45%, #2367d8);
+      color: #f7fbff;
+      border-radius: 22px;
+      padding: 20px 22px;
+      box-shadow: var(--shadow);
+    }
+
+    .hero h1 {
+      margin: 0 0 6px;
+      font-size: clamp(1.3rem, 2.5vw, 1.8rem);
+      letter-spacing: 0.2px;
+    }
+
+    .hero p {
+      margin: 0;
+      color: #d6e3ff;
+      font-size: 0.96rem;
+    }
+
+    .grid {
+      margin-top: 20px;
+      display: grid;
+      gap: 18px;
+      grid-template-columns: repeat(3, minmax(290px, 1fr));
+    }
+
+    .mock {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 740px;
+    }
+
+    .mock-head {
+      padding: 14px 14px 10px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, #fbfdff, #f4f8ff);
+    }
+
+    .kicker {
+      display: inline-block;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #2e4778;
+      margin-bottom: 6px;
+      font-weight: 700;
+    }
+
+    .mock-head h2 {
+      margin: 0 0 4px;
+      font-size: 1.02rem;
+    }
+
+    .mock-head p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
+
+    .viewport {
+      margin: 12px;
+      padding: 12px;
+      border: 1px dashed #c9d6ec;
+      border-radius: 12px;
+      background: linear-gradient(180deg, #fbfdff, #f6f9ff);
+      display: grid;
+      gap: 10px;
+      min-height: 560px;
+    }
+
+    .bar {
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--line);
+      background: #fff;
+      padding: 8px 10px;
+      font-size: 0.8rem;
+      color: #3f4f6e;
+      font-weight: 600;
+    }
+
+    .coach {
+      background: #ecf4ff;
+      border-color: #bdd5fb;
+      color: #21447f;
+    }
+
+    .box {
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--line);
+      background: #fff;
+      padding: 10px;
+      font-size: 0.8rem;
+      color: #2f3b55;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      min-height: 56px;
+      font-weight: 600;
+    }
+
+    .upload { min-height: 90px; border: 2px dashed #a9bfde; background: #f7fbff; }
+    .table-big { min-height: 150px; }
+    .table-xl { min-height: 220px; }
+    .sticky { border-left: 4px solid var(--accent-c); background: #fff8e8; }
+
+    .cols-2 { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
+    .cols-70-30 { display: grid; gap: 10px; grid-template-columns: 7fr 3fr; }
+    .cols-60-40 { display: grid; gap: 10px; grid-template-columns: 6fr 4fr; }
+
+    .cta {
+      margin-top: auto;
+      padding: 10px 12px 12px;
+      border-top: 1px solid var(--line);
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .pill {
+      padding: 7px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: #fff;
+      font-size: 0.76rem;
+      color: #3d4b66;
+      font-weight: 700;
+    }
+
+    .pill.a { border-color: #b8cdf8; background: #eef4ff; color: #25478a; }
+    .pill.b { border-color: #a6e0d3; background: #ecfaf6; color: #166a57; }
+    .pill.c { border-color: #ffe0a5; background: #fff8e9; color: #8a5a00; }
+
+    .legend {
+      margin-top: 18px;
+      background: #ffffffd1;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 0.84rem;
+      color: #3f4f6e;
+    }
+
+    @media (max-width: 1080px) {
+      .grid { grid-template-columns: 1fr; }
+      .mock { min-height: 0; }
+      .viewport { min-height: 0; }
+      .cols-70-30, .cols-60-40, .cols-2 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <h1>Tablerreur - Maquettes HTML pour organisation des box</h1>
+      <p>Prototype visuel seulement. Aucun comportement metier, aucun impact sur l'application existante.</p>
+    </section>
+
+    <section class="grid">
+      <article class="mock">
+        <header class="mock-head">
+          <span class="kicker">Option A</span>
+          <h2>Equilibree</h2>
+          <p>Bon compromis lisibilite / productivite pour la majorite des ecrans.</p>
+        </header>
+        <div class="viewport">
+          <div class="bar">Header + Step Nav</div>
+          <div class="bar coach">Coach Bar (guidage contextualise)</div>
+          <div class="box upload">Etape 1 - Upload principal (100%)</div>
+          <div class="cols-2">
+            <div class="box">Options d import</div>
+            <div class="box">Modele / Template</div>
+          </div>
+          <div class="box table-big">Etape 2 - Apercu tableau (100%)</div>
+          <div class="cols-70-30">
+            <div class="box">Config colonne (70%)</div>
+            <div class="box">Apercu regle (30%)</div>
+          </div>
+          <div class="cols-60-40">
+            <div class="box">Correctifs (60%)</div>
+            <div class="box">Apercu modifications (40%)</div>
+          </div>
+        </div>
+        <footer class="cta">
+          <span class="pill a">Flow clair de 1 a 5</span>
+          <span class="pill a">Panneaux stables</span>
+        </footer>
+      </article>
+
+      <article class="mock">
+        <header class="mock-head">
+          <span class="kicker">Option B</span>
+          <h2>Focus Data</h2>
+          <p>Maximise la place donnee au tableau et limite les changements de contexte.</p>
+        </header>
+        <div class="viewport">
+          <div class="bar">Header + Step Nav</div>
+          <div class="bar coach">Coach Bar (raccourcis + prochain geste)</div>
+          <div class="box table-xl">Etape 2 - Grand apercu tableau (prioritaire)</div>
+          <div class="box">Config colonne (100% largeur)</div>
+          <div class="box">Resume de config + actions rapides</div>
+          <div class="box">Correctifs (100% largeur)</div>
+          <div class="box table-big">Resultats - Table problemes</div>
+        </div>
+        <footer class="cta">
+          <span class="pill b">Friction minimale</span>
+          <span class="pill b">Moins de sauts visuels</span>
+        </footer>
+      </article>
+
+      <article class="mock">
+        <header class="mock-head">
+          <span class="kicker">Option C</span>
+          <h2>Productivite Resultats</h2>
+          <p>Optimise l etape 5 pour corriger vite et exporter vite.</p>
+        </header>
+        <div class="viewport">
+          <div class="bar">Header + Step Nav</div>
+          <div class="box">Downloads (rapport, csv, xlsx)</div>
+          <div class="box sticky">Filtres + Bulk Actions (sticky)</div>
+          <div class="box table-xl">Table problemes (100%)</div>
+          <div class="cols-2">
+            <div class="box">Actions inline (Ignorer / Exclure / Appliquer)</div>
+            <div class="box">Navigation cellule + edition rapide</div>
+          </div>
+          <div class="box">Footer actions (Revalider / Nouveau fichier)</div>
+        </div>
+        <footer class="cta">
+          <span class="pill c">Resolution acceleree</span>
+          <span class="pill c">Excellent pour gros volumes</span>
+        </footer>
+      </article>
+    </section>
+
+    <section class="legend">
+      <strong>Note:</strong> ces maquettes sont des wireframes visuels HTML/CSS pour valider la structure.
+      Prochaine etape: choisir A, B ou C (ou hybride) avant integration dans <code>src/spreadsheet_qa/web/static/index.html</code> et <code>style.css</code>.
+    </section>
+  </main>
+</body>
+</html>

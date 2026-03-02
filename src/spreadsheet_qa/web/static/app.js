@@ -20,6 +20,267 @@ const state = {
   loadedVocabs: {},       // cache { vocabName: [...values] } to restore selector on panel reopen
   loadedVocabLabels: {},  // cache { vocabName: {uri: labelFR} } for datatypes display
 };
+let _currentProblemsTotal = 0;
+
+const UX_PREFS_KEY = 'tablerreur.web.ux_prefs.v1';
+const UX_PREFS_DEFAULTS = {
+  header_row: 1,
+  delimiter: '',
+  encoding: '',
+  template_key: 'generic_default::',
+  show_special_chars: false,
+};
+
+let _uxPrefs = _loadUxPrefs();
+
+function _loadUxPrefs() {
+  try {
+    const raw = localStorage.getItem(UX_PREFS_KEY);
+    if (!raw) return { ...UX_PREFS_DEFAULTS };
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return { ...UX_PREFS_DEFAULTS };
+    return { ...UX_PREFS_DEFAULTS, ...parsed };
+  } catch (_) {
+    return { ...UX_PREFS_DEFAULTS };
+  }
+}
+
+function _saveUxPrefs() {
+  try {
+    localStorage.setItem(UX_PREFS_KEY, JSON.stringify(_uxPrefs));
+  } catch (_) {
+    // Non bloquant: localStorage peut être indisponible selon l'environnement.
+  }
+}
+
+function _setUxPref(key, value) {
+  _uxPrefs[key] = value;
+  _saveUxPrefs();
+}
+
+function _templateOptionKey(optionEl) {
+  if (!optionEl) return 'generic_default::';
+  return `${optionEl.value || 'generic_default'}::${optionEl.dataset.overlay || ''}`;
+}
+
+function _findTemplateOptionByKey(selectEl, key) {
+  if (!selectEl) return null;
+  return Array.from(selectEl.options).find(opt => _templateOptionKey(opt) === key) || null;
+}
+
+function _syncSpecialCharsButtons() {
+  document.querySelectorAll('.btn-toggle-special-chars').forEach(btn => {
+    btn.classList.toggle('btn-special-chars-active', state.showSpecialChars);
+  });
+}
+
+function _initUxPrefs() {
+  const headerRowEl = document.getElementById('header-row');
+  const delimiterEl = document.getElementById('delimiter');
+  const encodingEl = document.getElementById('encoding');
+  const templateEl = document.getElementById('template-id');
+
+  if (headerRowEl) {
+    const row = parseInt(_uxPrefs.header_row, 10);
+    if (!Number.isNaN(row) && row >= 1) {
+      headerRowEl.value = String(row);
+    }
+    headerRowEl.addEventListener('change', () => {
+      const val = parseInt(headerRowEl.value, 10);
+      _setUxPref('header_row', Number.isNaN(val) ? 1 : Math.max(1, val));
+    });
+  }
+
+  if (delimiterEl) {
+    delimiterEl.value = _uxPrefs.delimiter || '';
+    delimiterEl.addEventListener('change', () => _setUxPref('delimiter', delimiterEl.value || ''));
+  }
+
+  if (encodingEl) {
+    encodingEl.value = _uxPrefs.encoding || '';
+    encodingEl.addEventListener('change', () => _setUxPref('encoding', encodingEl.value || ''));
+  }
+
+  if (templateEl) {
+    const savedOpt = _findTemplateOptionByKey(templateEl, _uxPrefs.template_key);
+    if (savedOpt) {
+      savedOpt.selected = true;
+    }
+    templateEl.addEventListener('change', () => {
+      const current = templateEl.selectedOptions[0];
+      _setUxPref('template_key', _templateOptionKey(current));
+    });
+  }
+
+  state.showSpecialChars = !!_uxPrefs.show_special_chars;
+  _syncSpecialCharsButtons();
+}
+
+async function _extractErrorDetail(resp, fallback = 'Erreur') {
+  let detail = fallback;
+  const jsonResp = resp.clone();
+  try {
+    const data = await jsonResp.json();
+    const raw = data?.detail ?? data?.message ?? data?.error;
+    if (typeof raw === 'string' && raw.trim()) {
+      detail = raw.trim();
+    } else if (Array.isArray(raw) && raw.length) {
+      detail = raw
+        .map((item) => {
+          if (typeof item === 'string') return item;
+          if (item && typeof item === 'object') {
+            const loc = Array.isArray(item.loc) ? item.loc.join('.') : '';
+            const msg = item.msg || '';
+            return loc && msg ? `${loc}: ${msg}` : (msg || JSON.stringify(item));
+          }
+          return '';
+        })
+        .filter(Boolean)
+        .join('; ');
+    } else if (raw && typeof raw === 'object') {
+      detail = JSON.stringify(raw);
+    }
+  } catch (_) {
+    try {
+      const txt = await resp.text();
+      if (txt && txt.trim()) detail = txt.trim();
+    } catch (_) { /* ignore */ }
+  }
+  return detail || fallback;
+}
+
+function _formatUploadError(status, detail) {
+  if (status === 413) {
+    return [
+      'Le fichier est trop volumineux.',
+      'Astuce: réduisez sa taille ou augmentez TABLERREUR_MAX_UPLOAD_MB côté serveur.',
+    ].join('\n');
+  }
+  if (status === 415) {
+    return [
+      'Format non pris en charge.',
+      'Utilisez un fichier CSV, XLSX ou XLS.',
+    ].join('\n');
+  }
+  if (status === 422) {
+    if (/header_row=.*beyond the file length/i.test(detail)) {
+      return [
+        'La ligne d’en-tête choisie n’existe pas dans ce fichier.',
+        'Astuce: diminuez “Ligne d’en-tête” dans les options d’import.',
+      ].join('\n');
+    }
+    return [
+      'Le fichier n’a pas pu être importé avec ces options.',
+      'Vérifiez l’encodage, le délimiteur et la ligne d’en-tête.',
+      `Détail: ${detail}`,
+    ].join('\n');
+  }
+  return `Échec du téléversement (${status}).\nDétail: ${detail}`;
+}
+
+function _formatActionError(actionName, status, detail) {
+  if (status === 404 && /session introuvable|expirée/i.test(detail)) {
+    return [
+      `${actionName} impossible: la session a expiré.`,
+      'Rechargez un fichier pour repartir sur une session valide.',
+    ].join('\n');
+  }
+  if (status === 422) {
+    return `${actionName} impossible.\nDétail: ${detail}`;
+  }
+  return `${actionName} impossible (${status}).\nDétail: ${detail}`;
+}
+
+function _setInlineError(el, message) {
+  if (!el) return;
+  el.innerHTML = esc(message).replace(/\n/g, '<br>');
+  el.hidden = false;
+}
+
+function _setStepCoach(text, actionLabel = '', actionFn = null) {
+  const box = document.getElementById('step-coach');
+  const textEl = document.getElementById('step-coach-text');
+  const actionBtn = document.getElementById('step-coach-action');
+  if (!box || !textEl || !actionBtn) return;
+
+  if (!text) {
+    box.hidden = true;
+    return;
+  }
+
+  textEl.innerHTML = text;
+  if (actionLabel && typeof actionFn === 'function') {
+    actionBtn.textContent = actionLabel;
+    actionBtn.hidden = false;
+    actionBtn.onclick = (e) => {
+      e.preventDefault();
+      actionFn();
+    };
+  } else {
+    actionBtn.hidden = true;
+    actionBtn.onclick = null;
+  }
+  box.hidden = false;
+}
+
+function _updateStepCoach() {
+  const tablerreur = document.getElementById('app-tablerreur');
+  if (tablerreur?.hidden) {
+    _setStepCoach('');
+    return;
+  }
+
+  switch (state.currentStep) {
+    case 'upload':
+      _setStepCoach(
+        '<strong>Étape 1/5.</strong> Choisissez votre fichier puis lancez le téléversement. Les options d’import sont mémorisées.',
+        'Choisir un fichier',
+        () => fileInput?.click()
+      );
+      break;
+    case 'configure':
+      _setStepCoach(
+        '<strong>Étape 2/5.</strong> Cliquez sur un en-tête pour définir des règles. Double-cliquez une cellule pour corriger manuellement.'
+      );
+      break;
+    case 'fixes':
+      _setStepCoach(
+        '<strong>Étape 3/5.</strong> Activez les correctifs utiles puis vérifiez l’impact avec un aperçu.',
+        'Calculer l’aperçu',
+        () => previewFixes()
+      );
+      break;
+    case 'validate':
+      if (state.validationDone) {
+        _setStepCoach(
+          '<strong>Étape 4/5.</strong> Validation terminée. Consultez maintenant la liste des problèmes.',
+          'Voir les résultats',
+          () => goToStep('results')
+        );
+      } else {
+        _setStepCoach('<strong>Étape 4/5.</strong> Validation en cours, cela peut prendre quelques secondes.');
+      }
+      break;
+    case 'results':
+      if (_currentProblemsTotal > 0) {
+        _setStepCoach(
+          `<strong>Étape 5/5.</strong> ${_currentProblemsTotal} problème(s) affiché(s). Utilisez “Appliquer” ou “✏️” pour corriger rapidement.`,
+          'Filtrer: Erreurs',
+          () => {
+            const sev = document.getElementById('filter-severity');
+            if (sev) sev.value = 'ERROR';
+            loadProblems(1);
+          }
+        );
+      } else {
+        _setStepCoach('<strong>Étape 5/5.</strong> Aucun problème restant. Vous pouvez exporter le fichier nettoyé.');
+      }
+      break;
+    default:
+      _setStepCoach('');
+      break;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Navigation entre étapes
@@ -44,6 +305,7 @@ function goToStep(step) {
   if (step === 'fixes') updateUndoRedoButtons();
   if (step === 'validate') runValidation();
   if (step === 'results') loadProblems(1);
+  _updateStepCoach();
 }
 
 function enableStep(step) {
@@ -81,6 +343,7 @@ function switchApp(appName) {
       header.classList.add('app-header--tablerreur');
     }
   }
+  _updateStepCoach();
 }
 
 // ---------------------------------------------------------------------------
@@ -88,6 +351,8 @@ function switchApp(appName) {
 // ---------------------------------------------------------------------------
 const fileInput = document.getElementById('file-input');
 const uploadZone = document.getElementById('upload-zone');
+_initUxPrefs();
+_updateStepCoach();
 
 fileInput?.addEventListener('change', () => {
   if (fileInput.files.length) showFileSelected(fileInput.files[0].name);
@@ -124,10 +389,10 @@ async function doUpload() {
   const errEl = document.getElementById('upload-error');
   const progEl = document.getElementById('upload-progress');
   errEl.hidden = true;
+  errEl.textContent = '';
 
   if (!fileInput.files.length) {
-    errEl.textContent = 'Veuillez sélectionner un fichier.';
-    errEl.hidden = false;
+    _setInlineError(errEl, 'Veuillez sélectionner un fichier.');
     return;
   }
 
@@ -143,14 +408,18 @@ async function doUpload() {
   // Pour les templates NAKALA, on envoie template_id=generic_default + overlay_id=nakala_*.
   const _tplSelect = document.getElementById('template-id');
   const _tplOpt = _tplSelect.selectedOptions[0];
+  _setUxPref('header_row', parseInt(document.getElementById('header-row').value, 10) || 1);
+  _setUxPref('delimiter', document.getElementById('delimiter').value || '');
+  _setUxPref('encoding', document.getElementById('encoding').value || '');
+  _setUxPref('template_key', _templateOptionKey(_tplOpt));
   formData.append('template_id', _pendingTemplateFile ? 'generic_default' : (_tplOpt?.value || 'generic_default'));
   formData.append('overlay_id', _pendingTemplateFile ? '' : (_tplOpt?.dataset.overlay || ''));
 
   try {
     const resp = await fetch('/api/jobs', { method: 'POST', body: formData });
     if (!resp.ok) {
-      const data = await resp.json().catch(() => ({}));
-      throw new Error(data.detail || 'Échec du téléversement');
+      const detail = await _extractErrorDetail(resp, 'Échec du téléversement');
+      throw new Error(_formatUploadError(resp.status, detail));
     }
     const data = await resp.json();
     state.jobId = data.job_id;
@@ -165,6 +434,8 @@ async function doUpload() {
     state.columns = data.columns || [];
     state.columnConfig = {};
     state.activeColumn = null;
+    state.validationDone = false;
+    _currentProblemsTotal = 0;
 
     progEl.textContent = `Chargé : ${data.filename} (${data.rows} lignes × ${data.cols} colonnes)`;
 
@@ -192,8 +463,7 @@ async function doUpload() {
     goToStep('configure');
   } catch (err) {
     progEl.hidden = true;
-    errEl.textContent = 'Erreur : ' + err.message;
-    errEl.hidden = false;
+    _setInlineError(errEl, err?.message || 'Erreur lors du téléversement.');
   }
 }
 
@@ -875,12 +1145,15 @@ async function applyFixes() {
   const formData = buildFixesFormData();
   try {
     const resp = await fetch(`/api/jobs/${state.jobId}/fixes`, { method: 'POST', body: formData });
-    if (!resp.ok) throw new Error('Échec de l\'application des correctifs');
+    if (!resp.ok) {
+      const detail = await _extractErrorDetail(resp, 'Échec de l\'application des correctifs');
+      throw new Error(_formatActionError('Application des correctifs', resp.status, detail));
+    }
     await updateUndoRedoButtons();
     enableStep('validate');
     goToStep('validate');
   } catch (err) {
-    alert('Erreur : ' + err.message);
+    _showToast(`Erreur : ${err.message}`, 'error', 7000);
   }
 }
 
@@ -970,8 +1243,8 @@ async function runValidation() {
   try {
     const resp = await fetch(`/api/jobs/${state.jobId}/validate`, { method: 'POST' });
     if (!resp.ok) {
-      const data = await resp.json().catch(() => ({}));
-      throw new Error(data.detail || 'Erreur de validation');
+      const detail = await _extractErrorDetail(resp, 'Erreur de validation');
+      throw new Error(_formatActionError('Validation', resp.status, detail));
     }
     const data = await resp.json();
     const résumé = data['résumé'] || {};
@@ -986,15 +1259,51 @@ async function runValidation() {
     state.validationDone = true;
 
     enableStep('results');
+    _updateStepCoach();
   } catch (err) {
-    progEl.innerHTML = `<p class="msg-error">Erreur : ${esc(err.message)}</p>`;
+    const msg = err?.message || 'Erreur de validation';
+    progEl.innerHTML = `<p class="msg-error">Erreur : ${esc(msg).replace(/\n/g, '<br>')}</p>`;
+    _showToast(`Erreur de validation.\n${msg}`, 'error', 7000);
+    _updateStepCoach();
   }
 }
 
 // ---------------------------------------------------------------------------
 // ÉTAPE 5 — Résultats
 // ---------------------------------------------------------------------------
-let _currentProblemsTotal = 0;
+async function _applySuggestionToCell(rowNum, colName, suggestion) {
+  if (!state.jobId || !colName) return false;
+  if (!suggestion) return false;
+  if (rowNum > 30) {
+    _showToast(
+      `Ligne ${rowNum} hors aperçu (30 lignes max). Utilisez la correction manuelle.`,
+      'warning',
+      6000
+    );
+    return false;
+  }
+
+  try {
+    const resp = await fetch(`/api/jobs/${state.jobId}/edit-cell`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ row: rowNum - 1, column: colName, value: suggestion }),
+    });
+    if (!resp.ok) {
+      const detail = await _extractErrorDetail(resp, 'Échec de la modification');
+      throw new Error(_formatActionError('Application de la suggestion', resp.status, detail));
+    }
+
+    _manualEditsCount++;
+    _showCellsEditedBanner();
+    await updateUndoRedoButtons();
+    _showToastWithRevalidateLink('Suggestion appliquée. Pensez à re-valider.');
+    return true;
+  } catch (err) {
+    _showToast(`Erreur : ${err.message}`, 'error', 7000);
+    return false;
+  }
+}
 
 async function loadProblems(page) {
   if (!state.jobId) return;
@@ -1013,6 +1322,10 @@ async function loadProblems(page) {
 
   try {
     const resp = await fetch(url.toString());
+    if (!resp.ok) {
+      const detail = await _extractErrorDetail(resp, 'Échec du chargement');
+      throw new Error(_formatActionError('Chargement des problèmes', resp.status, detail));
+    }
     const data = await resp.json();
     _currentProblemsTotal = data.total;
 
@@ -1034,12 +1347,14 @@ async function loadProblems(page) {
         const sevLabel = sev === 'ERROR' ? 'Erreur' : sev === 'WARNING' ? 'Avertissement' : 'Suspicion';
         const status = p['statut'] || 'OPEN';
         const issueId = p['issue_id'] || '';
+        const rowNum = parseInt(p['ligne']);
+        const suggestion = p['suggestion'] || '';
 
         const tr = document.createElement('tr');
         tr.classList.add('problem-row-clickable');
         if (status === 'IGNORED') tr.classList.add('issue-ignored');
         if (status === 'EXCEPTED') tr.classList.add('issue-excepted');
-        tr.dataset.row = p['ligne'];
+        tr.dataset.row = rowNum;
         tr.dataset.col = p['colonne'];
         tr.dataset.issueId = issueId;
         tr.addEventListener('click', (e) => {
@@ -1068,7 +1383,7 @@ async function loadProblems(page) {
         tr.appendChild(tdCol);
 
         const tdLig = document.createElement('td');
-        tdLig.textContent = p['ligne'];
+        tdLig.textContent = rowNum;
         tr.appendChild(tdLig);
 
         const tdVal = document.createElement('td');
@@ -1087,7 +1402,7 @@ async function loadProblems(page) {
         tr.appendChild(tdMsg);
 
         const tdSug = document.createElement('td');
-        tdSug.textContent = p['suggestion'] || '';
+        tdSug.textContent = suggestion;
         tr.appendChild(tdSug);
 
         // Actions cell
@@ -1106,6 +1421,14 @@ async function loadProblems(page) {
           bExc.onclick = () => setIssueStatus(issueId, 'EXCEPTED');
           tdAct.appendChild(bIgn);
           tdAct.appendChild(bExc);
+          if (suggestion && rowNum <= 30) {
+            const bApply = document.createElement('button');
+            bApply.className = 'btn-status btn-apply-suggestion';
+            bApply.textContent = 'Appliquer';
+            bApply.title = 'Appliquer directement la suggestion sur la cellule';
+            bApply.onclick = () => _applySuggestionToCell(rowNum, p['colonne'], suggestion);
+            tdAct.appendChild(bApply);
+          }
         } else {
           const bReo = document.createElement('button');
           bReo.className = 'btn-status btn-reopen';
@@ -1137,11 +1460,18 @@ async function loadProblems(page) {
         bFix.title = 'Corriger cette cellule';
         bFix.addEventListener('click', async (e) => {
           e.stopPropagation();
-          const suggestion = p['suggestion'] || '';
-          const rowNum = parseInt(tr.dataset.row);
           const colName = tr.dataset.col;
 
-          if (suggestion && rowNum <= 30) {
+          if (rowNum > 30) {
+            _showToast(
+              `Ligne ${rowNum} hors aperçu (30 lignes max). Corrigez via export ou par lot.`,
+              'warning',
+              6000
+            );
+            return;
+          }
+
+          if (suggestion) {
             // Afficher un dialogue inline
             const existing = tdNav.querySelector('.fix-inline-dialog');
             if (existing) { existing.remove(); return; }
@@ -1156,20 +1486,7 @@ async function loadProblems(page) {
             btnApply.textContent = 'Appliquer';
             btnApply.onclick = async () => {
               dialog.remove();
-              if (!state.jobId) return;
-              try {
-                const resp = await fetch(`/api/jobs/${state.jobId}/edit-cell`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ row: rowNum - 1, column: colName, value: suggestion }),
-                });
-                if (resp.ok) {
-                  _manualEditsCount++;
-                  _showCellsEditedBanner();
-                  updateUndoRedoButtons();
-                  _showToastWithRevalidateLink('Cellule modifiée.');
-                }
-              } catch (_) { /* non-bloquant */ }
+              await _applySuggestionToCell(rowNum, colName, suggestion);
             };
             const btnEdit = document.createElement('button');
             btnEdit.className = 'btn btn-secondary btn-sm';
@@ -1221,8 +1538,11 @@ async function loadProblems(page) {
     _updateBulkActionBar();
 
     renderPagination(page, data.pages);
+    _updateStepCoach();
   } catch (err) {
     console.error('Erreur lors du chargement des problèmes', err);
+    _showToast(`Impossible de charger les problèmes.\n${err?.message || ''}`.trim(), 'error', 7000);
+    _updateStepCoach();
   }
 }
 
@@ -1665,6 +1985,7 @@ function resetApp() {
   state.columnConfig = {};
   state.activeColumn = null;
   state.validationDone = false;
+  _currentProblemsTotal = 0;
   _pendingCellNav = null;
   const bulkBar = document.getElementById('bulk-action-bar');
   if (bulkBar) bulkBar.hidden = true;
@@ -1875,9 +2196,8 @@ function renderVisibleCharsText(text) {
 /** Toggle the special-chars display mode; syncs both toggle buttons. */
 function toggleSpecialChars() {
   state.showSpecialChars = !state.showSpecialChars;
-  document.querySelectorAll('.btn-toggle-special-chars').forEach(btn => {
-    btn.classList.toggle('btn-special-chars-active', state.showSpecialChars);
-  });
+  _syncSpecialCharsButtons();
+  _setUxPref('show_special_chars', state.showSpecialChars);
   _applySpecialCharsToPreview();
   // Re-render problems table if currently visible (to update the Valeur column)
   if (state.currentStep === 'results') loadProblems(state.currentPage);
@@ -2000,7 +2320,7 @@ async function _reloadColumnConfigFromServer() {
 
 /** Affiche un toast temporaire (4 s). type: 'success' | 'warning' | 'error' */
 let _toastTimer = null;
-function _showToast(message, type) {
+function _showToast(message, type, durationMs = 4000) {
   const el = document.getElementById('template-toast');
   if (!el) return;
 
@@ -2013,7 +2333,7 @@ function _showToast(message, type) {
     el.style.animation = 'none';
     el.hidden = true;
     el.style.animation = '';
-  }, 4000);
+  }, durationMs);
 }
 
 /**
@@ -2031,6 +2351,23 @@ function _showToastWithRevalidateLink(message) {
     el.hidden = true;
     el.style.animation = '';
   }, 6000);
+}
+
+/** Affiche l'aide des principaux raccourcis clavier. */
+function showShortcutsHelp() {
+  _showToast(
+    [
+      'Raccourcis clavier',
+      'Ctrl/Cmd + O : ouvrir un fichier',
+      'Ctrl/Cmd + Entrée : action principale de l’étape',
+      'Alt + 1..5 : naviguer entre les étapes disponibles',
+      'Ctrl/Cmd + Z : annuler (Correctifs/Configurer)',
+      'Ctrl/Cmd + Shift + Z : rétablir',
+      '? : afficher cette aide',
+    ].join('\n'),
+    'success',
+    9000
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -2308,21 +2645,106 @@ async function revalidate() {
 }
 
 // ---------------------------------------------------------------------------
-// Raccourcis clavier undo/redo (Ctrl+Z / Ctrl+Shift+Z ou Cmd+Z / Cmd+Shift+Z)
-// Actifs uniquement à l'étape Correctifs, hors champs de saisie.
+// Raccourcis clavier globaux
 // ---------------------------------------------------------------------------
+function _isEditableTarget(target) {
+  if (!target) return false;
+  if (target.isContentEditable) return true;
+  const tag = target.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+}
+
+function _isTablerreurVisible() {
+  const root = document.getElementById('app-tablerreur');
+  return !!root && !root.hidden;
+}
+
+function _goToStepFromShortcut(stepNumber) {
+  const steps = ['upload', 'configure', 'fixes', 'validate', 'results'];
+  const step = steps[stepNumber - 1];
+  if (!step) return;
+  const btn = document.querySelector(`#step-nav [data-step="${step}"]`);
+  if (btn && !btn.disabled) {
+    goToStep(step);
+  }
+}
+
+function _runPrimaryActionShortcut() {
+  switch (state.currentStep) {
+    case 'upload':
+      doUpload();
+      break;
+    case 'configure': {
+      const summary = document.getElementById('config-summary');
+      if (summary && !summary.hidden) {
+        configureDone();
+      } else {
+        showConfigSummary();
+      }
+      break;
+    }
+    case 'fixes':
+      applyFixes();
+      break;
+    case 'validate': {
+      const btnResults = document.querySelector('#step-nav [data-step="results"]');
+      if (btnResults && !btnResults.disabled) {
+        goToStep('results');
+      }
+      break;
+    }
+    case 'results':
+      revalidate();
+      break;
+    default:
+      break;
+  }
+}
+
 document.addEventListener('keydown', (e) => {
-  if (state.currentStep !== 'fixes' && state.currentStep !== 'configure') return;
-  const tag = document.activeElement?.tagName;
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  if (!_isTablerreurVisible()) return;
 
+  const key = e.key || '';
+  const lower = key.toLowerCase();
+  const editable = _isEditableTarget(e.target);
   const mod = e.ctrlKey || e.metaKey;
-  if (!mod) return;
 
-  if (e.key === 'z' && !e.shiftKey) {
+  // "?" -> aide raccourcis (hors champ de saisie)
+  if (!editable && (key === '?' || (key === '/' && e.shiftKey))) {
+    e.preventDefault();
+    showShortcutsHelp();
+    return;
+  }
+
+  // Alt + 1..5 -> navigation rapide entre étapes déjà disponibles
+  if (!editable && e.altKey && !mod && /^[1-5]$/.test(key)) {
+    e.preventDefault();
+    _goToStepFromShortcut(parseInt(key, 10));
+    return;
+  }
+
+  // Ctrl/Cmd + O -> ouvrir un fichier
+  if (mod && !e.altKey && lower === 'o') {
+    e.preventDefault();
+    fileInput?.click();
+    return;
+  }
+
+  // Ctrl/Cmd + Enter -> action principale de l'étape (hors saisie)
+  if (!editable && mod && !e.altKey && key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    _runPrimaryActionShortcut();
+    return;
+  }
+
+  if (editable || !mod) return;
+  if (state.currentStep !== 'fixes' && state.currentStep !== 'configure') return;
+
+  // Undo/redo en Configurer / Correctifs
+  if (lower === 'z' && !e.shiftKey) {
     e.preventDefault();
     undoFix();
-  } else if ((e.key === 'z' && e.shiftKey) || e.key === 'y') {
+  } else if ((lower === 'z' && e.shiftKey) || lower === 'y') {
     e.preventDefault();
     redoFix();
   }
