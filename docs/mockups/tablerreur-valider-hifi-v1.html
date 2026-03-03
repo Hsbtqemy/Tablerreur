@@ -1,0 +1,989 @@
+﻿<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Mockup Tablerreur - Etape Valider (detail anomalies)" />
+  <link rel="icon" href="data:," />
+  <title>Tablerreur Valider Mockup Hifi V1 (detail)</title>
+  <link rel="stylesheet" href="flow-common.css" />
+  <style>
+    .valider-v1{display:grid;gap:12px}
+    .goal-card .body{display:grid;gap:10px}
+    .goal-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:space-between}
+    .goal-main{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    .goal-chip{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;font-size:.73rem;font-weight:700}
+    .goal-chip.blocked{background:#fff4d8;color:#8a5b00}
+    .goal-chip.ready{background:#e8f5ed;color:#14532d}
+    [data-theme="dark"] .goal-chip.blocked{background:#2d1b00;color:#fcd34d}
+    [data-theme="dark"] .goal-chip.ready{background:#052e16;color:#86efac}
+    .goal-text{font-size:.85rem;color:var(--text)}
+    .goal-text b{color:var(--text)}
+    .goal-bar{height:9px;border-radius:999px;background:var(--line);overflow:hidden}
+    .goal-bar > span{display:block;height:100%;width:72%;background:var(--primary)}
+    .goal-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+    .state-bar{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+    .state-btn{border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:999px;padding:4px 10px;font-size:.7rem;font-weight:700;cursor:pointer}
+    .state-btn.active{background:var(--primary);border-color:var(--primary);color:#fff}
+    .state-btn:focus-visible{outline:2px solid #93c5fd;outline-offset:1px}
+    .state-note{font-size:.68rem;color:var(--muted)}
+
+    .primary-grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:12px;align-items:stretch}
+    .primary-grid > .card{height:100%;display:flex;flex-direction:column}
+    .primary-grid > .card > .body{flex:1 1 auto;display:flex;flex-direction:column;min-height:0;gap:10px}
+
+    .table-toolbar{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
+    .table-toolbar .field{display:grid;gap:4px}
+    .table-toolbar label{font-size:.68rem;color:var(--muted);font-weight:700}
+    .table-toolbar input{width:100%;border:1px solid var(--line);border-radius:7px;padding:7px 8px;font-size:.74rem;background:var(--surface);color:var(--text);font-family:inherit}
+    .table-toolbar select{border:1px solid var(--line);border-radius:7px;padding:7px 8px;font-size:.74rem;background:var(--surface);color:var(--text);font-family:inherit}
+    .table-toolbar .tools{display:flex;gap:8px;align-items:flex-end;justify-content:flex-end;flex-wrap:wrap}
+    .table-toolbar .field.compact{min-width:170px}
+    .table-toolbar .meta{font-size:.7rem;color:var(--muted)}
+
+    .col-strip{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    .col-focus{font-size:.7rem;color:var(--muted);font-weight:700}
+    .col-pills{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+    .col-pill{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;border:1px solid var(--line);background:var(--surface);font-size:.66rem;color:var(--muted);font-weight:700}
+    .col-pill.active{border-color:var(--primary);color:var(--primary);background:#e8f0ff}
+    [data-theme="dark"] .col-pill{background:#2b3d55;border-color:#5a7397;color:#bfdbfe}
+    [data-theme="dark"] .col-pill.active{background:#1f3f73;border-color:#93c5fd;color:#dbeafe}
+
+    .sheet-wrap{border:1px solid var(--line);border-radius:9px;overflow:auto;max-height:430px}
+    .sheet{width:100%;border-collapse:collapse;font-size:.74rem;min-width:3940px}
+    .sheet th,.sheet td{padding:8px;border-bottom:1px solid var(--line);border-right:1px solid var(--line);text-align:left;white-space:nowrap}
+    .sheet th:last-child,.sheet td:last-child{border-right:none}
+    .sheet th{position:sticky;top:0;background:var(--head-bg);color:var(--head-text);z-index:1}
+    .sheet th.col-target{background:#dbeafe;color:#1d4ed8}
+    .sheet th:nth-child(1),.sheet td:nth-child(1){position:sticky;left:0;z-index:3;min-width:54px;max-width:54px}
+    .sheet th:nth-child(2),.sheet td:nth-child(2){position:sticky;left:54px;z-index:3;min-width:110px;max-width:110px}
+    .sheet td:nth-child(1),.sheet td:nth-child(2){background:var(--surface)}
+    .sheet .rowid{background:var(--head-bg);font-weight:700;color:var(--head-text)}
+    .sheet tr.selected{background:#eef4ff}
+    .sheet tr.selected td:nth-child(1),.sheet tr.selected td:nth-child(2){background:#eef4ff}
+    .sheet td.issue-cell{cursor:pointer}
+    .sheet td.issue-cell:hover{box-shadow:inset 0 0 0 1px rgba(37,99,235,.28)}
+    .sheet td.cell-error{background:#fef2f2;color:#7f1d1d;font-weight:700}
+    .sheet td.cell-warn{background:#fffbeb;color:#8a5b00;font-weight:700}
+    .sheet td.cell-fixed{background:#e8f5ed;color:#14532d;font-weight:700}
+    .sheet td.cell-ignored{background:#f3f4f6;color:#475569;font-weight:700}
+    .sheet td.cell-selected{outline:2px solid var(--primary);outline-offset:-2px}
+    [data-theme="dark"] .table-toolbar input{background:#2b3d55;border-color:#5a7397;box-shadow:inset 0 0 0 1px rgba(147,197,253,.16)}
+    [data-theme="dark"] .table-toolbar input:focus{outline:2px solid #93c5fd;outline-offset:1px}
+    [data-theme="dark"] .sheet-wrap{border-color:#5a7397}
+    [data-theme="dark"] .sheet th,[data-theme="dark"] .sheet .rowid{background:#2b3d55;color:#bfdbfe}
+    [data-theme="dark"] .sheet th.col-target{background:#1f3f73;color:#dbeafe}
+    [data-theme="dark"] .sheet td:nth-child(1),[data-theme="dark"] .sheet td:nth-child(2){background:#223247}
+    [data-theme="dark"] .sheet tr.selected{background:#1f3f73}
+    [data-theme="dark"] .sheet tr.selected td:nth-child(1),[data-theme="dark"] .sheet tr.selected td:nth-child(2){background:#1f3f73}
+    [data-theme="dark"] .sheet td.cell-error{background:#3f1012;color:#fecaca}
+    [data-theme="dark"] .sheet td.cell-warn{background:#2d1b00;color:#fcd34d}
+    [data-theme="dark"] .sheet td.cell-fixed{background:#052e16;color:#86efac}
+    [data-theme="dark"] .sheet td.cell-ignored{background:#334155;color:#cbd5e1}
+
+    .editor-stack{display:grid;gap:10px}
+    .context{display:grid;gap:7px;border:1px solid var(--line);border-radius:9px;padding:9px;background:var(--surface)}
+    .context-line{display:flex;justify-content:space-between;gap:8px;font-size:.73rem}
+    .context-line span{color:var(--muted)}
+    .context-line b{color:var(--text)}
+    .advice{border-left:3px solid var(--primary);background:var(--surface);padding:8px 9px;font-size:.72rem;color:var(--muted)}
+    .advice b{color:var(--text)}
+
+    .choices{display:grid;gap:8px}
+    .choice{border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--surface);display:grid;gap:5px}
+    .choice strong{font-size:.74rem;color:var(--text)}
+    .choice small{font-size:.68rem;color:var(--muted)}
+    .choice .actions{display:flex;gap:7px;flex-wrap:wrap}
+
+    .manual{display:grid;gap:6px;border-top:1px dashed var(--line);padding-top:8px}
+    .manual label{font-size:.68rem;font-weight:700;color:var(--muted)}
+    .manual textarea{min-height:68px;resize:vertical;border:1px solid var(--line);border-radius:7px;padding:7px 8px;font-family:inherit;font-size:.74rem;background:var(--surface);color:var(--text)}
+    .manual textarea:focus{outline:2px solid #93c5fd;outline-offset:1px}
+
+    .actions{display:flex;gap:8px;flex-wrap:wrap}
+    .actions.end{margin-top:auto;justify-content:flex-end}
+    .btn.is-disabled{opacity:.45;pointer-events:none;cursor:not-allowed}
+
+    .secondary{display:grid;gap:10px}
+    details.list-panel{border:1px solid var(--line);border-radius:9px;background:var(--surface)}
+    details.list-panel > summary{cursor:pointer;padding:9px 10px;font-size:.76rem;font-weight:700;color:var(--head-text);background:var(--head-bg);border-bottom:1px solid var(--head-border)}
+    details.list-panel[open] > summary{border-bottom:1px solid var(--line)}
+    .list-body{padding:10px;display:grid;gap:8px}
+    .mini-tools{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+    .mini-hint{font-size:.68rem;color:var(--muted)}
+    .mini-table{width:100%;border-collapse:collapse;font-size:.73rem}
+    .mini-table th,.mini-table td{padding:7px;border-bottom:1px solid var(--line);text-align:left}
+    .mini-table th{padding:0;background:var(--head-bg);color:var(--head-text)}
+    .mini-sort-btn{display:block;width:100%;text-align:left;border:none;background:transparent;color:inherit;padding:7px;font:inherit;font-weight:700;cursor:pointer}
+    .mini-sort-btn:hover{background:rgba(37,99,235,.08)}
+    .mini-sort-btn:focus-visible{outline:2px solid #93c5fd;outline-offset:-2px}
+    .mini-sort-btn.active{color:var(--primary)}
+    .mini-sort-btn.active::after{content:" (" attr(data-dir) ")";font-size:.66rem;font-weight:700;color:var(--muted)}
+    .mini-table tbody tr[data-row][data-col]{cursor:pointer}
+    .mini-table tbody tr[data-row][data-col]:hover{background:#eef4ff}
+    .mini-table tbody tr.mini-selected{background:#e8f0ff}
+
+    [data-theme="dark"] .context,
+    [data-theme="dark"] .advice,
+    [data-theme="dark"] .choice,
+    [data-theme="dark"] .manual textarea,
+    [data-theme="dark"] details.list-panel{background:#2b3d55;border-color:#5a7397;box-shadow:inset 0 0 0 1px rgba(147,197,253,.14)}
+    [data-theme="dark"] .manual textarea{box-shadow:inset 0 0 0 1px rgba(147,197,253,.16)}
+    [data-theme="dark"] .table-toolbar select{background:#2b3d55;border-color:#5a7397;box-shadow:inset 0 0 0 1px rgba(147,197,253,.16)}
+    [data-theme="dark"] details.list-panel > summary,
+    [data-theme="dark"] .mini-table th{background:#2b3d55;color:#bfdbfe}
+    [data-theme="dark"] .mini-sort-btn:hover{background:rgba(147,197,253,.18)}
+    [data-theme="dark"] .mini-sort-btn.active{color:#93c5fd}
+    [data-theme="dark"] .mini-table tbody tr[data-row][data-col]:hover{background:#1f3f73}
+    [data-theme="dark"] .mini-table tbody tr.mini-selected{background:#1f3f73}
+
+    @media (max-width:1120px){
+      .primary-grid{grid-template-columns:1fr}
+      .actions.end{justify-content:flex-start}
+    }
+    @media (max-width:760px){
+      .goal-top{align-items:flex-start}
+      .table-toolbar{grid-template-columns:1fr}
+      .sheet-wrap{max-height:320px}
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="header">
+      <div class="header-top">
+        <div class="brand"><span>Tablerreur</span><span>Mapala</span></div>
+        <div class="head-actions">
+          <div class="pills"><span class="pill">Mockup Flow</span><span class="pill">Etape 4 - Detail anomalies</span></div>
+          <button id="theme-toggle" class="btn-theme-toggle" type="button" onclick="toggleTheme()">Mode sombre</button>
+        </div>
+      </div>
+      <div class="sub">Controle qualite et mapping de tableurs CSV/XLSX</div>
+    </header>
+
+    <nav class="app-tabs">
+      <a id="tab-tablerreur" class="app-tab active" href="tablerreur-valider-hifi-v1.html">Tablerreur</a>
+      <a id="tab-mapala" class="app-tab" href="mapala-hifi-v1.html">Mapala</a>
+    </nav>
+
+    <nav class="step-nav">
+      <a class="step-btn" href="tablerreur-televerser-hifi-v1.html"><span class="step-num">1</span> Televerser</a>
+      <span class="step-sep">></span>
+      <a class="step-btn" href="tablerreur-configurer-hifi-v3.html"><span class="step-num">2</span> Configurer</a>
+      <span class="step-sep">></span>
+      <a class="step-btn" href="tablerreur-correctifs-hifi-v3-large.html"><span class="step-num">3</span> Correctifs</a>
+      <span class="step-sep">></span>
+      <a class="step-btn active" href="tablerreur-valider-hifi-v1.html"><span class="step-num">4</span> Valider</a>
+      <span class="step-sep">></span>
+      <a id="step-results" class="step-btn is-disabled" href="tablerreur-resultats-hifi-v1.html" aria-disabled="true" tabindex="-1"><span class="step-num">5</span> Resultats</a>
+      <span id="step-status" class="step-status"><b>Etape 4/5</b> Traitez les anomalies puis passez aux resultats</span>
+    </nav>
+
+    <main class="layout valider-v1">
+      <section class="card goal-card">
+        <div class="head"><span>Objectif de cette etape</span><span id="goal-target">Corriger 0/11 anomalies bloquantes</span></div>
+        <div class="body">
+          <div class="goal-top">
+            <div class="goal-main">
+              <span id="goal-chip" class="goal-chip blocked">11 bloquantes restantes</span>
+              <span id="goal-text" class="goal-text"><b>Priorite:</b> corriger la cellule active puis passer a la suivante.</span>
+            </div>
+            <div class="goal-actions">
+              <button id="btn-prev-issue" class="btn" type="button">Cellule precedente</button>
+              <button id="btn-next-issue" class="btn primary" type="button">Cellule suivante a corriger</button>
+              <a class="btn" href="tablerreur-correctifs-hifi-v2.html">Voir version V2 detail</a>
+            </div>
+          </div>
+          <div class="goal-bar" aria-hidden="true"><span id="goal-progress"></span></div>
+          <div class="state-bar" role="group" aria-label="Etat mockup valider">
+            <button class="state-btn active" type="button" data-state-btn="active" aria-pressed="true">En traitement</button>
+            <button class="state-btn" type="button" data-state-btn="ready" aria-pressed="false">Pret a valider</button>
+            <span class="state-note">Simulation maquette uniquement</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="primary-grid">
+        <div class="card">
+          <div class="head"><span>Tableau source (ancre principale)</span><span id="table-tag">Ligne 14 - Date_creation (2/30)</span></div>
+          <div class="body">
+            <div class="table-toolbar">
+              <div class="field">
+                <label for="table-search">Retrouver dans le tableau</label>
+                <input id="table-search" type="text" value="14/01/2026" />
+              </div>
+              <div class="tools">
+                <div class="field compact">
+                  <label for="row-filter">Lignes affichees</label>
+                  <select id="row-filter">
+                    <option value="all" selected>Toutes les lignes</option>
+                    <option value="issues">Lignes avec anomalies</option>
+                  </select>
+                </div>
+                <div id="table-meta" class="meta">8 colonnes visibles sur 30 - defilement horizontal actif</div>
+              </div>
+            </div>
+
+            <div class="col-strip">
+              <button id="btn-col-prev" class="btn" type="button">Colonne precedente</button>
+              <button id="btn-col-next" class="btn" type="button">Colonne suivante</button>
+              <span id="col-focus" class="col-focus">Colonne cible: Date_creation (2/30)</span>
+              <div class="col-pills" aria-hidden="true">
+                <span class="col-pill">Titre</span>
+                <span class="col-pill active">Date_creation</span>
+                <span class="col-pill">Langue</span>
+                <span class="col-pill">Licence</span>
+                <span class="col-pill">Type_doc</span>
+                <span class="col-pill">...</span>
+              </div>
+            </div>
+
+            <div id="sheet-wrap" class="sheet-wrap">
+              <table class="sheet">
+                <thead id="sheet-head"></thead>
+                <tbody id="sheet-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="head"><span>Corriger cette cellule</span><span id="cell-status">Bloquante</span></div>
+          <div class="body editor-stack">
+            <div class="context">
+              <div class="context-line"><span>Ligne</span><b id="ctx-row">14</b></div>
+              <div class="context-line"><span>Colonne</span><b id="ctx-col">Date_creation</b></div>
+              <div class="context-line"><span>Valeur actuelle</span><b id="ctx-current">14/01/2026</b></div>
+              <div class="context-line"><span>Valeur attendue</span><b id="ctx-expected">YYYY-MM-DD</b></div>
+            </div>
+
+            <div id="advice-line" class="advice"><b>Suggestion prioritaire:</b> remplacez par <b>2026-01-14</b>, puis passez a la cellule suivante.</div>
+
+            <div class="choices">
+              <div class="choice">
+                <strong id="choice-primary">2026-01-14</strong>
+                <small id="choice-primary-note">Compatible avec la regle Date_creation (ISO).</small>
+                <div class="actions">
+                  <button id="btn-apply-primary" class="btn" type="button">Appliquer</button>
+                  <button id="btn-ignore" class="btn" type="button">Ignorer</button>
+                </div>
+              </div>
+              <div class="choice">
+                <strong id="choice-alt">2026-01</strong>
+                <small id="choice-alt-note">Utiliser uniquement si la precision jour est inconnue.</small>
+                <div class="actions">
+                  <button id="btn-apply-alt" class="btn" type="button">Appliquer</button>
+                  <button id="btn-ignore-alt" class="btn" type="button">Ignorer</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="manual">
+              <label for="manual-value">Saisie manuelle</label>
+              <textarea id="manual-value">2026-01-14</textarea>
+              <div class="actions">
+                <button id="btn-apply-manual" class="btn" type="button">Valider la saisie</button>
+                <button id="btn-cancel-manual" class="btn" type="button">Annuler</button>
+              </div>
+            </div>
+
+            <div class="actions end">
+              <button id="btn-apply-column" class="btn" type="button">Appliquer suggestions sur la colonne</button>
+              <a id="btn-continue" class="btn primary is-disabled" href="tablerreur-resultats-hifi-v1.html" aria-disabled="true" tabindex="-1">Continuer vers Resultats</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="secondary">
+        <details class="list-panel">
+          <summary id="list-summary">Voir toutes les anomalies (vue secondaire)</summary>
+          <div class="list-body">
+            <div class="mini-tools">
+              <span class="mini-hint">Tri: cliquez un en-tete de colonne</span>
+              <span class="mini-hint">Clic: aller a la cellule - Double-clic: remonter au detail</span>
+            </div>
+            <table class="mini-table">
+              <thead>
+                <tr>
+                  <th><button type="button" class="mini-sort-btn" data-sort="severity">Severite</button></th>
+                  <th><button type="button" class="mini-sort-btn" data-sort="row">Ligne</button></th>
+                  <th><button type="button" class="mini-sort-btn active" data-sort="column" data-dir="asc">Colonne</button></th>
+                  <th><button type="button" class="mini-sort-btn" data-sort="value">Valeur</button></th>
+                  <th><button type="button" class="mini-sort-btn" data-sort="suggested">Suggestion</button></th>
+                </tr>
+              </thead>
+              <tbody id="mini-body"></tbody>
+            </table>
+          </div>
+        </details>
+      </section>
+    </main>
+
+    <div class="foot"><span>Flow navigation mockups - Tablerreur</span><span>Valider - detail anomalies (30 colonnes)</span></div>
+  </div>
+
+  <script src="flow-common.js"></script>
+  <script>
+    (function initValiderV1(){
+      const byId=(id)=>document.getElementById(id);
+      const stateButtons=[...document.querySelectorAll("[data-state-btn]")];
+      const stepResults=byId("step-results");
+      const stepStatus=byId("step-status");
+      const btnContinue=byId("btn-continue");
+      const btnPrevIssue=byId("btn-prev-issue");
+      const btnNextIssue=byId("btn-next-issue");
+      const btnColPrev=byId("btn-col-prev");
+      const btnColNext=byId("btn-col-next");
+      const tableSearch=byId("table-search");
+      const rowFilter=byId("row-filter");
+      const goalChip=byId("goal-chip");
+      const goalTarget=byId("goal-target");
+      const goalText=byId("goal-text");
+      const goalProgress=byId("goal-progress");
+      const cellStatus=byId("cell-status");
+      const tableTag=byId("table-tag");
+      const tableMeta=byId("table-meta");
+      const colFocus=byId("col-focus");
+      const colPills=document.querySelector(".col-pills");
+      const primaryGrid=document.querySelector(".primary-grid");
+      const sheetWrap=byId("sheet-wrap");
+      const sheetHead=byId("sheet-head");
+      const sheetBody=byId("sheet-body");
+      const ctxRow=byId("ctx-row");
+      const ctxCol=byId("ctx-col");
+      const ctxCurrent=byId("ctx-current");
+      const ctxExpected=byId("ctx-expected");
+      const adviceLine=byId("advice-line");
+      const choicePrimary=byId("choice-primary");
+      const choicePrimaryNote=byId("choice-primary-note");
+      const choiceAlt=byId("choice-alt");
+      const choiceAltNote=byId("choice-alt-note");
+      const btnApplyPrimary=byId("btn-apply-primary");
+      const btnApplyAlt=byId("btn-apply-alt");
+      const btnIgnore=byId("btn-ignore");
+      const btnIgnoreAlt=byId("btn-ignore-alt");
+      const manualValue=byId("manual-value");
+      const btnApplyManual=byId("btn-apply-manual");
+      const btnCancelManual=byId("btn-cancel-manual");
+      const btnApplyColumn=byId("btn-apply-column");
+      const listSummary=byId("list-summary");
+      const miniSortButtons=[...document.querySelectorAll(".mini-sort-btn")];
+      const miniBody=byId("mini-body");
+
+      const targetColumn="Date_creation";
+      const columns=[
+        "Titre","Date_creation","Langue","Licence","Type_doc","Auteur","Contributeur","Resume","Mots_cles","Sujet",
+        "Format","Taille","Url_source","Url_fichier","Droits","Collection","Fonds","Cote","Editeur","Ville",
+        "Pays","Latitude","Longitude","Date_modif","Version","Identifiant_ext","Relation","Provenance","Notes","Statut"
+      ];
+
+      const baseRows=[
+        {row:12,id:"NAK-00012",Titre:"Corpus oral occitan",Date_creation:"2026-01-11",Langue:"fr",Licence:"CC-BY-4.0",Format:"jpeg",Taille:"1024",Latitude:"43.29",Longitude:"5.38"},
+        {row:13,id:"NAK-00013",Titre:"Atlas des dialectes",Date_creation:"janv-2026",Langue:"fr",Licence:"CC-BY-4.0",Type_doc:"Imge",Url_source:"htp://src/13",Latitude:"91.000"},
+        {row:14,id:"NAK-00014",Titre:"Inventaire photo 1936",Date_creation:"14/01/2026",Langue:"fr",Licence:"CC-BY",Relation:"partof",Date_modif:"2026/01/14"},
+        {row:15,id:"NAK-00015",Titre:"Notice manuscrite",Date_creation:"2026-01-14",Langue:"fre",Licence:"CC-BY-4.0",Url_fichier:"file://local/15",Identifiant_ext:""},
+        {row:16,id:"NAK-00016",Titre:"Journal de fouille",Date_creation:"2026-01-15",Langue:"fr",Licence:"CC0",Pays:"France",Longitude:"181.2"},
+        {row:17,id:"NAK-00017",Titre:"Carte topographique",Date_creation:"2026-01-16",Langue:"en",Licence:"CC-BY-4.0",Taille:"-12 Ko",Statut:"unknown"},
+        {row:18,id:"NAK-00018",Titre:"Plan de coupe",Date_creation:"14-13-2026",Langue:"fr",Licence:"CC-BY-4.0",Cote:"",Provenance:"???"},
+        {row:19,id:"NAK-00019",Titre:"Interview audio",Date_creation:"2026-01-19",Langue:"eng",Licence:"CC-BY-4.0",Version:"vA",Date_modif:"demain"}
+      ];
+
+      const baseIssues=[
+        {row:12,col:"Format",severity:"warn",expected:"format MIME",suggested:"image/tiff",alt:"text/plain",note:"Valeur standardisee recommandee.",altNote:"Alternative si document texte."},
+        {row:12,col:"Taille",severity:"warn",expected:"nombre + unite",suggested:"1012 Ko",alt:"1012",note:"Uniformiser avec unite Ko.",altNote:"Possible sans unite si schema interne."},
+        {row:13,col:"Date_creation",severity:"warn",expected:"YYYY-MM ou YYYY-MM-DD",suggested:"2026-01",alt:"2026-01-01",note:"Date incomplete detectee.",altNote:"Utiliser le 1er jour si besoin."},
+        {row:13,col:"Type_doc",severity:"error",expected:"vocabulaire controle",suggested:"Image",alt:"Texte",note:"Libelle inconnu dans le vocabulaire.",altNote:"Choisir selon le contenu reel."},
+        {row:13,col:"Url_source",severity:"error",expected:"URL https valide",suggested:"https://src/13",alt:"https://example.org/src/13",note:"Schema URL invalide (htp).",altNote:"Remplacer par une URL stable."},
+        {row:13,col:"Latitude",severity:"error",expected:"-90 a 90",suggested:"43.30",alt:"",note:"Latitude hors plage valide.",altNote:"Laisser vide si inconnue."},
+        {row:14,col:"Date_creation",severity:"error",expected:"YYYY-MM-DD",suggested:"2026-01-14",alt:"2026-01",note:"Format date invalide.",altNote:"Mois seul accepte si jour inconnu."},
+        {row:14,col:"Licence",severity:"warn",expected:"identifiant licence complet",suggested:"CC-BY-4.0",alt:"CC-BY-SA-4.0",note:"Version de licence absente.",altNote:"Choisir la licence exacte."},
+        {row:14,col:"Relation",severity:"warn",expected:"isPartOf|references|...",suggested:"isPartOf",alt:"references",note:"Valeur non standardisee.",altNote:"Adapter selon la relation reelle."},
+        {row:14,col:"Date_modif",severity:"warn",expected:"YYYY-MM-DD",suggested:"2026-01-14",alt:"2026-02-04",note:"Date de modification non ISO.",altNote:"Mettre la date de derniere mise a jour."},
+        {row:15,col:"Langue",severity:"warn",expected:"code ISO 639",suggested:"fr",alt:"fra",note:"Code langue non standard.",altNote:"Utiliser le format requis par votre schema."},
+        {row:15,col:"Url_fichier",severity:"error",expected:"URL http(s)",suggested:"https://file/15",alt:"https://nakala.fr/file/15",note:"URL locale non transportable.",altNote:"Fournir une URL resolvable."},
+        {row:15,col:"Identifiant_ext",severity:"error",expected:"non vide",suggested:"EXT-15",alt:"NAK-00015",note:"Identifiant externe manquant.",altNote:"Utiliser un identifiant deja existant."},
+        {row:16,col:"Licence",severity:"error",expected:"CC0-1.0",suggested:"CC0-1.0",alt:"CC-BY-4.0",note:"Libelle licence incomplet.",altNote:"Alternative si attribution requise."},
+        {row:16,col:"Pays",severity:"warn",expected:"code ISO alpha-2",suggested:"FR",alt:"FRA",note:"Pays non normalise.",altNote:"Verifier le standard attendu."},
+        {row:16,col:"Longitude",severity:"error",expected:"-180 a 180",suggested:"5.39",alt:"",note:"Longitude hors plage valide.",altNote:"Laisser vide si inconnue."},
+        {row:17,col:"Taille",severity:"error",expected:"valeur positive",suggested:"1017 Ko",alt:"1017",note:"Taille negative detectee.",altNote:"Supprimer le signe negatif."},
+        {row:17,col:"Statut",severity:"warn",expected:"ok|a_corriger",suggested:"ok",alt:"a_corriger",note:"Statut hors vocabulaire attendu.",altNote:"Garder a_corriger si verification necessaire."},
+        {row:18,col:"Date_creation",severity:"error",expected:"YYYY-MM-DD",suggested:"2026-12-14",alt:"2026-12",note:"Date impossible (mois 13).",altNote:"Conserver le mois uniquement si incertain."},
+        {row:18,col:"Cote",severity:"error",expected:"non vide",suggested:"COTE-18",alt:"COTE-018",note:"Cote manquante.",altNote:"Respecter le format institutionnel."},
+        {row:18,col:"Provenance",severity:"warn",expected:"valeur controlee",suggested:"Import",alt:"Versement",note:"Provenance non interpretable.",altNote:"Choisir une valeur lisible."},
+        {row:19,col:"Langue",severity:"warn",expected:"code ISO 639",suggested:"en",alt:"eng",note:"Code langue non standard.",altNote:"Utiliser la variante acceptee par le schema."},
+        {row:19,col:"Version",severity:"warn",expected:"vN",suggested:"v9",alt:"v1",note:"Version non conforme au motif attendu.",altNote:"Adapter selon l historique reel."},
+        {row:19,col:"Date_modif",severity:"error",expected:"YYYY-MM-DD",suggested:"2026-02-09",alt:"2026-02",note:"Valeur relative interdite.",altNote:"Utiliser une date absolue."}
+      ];
+
+      const severityLabel={error:"Erreur",warn:"Avert."};
+      const severityRank={error:0,warn:1};
+      const initialBlocking=baseIssues.filter((i)=>i.severity==="error").length;
+
+      let rows=[];
+      let issues=[];
+      let selectedKey=null;
+      let issueColumns=[];
+      let colCursor=0;
+      let miniSortKey="column";
+      let miniSortDir=1;
+
+      function keyFor(row,col){
+        return row+"|"+col;
+      }
+
+      function deepClone(v){
+        return JSON.parse(JSON.stringify(v));
+      }
+
+      function fallbackValue(col,row){
+        if(col==="Type_doc")return row%2===0?"Image":"Texte";
+        if(col==="Auteur")return "Auteur_"+row;
+        if(col==="Contributeur")return "Contrib_"+row;
+        if(col==="Resume")return "Resume "+row;
+        if(col==="Mots_cles")return "mots;cles";
+        if(col==="Sujet")return "Patrimoine";
+        if(col==="Format")return row%2===0?"image/tiff":"text/plain";
+        if(col==="Taille")return (1000+row)+" Ko";
+        if(col==="Url_source")return "https://src/"+row;
+        if(col==="Url_fichier")return "https://file/"+row;
+        if(col==="Droits")return "consultation";
+        if(col==="Collection")return "COLL_A";
+        if(col==="Fonds")return "FONDS_"+(row%3+1);
+        if(col==="Cote")return "COTE-"+row;
+        if(col==="Editeur")return "MMSH";
+        if(col==="Ville")return "Aix";
+        if(col==="Pays")return "FR";
+        if(col==="Latitude")return "43."+row;
+        if(col==="Longitude")return "5."+row;
+        if(col==="Date_modif")return "2026-02-"+String(row-10).padStart(2,"0");
+        if(col==="Version")return "v"+(row-10);
+        if(col==="Identifiant_ext")return "EXT-"+row;
+        if(col==="Relation")return row%2===0?"isPartOf":"references";
+        if(col==="Provenance")return "Import";
+        if(col==="Notes")return "-";
+        if(col==="Statut")return row===14?"a_corriger":"ok";
+        return col+"_"+row;
+      }
+
+      function getRow(row){
+        return rows.find((r)=>r.row===row);
+      }
+
+      function getIssueByKey(issueKey){
+        return issues.find((i)=>keyFor(i.row,i.col)===issueKey)||null;
+      }
+
+      function getCellValue(row,col){
+        const entry=getRow(row);
+        if(!entry)return "";
+        return entry[col]??fallbackValue(col,row);
+      }
+
+      function getOpenIssues(){
+        return issues
+          .filter((i)=>i.status==="open")
+          .sort((a,b)=>
+            (columns.indexOf(a.col)-columns.indexOf(b.col)) ||
+            (a.row-b.row) ||
+            (severityRank[a.severity]-severityRank[b.severity])
+          );
+      }
+
+      function getOpenBlockingCount(){
+        return issues.filter((i)=>i.status==="open"&&i.severity==="error").length;
+      }
+
+      function getVisibleRows(){
+        if(rowFilter.value!=="issues"){
+          return rows;
+        }
+        const rowsWithIssues=new Set(getOpenIssues().map((i)=>i.row));
+        return rows.filter((r)=>rowsWithIssues.has(r.row));
+      }
+
+      function getCellClass(issue){
+        if(!issue)return "";
+        let cls="";
+        if(issue.status==="open")cls=issue.severity==="error"?"cell-error issue-cell":"cell-warn issue-cell";
+        else if(issue.status==="resolved")cls="cell-fixed issue-cell";
+        else cls="cell-ignored issue-cell";
+        if(keyFor(issue.row,issue.col)===selectedKey)cls+=" cell-selected";
+        return cls;
+      }
+
+      function setValidationAccess(isUnlocked){
+        stepResults.classList.toggle("is-disabled",!isUnlocked);
+        stepResults.setAttribute("aria-disabled",isUnlocked?"false":"true");
+        if(isUnlocked)stepResults.removeAttribute("tabindex");
+        else stepResults.setAttribute("tabindex","-1");
+        stepResults.title=isUnlocked?"":"Corriger les anomalies bloquantes";
+
+        btnContinue.classList.toggle("is-disabled",!isUnlocked);
+        btnContinue.setAttribute("aria-disabled",isUnlocked?"false":"true");
+        if(isUnlocked)btnContinue.removeAttribute("tabindex");
+        else btnContinue.setAttribute("tabindex","-1");
+        btnContinue.title=isUnlocked?"":"Corriger les anomalies bloquantes";
+      }
+
+      function updateStateButtons(activeBtn){
+        stateButtons.forEach((btn)=>{
+          const on=btn.dataset.stateBtn===activeBtn;
+          btn.classList.toggle("active",on);
+          btn.setAttribute("aria-pressed",on?"true":"false");
+        });
+      }
+
+      function getFocusColumn(){
+        const issue=getIssueByKey(selectedKey);
+        if(issue)return issue.col;
+        return issueColumns[colCursor]||targetColumn;
+      }
+
+      function scrollToColumn(colName){
+        const idx=columns.indexOf(colName);
+        if(idx<0)return;
+        const th=sheetHead.querySelector("th:nth-child("+(idx+3)+")");
+        if(!th)return;
+
+        // Keep target column fully visible to the right of sticky "#" and "ID" columns.
+        const stickyA=sheetHead.querySelector("th:nth-child(1)");
+        const stickyB=sheetHead.querySelector("th:nth-child(2)");
+        const stickyWidth=(stickyA?stickyA.offsetWidth:54)+(stickyB?stickyB.offsetWidth:110);
+        const gap=12;
+        const viewStart=sheetWrap.scrollLeft+stickyWidth+gap;
+        const viewEnd=sheetWrap.scrollLeft+sheetWrap.clientWidth-gap;
+        const colStart=th.offsetLeft;
+        const colEnd=colStart+th.offsetWidth;
+
+        if(colStart<viewStart){
+          sheetWrap.scrollLeft=Math.max(colStart-stickyWidth-gap,0);
+          return;
+        }
+        if(colEnd>viewEnd){
+          sheetWrap.scrollLeft=Math.max(colEnd-sheetWrap.clientWidth+gap,0);
+        }
+      }
+
+      function updateColumnNavigator(shouldScroll){
+        const selectedIssue=getIssueByKey(selectedKey);
+        issueColumns=[...new Set(getOpenIssues().map((i)=>i.col))];
+        issueColumns.sort((a,b)=>columns.indexOf(a)-columns.indexOf(b));
+        if(!issueColumns.length)issueColumns=[targetColumn];
+
+        if(selectedIssue){
+          const selIdx=issueColumns.indexOf(selectedIssue.col);
+          if(selIdx>=0)colCursor=selIdx;
+        }
+        if(colCursor>=issueColumns.length)colCursor=0;
+        if(colCursor<0)colCursor=0;
+
+        const currentCol=issueColumns[colCursor];
+        const colIndex=columns.indexOf(currentCol)+1;
+        colFocus.textContent="Colonne cible: "+currentCol+" ("+colIndex+"/"+columns.length+")";
+        if(shouldScroll)scrollToColumn(currentCol);
+
+        const start=Math.max(0,colCursor-2);
+        const windowCols=issueColumns.slice(start,start+5);
+        const pills=[];
+        if(start>0)pills.push("<span class='col-pill'>...</span>");
+        windowCols.forEach((col)=>{
+          pills.push("<span class='col-pill"+(col===currentCol?" active":"")+"'>"+col+"</span>");
+        });
+        if(start+5<issueColumns.length)pills.push("<span class='col-pill'>...</span>");
+        colPills.innerHTML=pills.join("");
+
+        btnColPrev.disabled=issueColumns.length<=1;
+        btnColNext.disabled=issueColumns.length<=1;
+      }
+
+      function updateEditor(){
+        const issue=getIssueByKey(selectedKey);
+        if(!issue){
+          ctxRow.textContent="--";
+          ctxCol.textContent="--";
+          ctxCurrent.textContent="--";
+          ctxExpected.textContent="--";
+          cellStatus.textContent="Aucune bloquante";
+          adviceLine.innerHTML="<b>Aucune anomalie ouverte.</b> Vous pouvez passer a l etape Resultats.";
+          choicePrimary.textContent="-";
+          choicePrimaryNote.textContent="Aucune suggestion active.";
+          choiceAlt.textContent="-";
+          choiceAltNote.textContent="Aucune alternative.";
+          manualValue.value="";
+          btnApplyPrimary.disabled=true;
+          btnApplyAlt.disabled=true;
+          btnIgnore.disabled=true;
+          btnIgnoreAlt.disabled=true;
+          btnApplyManual.disabled=true;
+          btnCancelManual.disabled=true;
+          btnApplyColumn.disabled=true;
+          tableTag.textContent="Aucune cellule bloquante restante";
+          return;
+        }
+
+        const currentValue=getCellValue(issue.row,issue.col);
+        const colIndex=columns.indexOf(issue.col)+1;
+        ctxRow.textContent=String(issue.row);
+        ctxCol.textContent=issue.col;
+        ctxCurrent.textContent=String(currentValue);
+        ctxExpected.textContent=issue.expected;
+        cellStatus.textContent=issue.severity==="error"?"Bloquante":"Avertissement";
+        adviceLine.innerHTML="<b>Suggestion prioritaire:</b> remplacez par <b>"+issue.suggested+"</b>, puis passez a la cellule suivante.";
+        choicePrimary.textContent=issue.suggested;
+        choicePrimaryNote.textContent=issue.note;
+        choiceAlt.textContent=issue.alt;
+        choiceAltNote.textContent=issue.altNote;
+        manualValue.value=issue.suggested;
+        tableTag.textContent="Ligne "+issue.row+" - "+issue.col+" ("+colIndex+"/"+columns.length+")";
+        btnApplyPrimary.disabled=false;
+        btnApplyAlt.disabled=false;
+        btnIgnore.disabled=false;
+        btnIgnoreAlt.disabled=false;
+        btnApplyManual.disabled=false;
+        btnCancelManual.disabled=false;
+        btnApplyColumn.disabled=false;
+        btnApplyColumn.textContent="Appliquer suggestions sur "+issue.col;
+      }
+
+      function updateGoalAndFlow(){
+        const blocking=getOpenBlockingCount();
+        const resolved=initialBlocking-blocking;
+        const pct=Math.round((resolved/initialBlocking)*100);
+        goalTarget.textContent="Corriger "+resolved+"/"+initialBlocking+" anomalies bloquantes";
+
+        if(blocking===0){
+          goalChip.className="goal-chip ready";
+          goalChip.textContent="0 bloquante restante";
+          goalText.innerHTML="<b>Objectif atteint:</b> vous pouvez passer a l etape Valider.";
+          stepStatus.innerHTML="<b>Etape 4/5</b> Toutes les anomalies bloquantes sont corrigees";
+          setValidationAccess(true);
+        }else{
+          goalChip.className="goal-chip blocked";
+          goalChip.textContent=blocking+" bloquante"+(blocking>1?"s":"")+" restante"+(blocking>1?"s":"");
+          goalText.innerHTML="<b>Priorite:</b> corriger la cellule active puis passer a la suivante.";
+          stepStatus.innerHTML="<b>Etape 4/5</b> Corrigez les cellules bloquantes dans le tableau";
+          setValidationAccess(false);
+        }
+        goalProgress.style.width=pct+"%";
+      }
+
+      function compareText(a,b){
+        return String(a).localeCompare(String(b),"fr",{sensitivity:"base"});
+      }
+
+      function compareMiniIssues(a,b,key){
+        if(key==="severity"){
+          return (severityRank[a.severity]-severityRank[b.severity]) ||
+            (columns.indexOf(a.col)-columns.indexOf(b.col)) ||
+            (a.row-b.row);
+        }
+        if(key==="row"){
+          return (a.row-b.row) ||
+            (columns.indexOf(a.col)-columns.indexOf(b.col)) ||
+            (severityRank[a.severity]-severityRank[b.severity]);
+        }
+        if(key==="value"){
+          return compareText(getCellValue(a.row,a.col),getCellValue(b.row,b.col)) ||
+            (columns.indexOf(a.col)-columns.indexOf(b.col)) ||
+            (a.row-b.row);
+        }
+        if(key==="suggested"){
+          return compareText(a.suggested,b.suggested) ||
+            (columns.indexOf(a.col)-columns.indexOf(b.col)) ||
+            (a.row-b.row);
+        }
+        return (columns.indexOf(a.col)-columns.indexOf(b.col)) ||
+          (a.row-b.row) ||
+          (severityRank[a.severity]-severityRank[b.severity]);
+      }
+
+      function updateMiniSortButtons(){
+        miniSortButtons.forEach((btn)=>{
+          const active=btn.dataset.sort===miniSortKey;
+          btn.classList.toggle("active",active);
+          if(active){
+            btn.setAttribute("data-dir",miniSortDir===1?"asc":"desc");
+          }else{
+            btn.removeAttribute("data-dir");
+          }
+          btn.setAttribute("aria-pressed",active?"true":"false");
+        });
+      }
+
+      function jumpToPrimaryArea(){
+        if(!primaryGrid)return;
+        primaryGrid.scrollIntoView({behavior:"smooth",block:"start"});
+      }
+
+      function renderMiniList(){
+        const open=[...getOpenIssues()];
+        open.sort((a,b)=>miniSortDir*compareMiniIssues(a,b,miniSortKey));
+
+        const sortLabelMap={
+          severity:"Severite",
+          row:"Ligne",
+          column:"Colonne",
+          value:"Valeur",
+          suggested:"Suggestion"
+        };
+        const sortLabel=sortLabelMap[miniSortKey]||"Colonne";
+        const dirLabel=miniSortDir===1?"asc":"desc";
+        listSummary.textContent="Voir toutes les anomalies (vue secondaire) - "+open.length+" ouvertes - Tri: "+sortLabel+" ("+dirLabel+")";
+        updateMiniSortButtons();
+
+        miniBody.innerHTML=open.map((issue)=>{
+          const rowKey=keyFor(issue.row,issue.col);
+          const selected=rowKey===selectedKey?" class='mini-selected'":"";
+          return "<tr"+selected+" data-row='"+issue.row+"' data-col='"+issue.col+"'><td>"+severityLabel[issue.severity]+"</td><td>"+issue.row+"</td><td>"+issue.col+"</td><td>"+getCellValue(issue.row,issue.col)+"</td><td>"+issue.suggested+"</td></tr>";
+        }).join("");
+        if(!open.length){
+          miniBody.innerHTML="<tr><td colspan='5'>Aucune anomalie ouverte.</td></tr>";
+          return;
+        }
+
+        miniBody.querySelectorAll("tr[data-row][data-col]").forEach((rowEl)=>{
+          rowEl.addEventListener("click",()=>{
+            selectedKey=keyFor(Number(rowEl.dataset.row),rowEl.dataset.col);
+            refreshUI(true);
+          });
+          rowEl.addEventListener("dblclick",()=>{
+            selectedKey=keyFor(Number(rowEl.dataset.row),rowEl.dataset.col);
+            refreshUI(true);
+            jumpToPrimaryArea();
+          });
+        });
+      }
+
+      function buildSheet(){
+        const focusCol=getFocusColumn();
+        const visible=8;
+        const visibleRows=getVisibleRows();
+        const rowMode=rowFilter.value==="issues"?"lignes avec anomalies":"toutes les lignes";
+        tableMeta.textContent=visible+" colonnes visibles sur "+columns.length+" - "+visibleRows.length+" lignes affichees ("+rowMode+")";
+
+        const headCells=[
+          "<th>#</th>",
+          "<th>ID</th>",
+          ...columns.map((col)=>"<th"+(col===focusCol?" class='col-target'":"")+">"+col+"</th>")
+        ];
+        sheetHead.innerHTML="<tr>"+headCells.join("")+"</tr>";
+
+        const selectedIssue=getIssueByKey(selectedKey);
+        const selectedRow=selectedIssue?selectedIssue.row:null;
+
+        if(!visibleRows.length){
+          sheetBody.innerHTML="<tr><td colspan='"+(columns.length+2)+"'>Aucune ligne avec anomalie ouverte.</td></tr>";
+        }else{
+          const bodyRows=visibleRows.map((entry)=>{
+            const dataCells=columns.map((col)=>{
+              const issue=issues.find((i)=>i.row===entry.row&&i.col===col);
+              const val=entry[col]??fallbackValue(col,entry.row);
+              const cls=getCellClass(issue);
+              const dataAttrs=issue?" data-row='"+issue.row+"' data-col='"+issue.col+"'":"";
+              return "<td"+(cls?" class='"+cls+"'":"")+dataAttrs+">"+val+"</td>";
+            }).join("");
+            return "<tr"+(selectedRow===entry.row?" class='selected'":"")+"><td class='rowid'>"+entry.row+"</td><td>"+entry.id+"</td>"+dataCells+"</tr>";
+          }).join("");
+          sheetBody.innerHTML=bodyRows;
+        }
+
+        sheetBody.querySelectorAll("td[data-row][data-col]").forEach((td)=>{
+          td.addEventListener("click",()=>{
+            selectedKey=keyFor(Number(td.dataset.row),td.dataset.col);
+            refreshUI(true);
+          });
+        });
+      }
+
+      function updateNavButtons(){
+        const open=getOpenIssues();
+        const noOpen=!open.length;
+        btnPrevIssue.disabled=noOpen;
+        btnNextIssue.disabled=noOpen;
+      }
+
+      function refreshUI(shouldScroll){
+        const open=getOpenIssues();
+        if(!selectedKey||!open.some((i)=>keyFor(i.row,i.col)===selectedKey)){
+          selectedKey=open.length?keyFor(open[0].row,open[0].col):null;
+        }
+        buildSheet();
+        updateColumnNavigator(shouldScroll);
+        updateEditor();
+        updateGoalAndFlow();
+        renderMiniList();
+        updateNavButtons();
+      }
+
+      function moveIssue(step){
+        const open=getOpenIssues();
+        if(!open.length)return;
+        let idx=open.findIndex((i)=>keyFor(i.row,i.col)===selectedKey);
+        if(idx<0)idx=0;
+
+        const current=open[idx];
+        const sameRow=open
+          .filter((i)=>i.row===current.row)
+          .sort((a,b)=>
+            (columns.indexOf(a.col)-columns.indexOf(b.col)) ||
+            (severityRank[a.severity]-severityRank[b.severity])
+          );
+
+        // Row focus: process anomalies on the current row before jumping away.
+        if(sameRow.length>1){
+          const rowIdx=sameRow.findIndex((i)=>keyFor(i.row,i.col)===selectedKey);
+          if(step>0 && rowIdx>=0 && rowIdx<sameRow.length-1){
+            selectedKey=keyFor(sameRow[rowIdx+1].row,sameRow[rowIdx+1].col);
+            refreshUI(true);
+            return;
+          }
+          if(step<0 && rowIdx>0){
+            selectedKey=keyFor(sameRow[rowIdx-1].row,sameRow[rowIdx-1].col);
+            refreshUI(true);
+            return;
+          }
+        }
+
+        idx=(idx+step+open.length)%open.length;
+        selectedKey=keyFor(open[idx].row,open[idx].col);
+        refreshUI(true);
+      }
+
+      function applyToSelected(value,nextStatus){
+        const issue=getIssueByKey(selectedKey);
+        if(!issue)return;
+        const entry=getRow(issue.row);
+        if(entry)entry[issue.col]=value;
+        issue.status=nextStatus;
+        refreshUI(true);
+      }
+
+      function ignoreSelected(){
+        const issue=getIssueByKey(selectedKey);
+        if(!issue)return;
+        issue.status="ignored";
+        refreshUI(true);
+      }
+
+      function applyColumnSuggestions(){
+        const issue=getIssueByKey(selectedKey);
+        if(!issue)return;
+        issues.forEach((it)=>{
+          if(it.col===issue.col&&it.status==="open"){
+            const entry=getRow(it.row);
+            if(entry)entry[it.col]=it.suggested;
+            it.status="resolved";
+          }
+        });
+        refreshUI(true);
+      }
+
+      function resetDemo(){
+        rows=deepClone(baseRows);
+        issues=deepClone(baseIssues).map((i)=>({...i,status:"open"}));
+        selectedKey=null;
+        colCursor=0;
+      }
+
+      function runQuickReady(){
+        issues.forEach((i)=>{
+          if(i.status==="open"){
+            const entry=getRow(i.row);
+            if(entry)entry[i.col]=i.suggested;
+            i.status="resolved";
+          }
+        });
+        selectedKey=null;
+      }
+
+      btnPrevIssue.addEventListener("click",()=>moveIssue(-1));
+      btnNextIssue.addEventListener("click",()=>moveIssue(1));
+      btnColPrev.addEventListener("click",()=>{
+        if(!issueColumns.length)return;
+        colCursor=(colCursor-1+issueColumns.length)%issueColumns.length;
+        updateColumnNavigator(true);
+      });
+      btnColNext.addEventListener("click",()=>{
+        if(!issueColumns.length)return;
+        colCursor=(colCursor+1)%issueColumns.length;
+        updateColumnNavigator(true);
+      });
+
+      btnApplyPrimary.addEventListener("click",()=>applyToSelected(choicePrimary.textContent.trim(),"resolved"));
+      btnApplyAlt.addEventListener("click",()=>applyToSelected(choiceAlt.textContent.trim(),"resolved"));
+      btnIgnore.addEventListener("click",()=>ignoreSelected());
+      btnIgnoreAlt.addEventListener("click",()=>ignoreSelected());
+      btnApplyManual.addEventListener("click",()=>applyToSelected((manualValue.value.trim()||choicePrimary.textContent.trim()),"resolved"));
+      btnCancelManual.addEventListener("click",()=>{
+        const issue=getIssueByKey(selectedKey);
+        if(!issue)return;
+        manualValue.value=issue.suggested;
+      });
+      btnApplyColumn.addEventListener("click",()=>applyColumnSuggestions());
+
+      tableSearch.addEventListener("keydown",(ev)=>{
+        if(ev.key!=="Enter")return;
+        const q=tableSearch.value.trim().toLowerCase();
+        if(!q)return;
+
+        const open=getOpenIssues();
+        const found=open.find((i)=>{
+          const val=String(getCellValue(i.row,i.col)).toLowerCase();
+          return val.includes(q)||i.col.toLowerCase().includes(q)||String(i.row)===q;
+        });
+        if(found){
+          selectedKey=keyFor(found.row,found.col);
+          refreshUI(true);
+          return;
+        }
+
+        const colMatch=columns.find((c)=>c.toLowerCase().includes(q));
+        if(colMatch){
+          const idx=issueColumns.indexOf(colMatch);
+          if(idx>=0)colCursor=idx;
+          else {
+            issueColumns=[...new Set([...issueColumns,colMatch])];
+            colCursor=issueColumns.indexOf(colMatch);
+          }
+          updateColumnNavigator(true);
+        }
+      });
+
+      rowFilter.addEventListener("change",()=>refreshUI(true));
+      miniSortButtons.forEach((btn)=>{
+        btn.addEventListener("click",()=>{
+          const key=btn.dataset.sort||"column";
+          if(key===miniSortKey){
+            miniSortDir=miniSortDir===1?-1:1;
+          }else{
+            miniSortKey=key;
+            miniSortDir=1;
+          }
+          renderMiniList();
+        });
+      });
+
+      stateButtons.forEach((btn)=>{
+        btn.addEventListener("click",()=>{
+          if(btn.dataset.stateBtn==="active"){
+            resetDemo();
+            updateStateButtons("active");
+            refreshUI(true);
+            return;
+          }
+          runQuickReady();
+          updateStateButtons("ready");
+          refreshUI(true);
+        });
+      });
+
+      resetDemo();
+      updateStateButtons("active");
+      refreshUI(true);
+    })();
+  </script>
+</body>
+</html>
+

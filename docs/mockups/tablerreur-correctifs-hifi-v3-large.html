@@ -1,0 +1,428 @@
+﻿<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Mockup Tablerreur - Etape Correctifs (hygiene)" />
+  <link rel="icon" href="data:," />
+  <title>Tablerreur Correctifs Mockup Hifi V3 Hygiene</title>
+  <link rel="stylesheet" href="flow-common.css" />
+  <style>
+    .correctifs-hygiene{display:grid;gap:12px}
+    .intro{font-size:.84rem;color:var(--muted)}
+    .intro b{color:var(--text)}
+
+    .hyg-grid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,.7fr);gap:12px;align-items:stretch}
+    .hyg-grid>.card{height:100%;display:flex;flex-direction:column}
+    .hyg-grid>.card>.body{flex:1 1 auto;display:grid;gap:10px}
+    .preview-card>.body{display:flex;flex-direction:column;gap:10px}
+
+    .fix-list{display:grid;gap:8px}
+    .fix-item{display:grid;grid-template-columns:auto 1fr;gap:8px;align-items:flex-start;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--surface)}
+    .fix-item input{margin-top:2px}
+    .fix-item b{font-size:.74rem;color:var(--text)}
+    .fix-item small{display:block;font-size:.68rem;color:var(--muted);margin-top:2px}
+
+    .scope{display:grid;gap:5px}
+    .scope label{font-size:.68rem;color:var(--muted);font-weight:700}
+    .scope-options{display:grid;gap:6px}
+    .scope-option{display:flex;align-items:flex-start;gap:7px;font-size:.74rem;color:var(--text)}
+    .scope-option input{margin-top:2px}
+    .scope-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    .scope-head .scope-summary{font-size:.68rem;color:var(--muted)}
+    .scope-panel{border:1px solid var(--line);border-radius:8px;padding:8px;display:grid;gap:8px;background:var(--surface)}
+    .scope-tools{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
+    .scope-tools input{width:100%;border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:.73rem;background:var(--surface);color:var(--text);font-family:inherit}
+    .scope-tools-actions{display:flex;gap:6px;flex-wrap:wrap}
+    .scope-tools-actions .btn{padding:5px 8px;font-size:.68rem}
+    .scope-cols{max-height:170px;overflow:auto;border:1px dashed var(--line);border-radius:7px;padding:7px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+    .scope-empty{font-size:.69rem;color:var(--muted)}
+    .scope-hint{font-size:.66rem;color:var(--muted)}
+
+    .strategy{display:grid;gap:6px}
+    .strategy > label{font-size:.68rem;color:var(--muted);font-weight:700}
+    .strategy-list{display:grid;gap:8px}
+    .strategy-item{display:grid;grid-template-columns:auto 1fr;gap:8px;align-items:flex-start;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--surface)}
+    .strategy-item input{margin-top:2px}
+    .strategy-item b{font-size:.74rem;color:var(--text)}
+    .strategy-item small{display:block;font-size:.68rem;color:var(--muted);margin-top:2px}
+
+    .preview-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+    .preview-kpi{border:1px solid var(--line);border-radius:8px;background:var(--surface);padding:9px;display:grid;gap:2px}
+    .preview-kpi span{font-size:.68rem;color:var(--muted)}
+    .preview-kpi b{font-size:.9rem;color:var(--text)}
+
+    .preview-list{border:1px dashed var(--line);border-radius:8px;background:var(--surface);padding:9px;display:grid;gap:6px;min-height:92px}
+    .preview-entry{font-size:.71rem;color:var(--muted)}
+    .preview-actions-title{margin-top:auto;padding:6px 8px 8px;border-left:3px solid var(--primary);border-bottom:2px solid var(--card-border);background:var(--head-bg);border-radius:6px 6px 0 0;font-size:.72rem;font-weight:700;color:var(--head-text);letter-spacing:.02em;text-transform:uppercase}
+    .preview-actions{display:grid;gap:8px;padding-top:8px}
+    .preview-actions .intro{font-size:.74rem;line-height:1.45;color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px}
+    .preview-actions .actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:stretch}
+    .preview-actions .actions .btn{min-height:36px;display:inline-flex;align-items:center;justify-content:center;text-align:center;padding:8px 10px}
+
+    .actions{display:flex;gap:8px;flex-wrap:wrap}
+
+    [data-theme="dark"] .fix-item,
+    [data-theme="dark"] .strategy-item,
+    [data-theme="dark"] .preview-kpi,
+    [data-theme="dark"] .preview-list{background:#2b3d55;border-color:#5a7397;box-shadow:inset 0 0 0 1px rgba(147,197,253,.14)}
+    [data-theme="dark"] .scope-option{color:#e2e8f0}
+    [data-theme="dark"] .scope-panel{background:#2b3d55;border-color:#5a7397;box-shadow:inset 0 0 0 1px rgba(147,197,253,.14)}
+    [data-theme="dark"] .scope-tools input{background:#2b3d55;border-color:#5a7397;color:#e2e8f0}
+    [data-theme="dark"] .scope-cols{border-color:#5a7397}
+    [data-theme="dark"] .preview-actions .intro{background:#2b3d55;border-color:#5a7397;color:#e2e8f0;box-shadow:inset 0 0 0 1px rgba(147,197,253,.14)}
+
+    @media (max-width:1080px){
+      .hyg-grid{grid-template-columns:1fr}
+    }
+    @media (max-width:720px){
+      .preview-kpis{grid-template-columns:1fr}
+      .scope-cols{grid-template-columns:1fr}
+      .scope-tools{grid-template-columns:1fr}
+      .preview-actions .actions{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="header">
+      <div class="header-top">
+        <div class="brand"><span>Tablerreur</span><span>Mapala</span></div>
+        <div class="head-actions">
+          <div class="pills"><span class="pill">Mockup Flow</span><span class="pill">Etape 3 - Hygiene</span></div>
+          <button id="theme-toggle" class="btn-theme-toggle" type="button" onclick="toggleTheme()">Mode sombre</button>
+        </div>
+      </div>
+      <div class="sub">Controle qualite et mapping de tableurs CSV/XLSX</div>
+    </header>
+
+    <nav class="app-tabs">
+      <a id="tab-tablerreur" class="app-tab active" href="tablerreur-correctifs-hifi-v3-large.html">Tablerreur</a>
+      <a id="tab-mapala" class="app-tab" href="mapala-hifi-v1.html">Mapala</a>
+    </nav>
+
+    <nav class="step-nav">
+      <a class="step-btn" href="tablerreur-televerser-hifi-v1.html"><span class="step-num">1</span> Televerser</a>
+      <span class="step-sep">></span>
+      <a class="step-btn" href="tablerreur-configurer-hifi-v3.html"><span class="step-num">2</span> Configurer</a>
+      <span class="step-sep">></span>
+      <a class="step-btn active" href="tablerreur-correctifs-hifi-v3-large.html"><span class="step-num">3</span> Correctifs</a>
+      <span class="step-sep">></span>
+      <a class="step-btn" href="tablerreur-valider-hifi-v1.html"><span class="step-num">4</span> Valider</a>
+      <span class="step-sep">></span>
+      <a class="step-btn is-disabled" href="tablerreur-resultats-hifi-v1.html" aria-disabled="true" tabindex="-1"><span class="step-num">5</span> Resultats</a>
+      <span class="step-status"><b>Etape 3/5</b> Appliquez des correctifs d'hygiene avant la validation</span>
+    </nav>
+
+    <main class="layout correctifs-hygiene">
+      <section class="hyg-grid">
+        <div class="card">
+          <div class="head"><span>Correctifs disponibles</span><span>Application en lot</span></div>
+          <div class="body">
+            <p class="intro"><b>Selectionnez les correctifs a appliquer avant la validation.</b> Cette etape traite en masse les problemes de forme (espaces, caracteres, encodage).</p>
+            <div class="fix-list">
+              <label class="fix-item"><input id="fix-trim" type="checkbox" /><span><b>Supprimer les espaces en debut et fin</b><small>Supprime les espaces superflus avant et apres chaque valeur.</small></span></label>
+              <label class="fix-item"><input id="fix-collapse" type="checkbox" /><span><b>Reduire les espaces multiples</b><small>Remplace toute sequence d'espaces par un seul espace.</small></span></label>
+              <label class="fix-item"><input id="fix-nbsp" type="checkbox" /><span><b>Remplacer les espaces insecables (NBSP)</b><small>Remplace les espaces insecables (U+00A0) par des espaces normaux.</small></span></label>
+              <label class="fix-item"><input id="fix-invisible" type="checkbox" /><span><b>Supprimer les caracteres invisibles</b><small>Supprime les caracteres de largeur nulle (U+200B, U+FEFF, etc.).</small></span></label>
+              <label class="fix-item"><input id="fix-unicode" type="checkbox" /><span><b>Normaliser l'Unicode</b><small>Remplace les guillemets courbes, tirets fantaisie, etc. par leurs equivalents ASCII.</small></span></label>
+              <label class="fix-item"><input id="fix-newlines" type="checkbox" /><span><b>Normaliser les retours a la ligne</b><small>Convertit les fins de ligne Windows (\\r\\n) en Unix (\\n).</small></span></label>
+            </div>
+            <div class="scope">
+              <label>Appliquer sur les colonnes :</label>
+              <div class="scope-options">
+                <div class="scope-head">
+                  <label class="scope-option">
+                    <input id="scope-all" type="checkbox" checked />
+                    <span>Toutes les colonnes</span>
+                  </label>
+                  <button id="scope-toggle" class="btn" type="button" aria-expanded="false" aria-controls="scope-panel">Selectionner des colonnes</button>
+                  <span id="scope-summary" class="scope-summary">Toutes les colonnes (60)</span>
+                </div>
+                <div id="scope-panel" class="scope-panel" hidden>
+                  <div class="scope-tools">
+                    <input id="scope-search" type="search" placeholder="Rechercher une colonne..." />
+                    <div class="scope-tools-actions">
+                      <button id="scope-select-visible" class="btn" type="button">Tout cocher</button>
+                      <button id="scope-clear-visible" class="btn" type="button">Tout decocher</button>
+                    </div>
+                  </div>
+                  <div id="scope-cols-list" class="scope-cols"></div>
+                </div>
+                <span class="scope-hint">Cochez une ou plusieurs colonnes pour cibler le correctif.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card preview-card">
+          <div class="head"><span>Apercu des modifications</span><span id="preview-state">Mise a jour auto</span></div>
+          <div class="body">
+            <div class="preview-kpis">
+              <div class="preview-kpi"><span>Correctifs selectionnes</span><b id="kpi-selected">0</b></div>
+              <div class="preview-kpi"><span>Cellules concernees</span><b id="kpi-impact">--</b></div>
+              <div class="preview-kpi"><span>Lignes impactees</span><b id="kpi-confidence">--</b></div>
+            </div>
+            <div id="preview-list" class="preview-list">
+              <div class="preview-entry">Aucun correctif selectionne.</div>
+            </div>
+            <div class="strategy">
+              <label>Mode d'application :</label>
+              <div class="strategy-list">
+                <label class="strategy-item"><input id="mode-apply" type="radio" name="apply-mode" value="apply" checked /><span><b>Corriger automatiquement</b><small>Le correctif est applique en lot avant de passer a l'etape Valider.</small></span></label>
+                <label class="strategy-item"><input id="mode-flag" type="radio" name="apply-mode" value="flag" /><span><b>Marquer pour verifier</b><small>Chaque occurrence detectee sera envoyee dans Valider pour revision manuelle.</small></span></label>
+              </div>
+            </div>
+            <div class="preview-actions-title">Validation</div>
+            <div class="preview-actions">
+              <p id="action-hint" class="intro">Vous pouvez soit appliquer les correctifs selectionnes, soit passer directement a l'etape <b>Valider</b>.</p>
+              <div class="actions">
+                <a class="btn" href="tablerreur-valider-hifi-v1.html">Passer sans correctifs</a>
+                <button id="btn-apply-fixes" class="btn primary" type="button">Appliquer les correctifs et continuer</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div class="foot"><span>Flow navigation mockups - Tablerreur</span><span>Correctifs Hygiene</span></div>
+  </div>
+
+  <script src="flow-common.js"></script>
+  <script>
+    (function initCorrectifsHygiene(){
+      const byId=(id)=>document.getElementById(id);
+      const fixes=[
+        {id:"fix-trim",label:"Supprimer les espaces en debut et fin",base:54},
+        {id:"fix-collapse",label:"Reduire les espaces multiples",base:38},
+        {id:"fix-nbsp",label:"Remplacer les espaces insecables",base:27},
+        {id:"fix-invisible",label:"Supprimer les caracteres invisibles",base:19},
+        {id:"fix-unicode",label:"Normaliser l'Unicode",base:14},
+        {id:"fix-newlines",label:"Normaliser les retours a la ligne",base:11}
+      ].map((f)=>({ ...f, input: byId(f.id) }));
+
+      const scopeColumns=[
+        "Date_creation","Langue","Licence","Resume","Notes","Titre","Identifiant","Auteur","Contributeur","Type_doc",
+        "Format","Taille","Url_source","Url_fichier","Collection","Fonds","Cote","Editeur","Ville","Pays",
+        "Latitude","Longitude","Date_modif","Version","Relation","Provenance","Statut",
+        ...Array.from({length:33},(_,i)=>"Col_"+String(i+28).padStart(2,"0"))
+      ];
+      const selectedScopeCols=new Set();
+      const scopeAll=byId("scope-all");
+      const scopeToggle=byId("scope-toggle");
+      const scopeSummary=byId("scope-summary");
+      const scopePanel=byId("scope-panel");
+      const scopeSearch=byId("scope-search");
+      const scopeSelectVisible=byId("scope-select-visible");
+      const scopeClearVisible=byId("scope-clear-visible");
+      const scopeColsList=byId("scope-cols-list");
+      const applyModeInputs=[...document.querySelectorAll("input[name='apply-mode']")];
+      const previewState=byId("preview-state");
+      const kpiSelected=byId("kpi-selected");
+      const kpiImpact=byId("kpi-impact");
+      const kpiConfidence=byId("kpi-confidence");
+      const previewList=byId("preview-list");
+      const btnApplyFixes=byId("btn-apply-fixes");
+      const actionHint=byId("action-hint");
+
+      function getSelected(){
+        return fixes.filter((f)=>f.input.checked);
+      }
+
+      function getMode(){
+        const checked=applyModeInputs.find((input)=>input.checked);
+        return checked?checked.value:"apply";
+      }
+
+      function getModeLabel(mode){
+        return mode==="flag"?"Marquer pour verifier":"Corriger automatiquement";
+      }
+
+      function getFilteredScopeColumns(){
+        const query=(scopeSearch.value||"").trim().toLowerCase();
+        if(!query)return scopeColumns;
+        return scopeColumns.filter((col)=>col.toLowerCase().includes(query));
+      }
+
+      function setScopePanelOpen(isOpen){
+        scopePanel.hidden=!isOpen;
+        scopeToggle.setAttribute("aria-expanded",isOpen?"true":"false");
+        scopeToggle.textContent=isOpen?"Masquer la selection":"Selectionner des colonnes";
+      }
+
+      function updateScopeSummary(){
+        if(scopeAll.checked){
+          scopeSummary.textContent="Toutes les colonnes ("+scopeColumns.length+")";
+          return;
+        }
+        scopeSummary.textContent=selectedScopeCols.size+"/"+scopeColumns.length+" colonnes selectionnees";
+      }
+
+      function renderScopeList(){
+        const filtered=getFilteredScopeColumns();
+        if(!filtered.length){
+          scopeColsList.innerHTML="<div class='scope-empty'>Aucune colonne ne correspond a votre recherche.</div>";
+          return;
+        }
+        scopeColsList.innerHTML=filtered.map((col)=>{
+          const checked=selectedScopeCols.has(col)?" checked":"";
+          return "<label class='scope-option'><input class='scope-col-item' type='checkbox' value='"+col+"'"+checked+" /><span>"+col+"</span></label>";
+        }).join("");
+      }
+
+      function applyScopeSelection(columns,selected){
+        if(selected){
+          scopeAll.checked=false;
+          columns.forEach((col)=>selectedScopeCols.add(col));
+        }else{
+          columns.forEach((col)=>selectedScopeCols.delete(col));
+          if(!selectedScopeCols.size){
+            scopeAll.checked=true;
+          }
+        }
+        renderScopeList();
+        updateScopeSummary();
+      }
+
+      function getScopeInfo(){
+        if(scopeAll.checked){
+          return {
+            label:"Toutes les colonnes",
+            factor:1,
+            count:scopeColumns.length,
+            total:scopeColumns.length
+          };
+        }
+        if(!selectedScopeCols.size){
+          return {label:"Aucune colonne",factor:0,count:0,total:scopeColumns.length};
+        }
+        const selectedOrdered=scopeColumns.filter((col)=>selectedScopeCols.has(col));
+        const labelBase=selectedOrdered.slice(0,4).join(", ");
+        const label=selectedOrdered.length>4?labelBase+" +"+(selectedOrdered.length-4):labelBase;
+        return {
+          label,
+          factor:Math.min(1,Math.max(0.08,selectedOrdered.length/scopeColumns.length)),
+          count:selectedOrdered.length,
+          total:scopeColumns.length
+        };
+      }
+
+      function syncModeUI(){
+        const mode=getMode();
+        if(mode==="flag"){
+          btnApplyFixes.textContent="Marquer pour verifier et continuer";
+          actionHint.innerHTML="Les occurrences detectees seront marquees pour controle detaille dans <b>Valider</b>.";
+          return;
+        }
+
+        btnApplyFixes.textContent="Appliquer les correctifs et continuer";
+        actionHint.innerHTML="Vous pouvez soit appliquer les correctifs selectionnes, soit passer directement a l'etape <b>Valider</b>.";
+      }
+
+      function refreshPreview(){
+        const selected=getSelected();
+        const scopeInfo=getScopeInfo();
+        const mode=getMode();
+        kpiSelected.textContent=String(selected.length);
+        syncModeUI();
+
+        if(!selected.length){
+          previewState.textContent="Aucun correctif selectionne";
+          kpiImpact.textContent="--";
+          kpiConfidence.textContent="--";
+          previewList.innerHTML=[
+            "<div class='preview-entry'><b>Perimetre:</b> "+scopeInfo.label+"</div>",
+            "<div class='preview-entry'><b>Mode :</b> "+getModeLabel(mode)+"</div>",
+            "<div class='preview-entry'>Selectionnez au moins un correctif.</div>"
+          ].join("");
+          return;
+        }
+
+        if(scopeInfo.factor===0){
+          previewState.textContent="Selection de colonnes incomplete";
+          kpiImpact.textContent="--";
+          kpiConfidence.textContent="--";
+          previewList.innerHTML="<div class='preview-entry'>Selectionnez au moins une colonne cible.</div>";
+          return;
+        }
+
+        const scopeFactor=scopeInfo.factor;
+        const cells=Math.max(1,Math.round(selected.reduce((s,f)=>s+f.base,0)*scopeFactor));
+        const rows=Math.max(1,Math.round(cells/3.4));
+
+        kpiImpact.textContent="~"+cells;
+        kpiConfidence.textContent="~"+rows;
+        previewState.textContent="Apercu mis a jour";
+
+        const modeEntry=mode==="flag"
+          ? "<div class='preview-entry'><b>Mode :</b> les occurrences seront marquees pour verification dans l'etape Valider.</div>"
+          : "<div class='preview-entry'><b>Mode :</b> corrections automatiques appliquees avant l'etape Valider.</div>";
+
+        const scopeLabel=scopeAll.checked?scopeInfo.label:(scopeInfo.label+" ("+scopeInfo.count+"/"+scopeInfo.total+")");
+        const entries=[
+          "<div class='preview-entry'><b>Perimetre:</b> "+scopeLabel+"</div>",
+          modeEntry,
+          ...selected.map((f)=>"<div class='preview-entry'>"+f.label+" : ~"+Math.max(1,Math.round(f.base*scopeFactor))+" cellule(s)</div>"),
+          "<div class='preview-entry'><b>Note:</b> estimation de maquette, a confirmer sur run reel.</div>"
+        ];
+        previewList.innerHTML=entries.join("");
+      }
+
+      fixes.forEach((f)=>f.input.addEventListener("change",refreshPreview));
+      scopeToggle.addEventListener("click",()=>{
+        setScopePanelOpen(scopePanel.hidden);
+      });
+      scopeSearch.addEventListener("input",()=>{
+        renderScopeList();
+      });
+      scopeAll.addEventListener("change",()=>{
+        if(scopeAll.checked){
+          selectedScopeCols.clear();
+        }else if(!selectedScopeCols.size){
+          scopeAll.checked=true;
+        }
+        renderScopeList();
+        updateScopeSummary();
+        refreshPreview();
+      });
+      scopeColsList.addEventListener("change",(event)=>{
+        const target=event.target;
+        if(!(target instanceof HTMLInputElement))return;
+        if(!target.classList.contains("scope-col-item"))return;
+
+        if(target.checked){
+          selectedScopeCols.add(target.value);
+          scopeAll.checked=false;
+        }else{
+          selectedScopeCols.delete(target.value);
+          if(!selectedScopeCols.size){
+            scopeAll.checked=true;
+          }
+        }
+        updateScopeSummary();
+        refreshPreview();
+      });
+      scopeSelectVisible.addEventListener("click",()=>{
+        applyScopeSelection(getFilteredScopeColumns(),true);
+        refreshPreview();
+      });
+      scopeClearVisible.addEventListener("click",()=>{
+        applyScopeSelection(getFilteredScopeColumns(),false);
+        refreshPreview();
+      });
+      applyModeInputs.forEach((input)=>input.addEventListener("change",refreshPreview));
+      btnApplyFixes.addEventListener("click",()=>{
+        const mode=getMode();
+        refreshPreview();
+        window.location.href=mode==="flag"?"tablerreur-valider-hifi-v1.html?mode=verify":"tablerreur-valider-hifi-v1.html";
+      });
+
+      setScopePanelOpen(false);
+      renderScopeList();
+      updateScopeSummary();
+      refreshPreview();
+    })();
+  </script>
+</body>
+</html>

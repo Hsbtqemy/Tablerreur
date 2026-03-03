@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Mockup Tablerreur - Etape Correctifs V2 detail cellule" />
+  <link rel="icon" href="data:," />
+  <title>Tablerreur Correctifs Mockup Hifi V2</title>
+  <link rel="stylesheet" href="flow-common.css" />
+  <style>
+    .correctifs-v2{display:grid;gap:12px}
+    .goal-card .body{display:grid;gap:10px}
+    .goal-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:space-between}
+    .goal-main{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    .goal-chip{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;font-size:.73rem;font-weight:700}
+    .goal-chip.blocked{background:#fff4d8;color:#8a5b00}
+    .goal-chip.ready{background:#e8f5ed;color:#14532d}
+    [data-theme="dark"] .goal-chip.blocked{background:#2d1b00;color:#fcd34d}
+    [data-theme="dark"] .goal-chip.ready{background:#052e16;color:#86efac}
+    .goal-text{font-size:.85rem;color:var(--text)}
+    .goal-text b{color:var(--text)}
+    .goal-bar{height:9px;border-radius:999px;background:var(--line);overflow:hidden}
+    .goal-bar > span{display:block;height:100%;width:72%;background:var(--primary)}
+    .goal-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+    .state-bar{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+    .state-btn{border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:999px;padding:4px 10px;font-size:.7rem;font-weight:700;cursor:pointer}
+    .state-btn.active{background:var(--primary);border-color:var(--primary);color:#fff}
+    .state-btn:focus-visible{outline:2px solid #93c5fd;outline-offset:1px}
+    .state-note{font-size:.68rem;color:var(--muted)}
+
+    .primary-grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:12px;align-items:stretch}
+    .primary-grid > .card{height:100%;display:flex;flex-direction:column}
+    .primary-grid > .card > .body{flex:1 1 auto;display:flex;flex-direction:column;min-height:0;gap:10px}
+
+    .table-toolbar{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
+    .table-toolbar .field{display:grid;gap:4px}
+    .table-toolbar label{font-size:.68rem;color:var(--muted);font-weight:700}
+    .table-toolbar input{width:100%;border:1px solid var(--line);border-radius:7px;padding:7px 8px;font-size:.74rem;background:var(--surface);color:var(--text);font-family:inherit}
+    .table-toolbar .meta{font-size:.7rem;color:var(--muted)}
+
+    .sheet-wrap{border:1px solid var(--line);border-radius:9px;overflow:auto;max-height:430px}
+    .sheet{width:100%;border-collapse:collapse;font-size:.74rem;min-width:760px}
+    .sheet th,.sheet td{padding:8px;border-bottom:1px solid var(--line);border-right:1px solid var(--line);text-align:left;white-space:nowrap}
+    .sheet th:last-child,.sheet td:last-child{border-right:none}
+    .sheet th{position:sticky;top:0;background:var(--head-bg);color:var(--head-text);z-index:1}
+    .sheet .rowid{background:var(--head-bg);font-weight:700;color:var(--head-text)}
+    .sheet tr.selected{background:#eef4ff}
+    .sheet td.cell-error{background:#fef2f2;color:#7f1d1d;font-weight:700}
+    .sheet td.cell-warn{background:#fffbeb;color:#8a5b00;font-weight:700}
+    .sheet td.cell-selected{outline:2px solid var(--primary);outline-offset:-2px}
+    [data-theme="dark"] .table-toolbar input{background:#2b3d55;border-color:#5a7397;box-shadow:inset 0 0 0 1px rgba(147,197,253,.16)}
+    [data-theme="dark"] .table-toolbar input:focus{outline:2px solid #93c5fd;outline-offset:1px}
+    [data-theme="dark"] .sheet-wrap{border-color:#5a7397}
+    [data-theme="dark"] .sheet th,[data-theme="dark"] .sheet .rowid{background:#2b3d55;color:#bfdbfe}
+    [data-theme="dark"] .sheet tr.selected{background:#1f3f73}
+    [data-theme="dark"] .sheet td.cell-error{background:#3f1012;color:#fecaca}
+    [data-theme="dark"] .sheet td.cell-warn{background:#2d1b00;color:#fcd34d}
+
+    .editor-stack{display:grid;gap:10px}
+    .context{display:grid;gap:7px;border:1px solid var(--line);border-radius:9px;padding:9px;background:var(--surface)}
+    .context-line{display:flex;justify-content:space-between;gap:8px;font-size:.73rem}
+    .context-line span{color:var(--muted)}
+    .context-line b{color:var(--text)}
+    .advice{border-left:3px solid var(--primary);background:var(--surface);padding:8px 9px;font-size:.72rem;color:var(--muted)}
+    .advice b{color:var(--text)}
+
+    .choices{display:grid;gap:8px}
+    .choice{border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--surface);display:grid;gap:5px}
+    .choice strong{font-size:.74rem;color:var(--text)}
+    .choice small{font-size:.68rem;color:var(--muted)}
+    .choice .actions{display:flex;gap:7px;flex-wrap:wrap}
+
+    .manual{display:grid;gap:6px;border-top:1px dashed var(--line);padding-top:8px}
+    .manual label{font-size:.68rem;font-weight:700;color:var(--muted)}
+    .manual textarea{min-height:68px;resize:vertical;border:1px solid var(--line);border-radius:7px;padding:7px 8px;font-family:inherit;font-size:.74rem;background:var(--surface);color:var(--text)}
+    .manual textarea:focus{outline:2px solid #93c5fd;outline-offset:1px}
+
+    .actions{display:flex;gap:8px;flex-wrap:wrap}
+    .actions.end{margin-top:auto;justify-content:flex-end}
+    .btn.is-disabled{opacity:.45;pointer-events:none;cursor:not-allowed}
+
+    .secondary{display:grid;gap:10px}
+    details.list-panel{border:1px solid var(--line);border-radius:9px;background:var(--surface)}
+    details.list-panel > summary{cursor:pointer;padding:9px 10px;font-size:.76rem;font-weight:700;color:var(--head-text);background:var(--head-bg);border-bottom:1px solid var(--head-border)}
+    details.list-panel[open] > summary{border-bottom:1px solid var(--line)}
+    .list-body{padding:10px;display:grid;gap:8px}
+    .mini-table{width:100%;border-collapse:collapse;font-size:.73rem}
+    .mini-table th,.mini-table td{padding:7px;border-bottom:1px solid var(--line);text-align:left}
+    .mini-table th{background:var(--head-bg);color:var(--head-text)}
+
+    [data-theme="dark"] .context,
+    [data-theme="dark"] .advice,
+    [data-theme="dark"] .choice,
+    [data-theme="dark"] .manual textarea,
+    [data-theme="dark"] details.list-panel{background:#2b3d55;border-color:#5a7397;box-shadow:inset 0 0 0 1px rgba(147,197,253,.14)}
+    [data-theme="dark"] .manual textarea{box-shadow:inset 0 0 0 1px rgba(147,197,253,.16)}
+    [data-theme="dark"] details.list-panel > summary,
+    [data-theme="dark"] .mini-table th{background:#2b3d55;color:#bfdbfe}
+
+    @media (max-width:1120px){
+      .primary-grid{grid-template-columns:1fr}
+      .actions.end{justify-content:flex-start}
+    }
+    @media (max-width:760px){
+      .goal-top{align-items:flex-start}
+      .table-toolbar{grid-template-columns:1fr}
+      .sheet-wrap{max-height:320px}
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="header">
+      <div class="header-top">
+        <div class="brand"><span>Tablerreur</span><span>Mapala</span></div>
+        <div class="head-actions">
+          <div class="pills"><span class="pill">Mockup Flow</span><span class="pill">Etape 3 - V2</span></div>
+          <button id="theme-toggle" class="btn-theme-toggle" type="button" onclick="toggleTheme()">Mode sombre</button>
+        </div>
+      </div>
+      <div class="sub">Controle qualite et mapping de tableurs CSV/XLSX</div>
+    </header>
+
+    <nav class="app-tabs">
+      <a id="tab-tablerreur" class="app-tab active" href="tablerreur-correctifs-hifi-v2.html">Tablerreur</a>
+      <a id="tab-mapala" class="app-tab" href="mapala-hifi-v1.html">Mapala</a>
+    </nav>
+
+    <nav class="step-nav">
+      <a class="step-btn" href="tablerreur-televerser-hifi-v1.html"><span class="step-num">1</span> Televerser</a>
+      <span class="step-sep">></span>
+      <a class="step-btn" href="tablerreur-configurer-hifi-v3.html"><span class="step-num">2</span> Configurer</a>
+      <span class="step-sep">></span>
+      <a class="step-btn active" href="tablerreur-correctifs-hifi-v2.html"><span class="step-num">3</span> Correctifs</a>
+      <span class="step-sep">></span>
+      <a id="step-validate" class="step-btn is-disabled" href="tablerreur-valider-hifi-v1.html" aria-disabled="true" tabindex="-1"><span class="step-num">4</span> Valider</a>
+      <span class="step-sep">></span>
+      <a class="step-btn is-disabled" href="tablerreur-resultats-hifi-v1.html" aria-disabled="true" tabindex="-1"><span class="step-num">5</span> Resultats</a>
+      <span id="step-status" class="step-status"><b>Etape 3/5</b> Corrigez les cellules bloquantes dans le tableau</span>
+    </nav>
+
+    <main class="layout correctifs-v2">
+      <section class="card goal-card">
+        <div class="head"><span>Objectif de cette etape</span><span>Corriger 0/11 anomalies bloquantes</span></div>
+        <div class="body">
+          <div class="goal-top">
+            <div class="goal-main">
+              <span id="goal-chip" class="goal-chip blocked">11 bloquantes restantes</span>
+              <span id="goal-text" class="goal-text"><b>Priorite:</b> corriger la cellule active puis passer a la suivante.</span>
+            </div>
+            <div class="goal-actions">
+              <button class="btn">Cellule precedente</button>
+              <button class="btn primary">Cellule suivante a corriger</button>
+              <a class="btn" href="tablerreur-correctifs-hifi-v1.html">Voir version precedente</a>
+            </div>
+          </div>
+          <div class="goal-bar" aria-hidden="true"><span id="goal-progress"></span></div>
+          <div class="state-bar" role="group" aria-label="Etat mockup correctifs">
+            <button class="state-btn active" type="button" data-state-btn="active" aria-pressed="true">En traitement</button>
+            <button class="state-btn" type="button" data-state-btn="ready" aria-pressed="false">Pret a valider</button>
+            <span class="state-note">Simulation maquette uniquement</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="primary-grid">
+        <div class="card">
+          <div class="head"><span>Tableau source (ancre principale)</span><span id="table-tag">Ligne 14 - Date_creation selectionnee</span></div>
+          <div class="body">
+            <div class="table-toolbar">
+              <div class="field">
+                <label for="table-search">Retrouver dans le tableau</label>
+                <input id="table-search" type="text" value="14/01/2026" />
+              </div>
+              <div class="meta">5 colonnes visibles sur 35 - defilement horizontal actif</div>
+            </div>
+
+            <div class="sheet-wrap">
+              <table class="sheet">
+                <thead>
+                  <tr><th>#</th><th>ID</th><th>Titre</th><th>Date_creation</th><th>Langue</th><th>Licence</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td class="rowid">12</td><td>NAK-00012</td><td>Corpus oral occitan</td><td>2026-01-11</td><td>fr</td><td>CC-BY-4.0</td></tr>
+                  <tr><td class="rowid">13</td><td>NAK-00013</td><td>Atlas des dialectes</td><td class="cell-warn">janv-2026</td><td>fr</td><td>CC-BY-4.0</td></tr>
+                  <tr class="selected"><td class="rowid">14</td><td>NAK-00014</td><td>Inventaire photo 1936</td><td class="cell-error cell-selected">14/01/2026</td><td>fr</td><td>CC-BY</td></tr>
+                  <tr><td class="rowid">15</td><td>NAK-00015</td><td>Notice manuscrite</td><td>2026-01-14</td><td class="cell-warn">fre</td><td>CC-BY-4.0</td></tr>
+                  <tr><td class="rowid">16</td><td>NAK-00016</td><td>Journal de fouille</td><td>2026-01-15</td><td>fr</td><td class="cell-error">CC0</td></tr>
+                  <tr><td class="rowid">17</td><td>NAK-00017</td><td>Carte topographique</td><td>2026-01-16</td><td>en</td><td>CC-BY-4.0</td></tr>
+                  <tr><td class="rowid">18</td><td>NAK-00018</td><td>Plan de coupe</td><td class="cell-error">14-13-2026</td><td>fr</td><td>CC-BY-4.0</td></tr>
+                  <tr><td class="rowid">19</td><td>NAK-00019</td><td>Interview audio</td><td>2026-01-19</td><td class="cell-warn">eng</td><td>CC-BY-4.0</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="head"><span>Corriger cette cellule</span><span id="cell-status">Bloquante</span></div>
+          <div class="body editor-stack">
+            <div class="context">
+              <div class="context-line"><span>Ligne</span><b>14</b></div>
+              <div class="context-line"><span>Colonne</span><b>Date_creation</b></div>
+              <div class="context-line"><span>Valeur actuelle</span><b>14/01/2026</b></div>
+              <div class="context-line"><span>Valeur attendue</span><b>YYYY-MM-DD</b></div>
+            </div>
+
+            <div class="advice"><b>Suggestion prioritaire:</b> remplacez par <b>2026-01-14</b>, puis passez a la cellule suivante.</div>
+
+            <div class="choices">
+              <div class="choice">
+                <strong>2026-01-14</strong>
+                <small>Compatible avec la regle Date_creation (ISO).</small>
+                <div class="actions">
+                  <button class="btn">Appliquer</button>
+                  <button class="btn">Ignorer</button>
+                </div>
+              </div>
+              <div class="choice">
+                <strong>2026-01</strong>
+                <small>Utiliser uniquement si la precision jour est inconnue.</small>
+                <div class="actions">
+                  <button class="btn">Appliquer</button>
+                  <button class="btn">Ignorer</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="manual">
+              <label for="manual-value">Saisie manuelle</label>
+              <textarea id="manual-value">2026-01-14</textarea>
+              <div class="actions">
+                <button class="btn">Valider la saisie</button>
+                <button class="btn">Annuler</button>
+              </div>
+            </div>
+
+            <div class="actions end">
+              <button class="btn">Appliquer suggestions sur la colonne</button>
+              <a id="btn-continue" class="btn primary is-disabled" href="tablerreur-valider-hifi-v1.html" aria-disabled="true" tabindex="-1">Continuer vers Valider</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="secondary">
+        <details class="list-panel">
+          <summary>Voir toutes les anomalies (vue secondaire)</summary>
+          <div class="list-body">
+            <table class="mini-table">
+              <thead><tr><th>Severite</th><th>Ligne</th><th>Colonne</th><th>Valeur</th><th>Suggestion</th></tr></thead>
+              <tbody>
+                <tr><td>Erreur</td><td>14</td><td>Date_creation</td><td>14/01/2026</td><td>2026-01-14</td></tr>
+                <tr><td>Avert.</td><td>15</td><td>Langue</td><td>fre</td><td>fr</td></tr>
+                <tr><td>Erreur</td><td>16</td><td>Licence</td><td>CC0</td><td>CC0-1.0</td></tr>
+                <tr><td>Erreur</td><td>18</td><td>Date_creation</td><td>14-13-2026</td><td>2026-12-14</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </section>
+    </main>
+
+    <div class="foot"><span>Flow navigation mockups - Tablerreur</span><span>Correctifs V2 detail-first</span></div>
+  </div>
+
+  <script src="flow-common.js"></script>
+  <script>
+    (function initCorrectifsV2(){
+      const byId=(id)=>document.getElementById(id);
+      const stateButtons=[...document.querySelectorAll("[data-state-btn]")];
+      const stepValidate=byId("step-validate");
+      const stepStatus=byId("step-status");
+      const btnContinue=byId("btn-continue");
+      const goalChip=byId("goal-chip");
+      const goalText=byId("goal-text");
+      const goalProgress=byId("goal-progress");
+      const cellStatus=byId("cell-status");
+      const tableTag=byId("table-tag");
+
+      function setValidationAccess(isUnlocked){
+        stepValidate.classList.toggle("is-disabled",!isUnlocked);
+        stepValidate.setAttribute("aria-disabled",isUnlocked?"false":"true");
+        if(isUnlocked)stepValidate.removeAttribute("tabindex");
+        else stepValidate.setAttribute("tabindex","-1");
+        stepValidate.title=isUnlocked?"":"Corriger les anomalies bloquantes";
+
+        btnContinue.classList.toggle("is-disabled",!isUnlocked);
+        btnContinue.setAttribute("aria-disabled",isUnlocked?"false":"true");
+        if(isUnlocked)btnContinue.removeAttribute("tabindex");
+        else btnContinue.setAttribute("tabindex","-1");
+        btnContinue.title=isUnlocked?"":"Corriger les anomalies bloquantes";
+      }
+
+      function setState(state){
+        stateButtons.forEach((btn)=>{
+          const on=btn.dataset.stateBtn===state;
+          btn.classList.toggle("active",on);
+          btn.setAttribute("aria-pressed",on?"true":"false");
+        });
+
+        if(state==="ready"){
+          goalChip.className="goal-chip ready";
+          goalChip.textContent="0 bloquante restante";
+          goalText.innerHTML="<b>Objectif atteint:</b> vous pouvez passer a l etape Valider.";
+          goalProgress.style.width="100%";
+          stepStatus.innerHTML="<b>Etape 3/5</b> Toutes les anomalies bloquantes sont corrigees";
+          cellStatus.textContent="Resolue";
+          tableTag.textContent="Aucune cellule bloquante restante";
+          setValidationAccess(true);
+          return;
+        }
+
+        goalChip.className="goal-chip blocked";
+        goalChip.textContent="11 bloquantes restantes";
+        goalText.innerHTML="<b>Priorite:</b> corriger la cellule active puis passer a la suivante.";
+        goalProgress.style.width="72%";
+        stepStatus.innerHTML="<b>Etape 3/5</b> Corrigez les cellules bloquantes dans le tableau";
+        cellStatus.textContent="Bloquante";
+        tableTag.textContent="Ligne 14 - Date_creation selectionnee";
+        setValidationAccess(false);
+      }
+
+      stateButtons.forEach((btn)=>{
+        btn.addEventListener("click",()=>setState(btn.dataset.stateBtn));
+      });
+
+      setState("active");
+    })();
+  </script>
+</body>
+</html>

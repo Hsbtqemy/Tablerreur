@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Mockup Tablerreur - Etape Televerser" />
+  <link rel="icon" href="data:," />
+  <title>Tablerreur Televerser Mockup Hifi V1</title>
+  <link rel="stylesheet" href="flow-common.css" />
+  <style>
+    .upload-layout{display:grid;gap:12px}
+    .upload-top{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:12px;align-items:stretch}
+    .card-upload,
+    .card-summary{display:flex;flex-direction:column;height:390px}
+    .card-upload > .body,
+    .card-summary > .body{flex:1 1 auto;min-height:0}
+    .card-upload .state-block{min-height:170px}
+    .card-summary .kpi-list{height:100%;display:flex;flex-direction:column;justify-content:space-between;gap:8px}
+    .upload-bottom{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:stretch}
+    .upload-bottom > .card{height:100%;display:flex;flex-direction:column}
+    .upload-bottom > .card > .body{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;gap:10px}
+    #card-options .form-grid{flex:1 1 auto}
+    .upload-bottom .actions{margin-top:auto}
+    .card-next .todo-list{flex:1 1 auto;gap:10px}
+    .card-next .todo-item{padding:10px 12px}
+    .upload-stack{display:grid;gap:10px}
+    .state-toolbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+    .state-note{font-size:.68rem;color:var(--muted)}
+    .state-btn{border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:999px;padding:4px 10px;font-size:.7rem;font-weight:700;cursor:pointer}
+    .state-btn.active{background:var(--primary);border-color:var(--primary);color:#fff}
+    .state-btn:focus-visible{outline:2px solid #93c5fd;outline-offset:1px}
+    .status-banner{border-radius:8px;padding:8px 10px;font-size:.73rem;font-weight:700}
+    .status-empty{background:#eff6ff;color:#1e3a8a}
+    .status-loading{background:#e0ecff;color:#1e3a8a}
+    .status-loaded{background:#e8f5ed;color:#14532d}
+    .status-error{background:#fef2f2;color:#7f1d1d}
+    [data-theme="dark"] .status-empty{background:#13243a;color:#bfdbfe}
+    [data-theme="dark"] .status-loading{background:#1d3557;color:#bfdbfe}
+    [data-theme="dark"] .status-loaded{background:#052e16;color:#86efac}
+    [data-theme="dark"] .status-error{background:#3f1012;color:#fecaca}
+    .state-block[hidden]{display:none}
+    .upload-zone{border:2px dashed var(--line);border-radius:10px;padding:18px;background:var(--surface);display:grid;gap:8px;justify-items:center;text-align:center}
+    .upload-icon{font-size:1.65rem;line-height:1}
+    .upload-line{font-size:.82rem;color:var(--muted)}
+    .upload-meta{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+    .chip{border:1px solid var(--line);border-radius:999px;padding:3px 8px;background:var(--surface);font-size:.7rem;font-weight:700;color:var(--muted)}
+    .progress{width:min(340px,100%);height:9px;border-radius:999px;background:var(--line);overflow:hidden}
+    .progress > span{display:block;height:100%;width:55%;background:var(--primary)}
+    .file-box{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--surface);display:grid;gap:2px}
+    .file-box.loaded{gap:8px;justify-items:center;text-align:center;padding:14px 18px}
+    .loaded-status{color:var(--text)}
+    .file-box b{font-size:.8rem;color:var(--text)}
+    .file-box span{font-size:.71rem;color:var(--muted)}
+    .file-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+    .form-grid{display:grid;grid-template-columns:180px 1fr;gap:8px 10px;align-items:center}
+    .form-grid label{font-size:.75rem;color:var(--muted);font-weight:600}
+    .form-grid input,.form-grid select{width:100%;border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:.75rem;background:var(--surface);color:var(--text);font-family:inherit}
+    [data-theme="dark"] .form-grid input,
+    [data-theme="dark"] .form-grid select{
+      background:#2b3d55;
+      border-color:#5a7397;
+      box-shadow:inset 0 0 0 1px rgba(147,197,253,.16);
+    }
+    [data-theme="dark"] .form-grid input:focus,
+    [data-theme="dark"] .form-grid select:focus{
+      outline:2px solid #93c5fd;
+      outline-offset:1px;
+    }
+    .template-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .hint{font-size:.68rem;color:var(--muted)}
+    .hint strong{color:var(--text)}
+    .actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+    .btn.is-disabled{opacity:.45;pointer-events:none;cursor:not-allowed}
+    .card.is-locked .body{opacity:.56;pointer-events:none;user-select:none}
+    .card.is-locked .head::after{content:"Verrouille";font-size:.66rem;font-weight:700;color:var(--muted)}
+    .kpi-list{display:grid;gap:8px}
+    .kpi-line{display:flex;justify-content:space-between;gap:8px;padding:7px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface);font-size:.73rem}
+    .kpi-line b{color:var(--text)}
+    .kpi-line span{color:var(--muted)}
+    .todo-list{display:grid;gap:6px}
+    .todo-item{padding:6px 8px;border-left:3px solid var(--primary);background:var(--surface);font-size:.72rem;color:var(--muted)}
+    .todo-item b{color:var(--text)}
+    [data-theme="dark"] .kpi-line{
+      background:#2b3d55;
+      border-color:#5a7397;
+      box-shadow:inset 0 0 0 1px rgba(147,197,253,.14);
+    }
+    [data-theme="dark"] .todo-item{
+      background:#2b3d55;
+      box-shadow:inset 0 0 0 1px rgba(147,197,253,.12);
+    }
+    [data-theme="dark"] .upload-zone,
+    [data-theme="dark"] .file-box.loaded{
+      background:#2b3d55;
+      border-color:#5a7397;
+      box-shadow:inset 0 0 0 1px rgba(147,197,253,.2);
+    }
+    @media (max-width:1279px){
+      .upload-bottom{grid-template-columns:repeat(2,minmax(0,1fr))}
+      .upload-bottom .card-next{grid-column:1 / -1}
+    }
+    @media (max-width:960px){
+      .upload-top,
+      .upload-bottom{grid-template-columns:1fr}
+      .upload-bottom .card-next{grid-column:auto}
+    }
+    @media (max-width:760px){
+      .form-grid{grid-template-columns:1fr}
+      .actions{justify-content:flex-start}
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="header">
+      <div class="header-top">
+        <div class="brand"><span>Tablerreur</span><span>Mapala</span></div>
+        <div class="head-actions">
+          <div class="pills"><span class="pill">Mockup Flow</span><span class="pill">Etape 1</span></div>
+          <button id="theme-toggle" class="btn-theme-toggle" type="button" onclick="toggleTheme()">Mode sombre</button>
+        </div>
+      </div>
+      <div class="sub">Controle qualite et mapping de tableurs CSV/XLSX</div>
+    </header>
+
+    <nav class="app-tabs">
+      <a id="tab-tablerreur" class="app-tab active" href="tablerreur-televerser-hifi-v1.html">Tablerreur</a>
+      <a id="tab-mapala" class="app-tab" href="mapala-hifi-v1.html">Mapala</a>
+    </nav>
+
+    <nav class="step-nav">
+      <a class="step-btn active" href="tablerreur-televerser-hifi-v1.html"><span class="step-num">1</span> Televerser</a>
+      <span class="step-sep">></span>
+      <a id="step-configure" class="step-btn" href="tablerreur-configurer-hifi-v3.html"><span class="step-num">2</span> Configurer</a>
+      <span class="step-sep">></span>
+      <a class="step-btn is-disabled" href="tablerreur-correctifs-hifi-v3-large.html" aria-disabled="true" tabindex="-1"><span class="step-num">3</span> Correctifs</a>
+      <span class="step-sep">></span>
+      <a class="step-btn is-disabled" href="tablerreur-valider-hifi-v1.html" aria-disabled="true" tabindex="-1"><span class="step-num">4</span> Valider</a>
+      <span class="step-sep">></span>
+      <a class="step-btn is-disabled" href="tablerreur-resultats-hifi-v1.html" aria-disabled="true" tabindex="-1"><span class="step-num">5</span> Resultats</a>
+      <span id="step-status" class="step-status"><b>Etape 1/5</b> Televersement du jeu de donnees</span>
+    </nav>
+
+    <main class="layout upload-layout">
+      <section class="upload-top">
+        <div class="card card-upload">
+          <div class="head"><span>Depot de fichier</span><span>CSV/XLSX/TSV</span></div>
+          <div class="body upload-stack">
+            <div class="state-toolbar" role="group" aria-label="Etat mockup de televersement">
+              <button class="state-btn" type="button" data-state-btn="empty" aria-pressed="false">Vide</button>
+              <button class="state-btn" type="button" data-state-btn="loading" aria-pressed="false">En cours</button>
+              <button class="state-btn active" type="button" data-state-btn="loaded" aria-pressed="true">Charge</button>
+              <button class="state-btn" type="button" data-state-btn="error" aria-pressed="false">Erreur</button>
+              <span class="state-note">Simulation maquette uniquement</span>
+            </div>
+
+            <div id="upload-status" class="status-banner status-loaded">Fichier charge et pret pour Configurer.</div>
+
+            <div id="block-empty" class="upload-zone state-block" hidden>
+              <div class="upload-icon" aria-hidden="true">Fichier</div>
+              <div class="upload-line"><strong>Deposez votre fichier ici</strong> ou cliquez pour parcourir</div>
+              <button class="btn" type="button">Parcourir...</button>
+              <div class="upload-meta">
+                <span class="chip">CSV</span><span class="chip">XLSX</span><span class="chip">XLS</span><span class="chip">TSV</span>
+              </div>
+              <div class="hint">Formats acceptes: <strong>.csv .xlsx .xls .xlsm .tsv .txt</strong></div>
+            </div>
+
+            <div id="block-loading" class="upload-zone state-block" hidden>
+              <div class="upload-icon" aria-hidden="true">Import</div>
+              <div class="upload-line"><strong>Analyse du fichier en cours...</strong></div>
+              <div class="progress" aria-hidden="true"><span></span></div>
+              <div class="hint">Detection de l'entete, de l'encodage et de la feuille source.</div>
+            </div>
+
+            <div id="block-error" class="upload-zone state-block" hidden>
+              <div class="upload-icon" aria-hidden="true">Erreur</div>
+              <div class="upload-line"><strong>Import interrompu: fichier non lisible.</strong></div>
+              <button class="btn" type="button">Reessayer</button>
+              <div class="hint">Controlez le format et relancez le televersement.</div>
+            </div>
+
+            <div id="block-loaded" class="file-box loaded state-block">
+              <div class="upload-icon loaded-status" aria-hidden="true">Fichier charge</div>
+              <b>depot_nakala_2026_v4.xlsx</b>
+              <span>523 lignes - 35 colonnes - 1.8 Mo - Feuille: Data_1</span>
+              <div class="file-actions">
+                <button class="btn" type="button">Remplacer fichier</button>
+                <button class="btn" type="button">Retirer</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card card-summary">
+          <div class="head"><span>Resume import</span><span>Contexte courant</span></div>
+          <div class="body kpi-list">
+            <div class="kpi-line"><span>Fichier</span><b id="kpi-file">depot_nakala_2026_v4.xlsx</b></div>
+            <div class="kpi-line"><span>Lignes detectees</span><b id="kpi-rows">523</b></div>
+            <div class="kpi-line"><span>Colonnes detectees</span><b id="kpi-cols">35</b></div>
+            <div class="kpi-line"><span>Entete</span><b id="kpi-header">Ligne 1</b></div>
+            <div class="kpi-line"><span>Modele actif</span><b id="kpi-template">nakala_baseline</b></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="upload-bottom">
+        <div id="card-options" class="card">
+          <div class="head"><span>Options d'import</span><span>Configuration initiale</span></div>
+          <div class="body upload-stack">
+            <div class="form-grid">
+              <label for="header-row">Ligne d'entete</label>
+              <input id="header-row" type="number" min="1" max="100" value="1" />
+
+              <label for="delimiter">Delimiteur (CSV)</label>
+              <select id="delimiter">
+                <option value="">Detection auto</option>
+                <option>;</option>
+                <option>,</option>
+                <option>Tabulation</option>
+                <option>|</option>
+              </select>
+
+              <label for="encoding">Encodage</label>
+              <select id="encoding">
+                <option value="">Detection auto</option>
+                <option>UTF-8</option>
+                <option>UTF-8 BOM</option>
+                <option>Latin-1</option>
+                <option>CP1252</option>
+              </select>
+
+              <label for="sheet">Feuille source</label>
+              <select id="sheet">
+                <option selected>Data_1</option>
+                <option>Sheet2</option>
+                <option>Archives</option>
+              </select>
+            </div>
+            <div class="hint">Ces valeurs sont pre-remplies par detection automatique et restent modifiables.</div>
+          </div>
+        </div>
+
+        <div id="card-template" class="card">
+          <div class="head"><span>Modele de validation</span><span>Modele applique a l'etape Configurer</span></div>
+          <div class="body upload-stack">
+            <div class="form-grid">
+              <label for="template-id">Choisir un modele</label>
+              <select id="template-id">
+                <option>Generique - Defaut</option>
+                <option>Generique - Strict</option>
+                <option selected>NAKALA - Reference</option>
+                <option>NAKALA - Etendu</option>
+              </select>
+            </div>
+            <div class="template-row">
+              <button class="btn" type="button">Importer un modele (.yml)</button>
+              <span class="hint">Aucun fichier personnalise charge</span>
+            </div>
+            <div class="actions">
+              <a class="btn" href="tablerreur-televerser-hifi-v1.html">Reinitialiser</a>
+              <a id="btn-continue" class="btn primary" href="tablerreur-configurer-hifi-v3.html">Continuer vers Configurer</a>
+            </div>
+          </div>
+        </div>
+
+        <div class="card card-next">
+          <div class="head"><span>Prochaine etape</span><span id="next-step-tag">Configurer</span></div>
+          <div id="next-step-body" class="body todo-list">
+            <div class="todo-item"><b>1.</b> Verifier la detection d'entete et l'encodage.</div>
+            <div class="todo-item"><b>2.</b> Confirmer/choisir le template de validation.</div>
+            <div class="todo-item"><b>3.</b> Ouvrir <b>Configurer</b> pour ajuster les regles colonne par colonne.</div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div class="foot"><span>Flow navigation mockups - Tablerreur</span><span>Iteration navigation</span></div>
+  </div>
+
+  <script src="flow-common.js"></script>
+  <script>
+    (function initUploadStateMockup(){
+      const byId=(id)=>document.getElementById(id);
+      const blocks={
+        empty:byId("block-empty"),
+        loading:byId("block-loading"),
+        loaded:byId("block-loaded"),
+        error:byId("block-error")
+      };
+      const status=byId("upload-status");
+      const cardOptions=byId("card-options");
+      const cardTemplate=byId("card-template");
+      const stepConfigure=byId("step-configure");
+      const stepStatus=byId("step-status");
+      const btnContinue=byId("btn-continue");
+      const nextStepBody=byId("next-step-body");
+      const nextStepTag=byId("next-step-tag");
+      const kpiFile=byId("kpi-file");
+      const kpiRows=byId("kpi-rows");
+      const kpiCols=byId("kpi-cols");
+      const kpiHeader=byId("kpi-header");
+      const kpiTemplate=byId("kpi-template");
+      const stateButtons=[...document.querySelectorAll("[data-state-btn]")];
+
+      const loadedData={
+        file:"depot_nakala_2026_v4.xlsx",
+        rows:"523",
+        cols:"35",
+        header:"Ligne 1",
+        template:"nakala_baseline"
+      };
+
+      function toggleConfigureAccess(isUnlocked){
+        stepConfigure.classList.toggle("is-disabled",!isUnlocked);
+        stepConfigure.setAttribute("aria-disabled",isUnlocked?"false":"true");
+        if(isUnlocked)stepConfigure.removeAttribute("tabindex");
+        else stepConfigure.setAttribute("tabindex","-1");
+        stepConfigure.title=isUnlocked?"":"Import requis pour debloquer Configurer";
+
+        btnContinue.classList.toggle("is-disabled",!isUnlocked);
+        btnContinue.setAttribute("aria-disabled",isUnlocked?"false":"true");
+        if(isUnlocked)btnContinue.removeAttribute("tabindex");
+        else btnContinue.setAttribute("tabindex","-1");
+        btnContinue.title=isUnlocked?"":"Import requis pour continuer";
+
+        cardOptions.classList.toggle("is-locked",!isUnlocked);
+        cardTemplate.classList.toggle("is-locked",!isUnlocked);
+      }
+
+      function fillKpi(state){
+        if(state==="loaded"){
+          kpiFile.textContent=loadedData.file;
+          kpiRows.textContent=loadedData.rows;
+          kpiCols.textContent=loadedData.cols;
+          kpiHeader.textContent=loadedData.header;
+          kpiTemplate.textContent=loadedData.template;
+          return;
+        }
+        if(state==="error"){
+          kpiFile.textContent="import_echec.xlsx";
+          kpiRows.textContent="--";
+          kpiCols.textContent="--";
+          kpiHeader.textContent="non detecte";
+          kpiTemplate.textContent="non applique";
+          return;
+        }
+        if(state==="loading"){
+          kpiFile.textContent="depot_nakala_2026_v4.xlsx";
+          kpiRows.textContent="analyse...";
+          kpiCols.textContent="analyse...";
+          kpiHeader.textContent="analyse...";
+          kpiTemplate.textContent="analyse...";
+          return;
+        }
+        kpiFile.textContent="aucun";
+        kpiRows.textContent="--";
+        kpiCols.textContent="--";
+        kpiHeader.textContent="--";
+        kpiTemplate.textContent="--";
+      }
+
+      function fillNextStep(state){
+        if(state==="loaded"){
+          nextStepBody.innerHTML="" +
+            "<div class='todo-item'><b>1.</b> Verifier la detection d'entete et l'encodage.</div>" +
+            "<div class='todo-item'><b>2.</b> Confirmer/choisir le template de validation.</div>" +
+            "<div class='todo-item'><b>3.</b> Ouvrir <b>Configurer</b> pour ajuster les regles colonne par colonne.</div>";
+          return;
+        }
+        if(state==="loading"){
+          nextStepBody.innerHTML="<div class='todo-item'><b>Analyse en cours.</b> Patientez avant de passer a Configurer.</div>";
+          return;
+        }
+        if(state==="error"){
+          nextStepBody.innerHTML="<div class='todo-item'><b>Import bloque.</b> Corrigez le fichier puis relancez le televersement.</div>";
+          return;
+        }
+        nextStepBody.innerHTML="<div class='todo-item'><b>Action requise.</b> Chargez un fichier pour debloquer l'etape Configurer.</div>";
+      }
+
+      function setUploadState(state){
+        Object.entries(blocks).forEach(([key,node])=>{
+          node.hidden=key!==state;
+        });
+        stateButtons.forEach((btn)=>{
+          btn.classList.toggle("active",btn.dataset.stateBtn===state);
+          btn.setAttribute("aria-pressed",btn.dataset.stateBtn===state?"true":"false");
+        });
+
+        status.className="status-banner";
+        if(state==="loaded"){
+          status.classList.add("status-loaded");
+          status.textContent="Fichier charge et pret pour Configurer.";
+          stepStatus.innerHTML="<b>Etape 1/5</b> Import valide, passage vers Configurer autorise";
+          nextStepTag.textContent="Configurez";
+          toggleConfigureAccess(true);
+        }else if(state==="loading"){
+          status.classList.add("status-loading");
+          status.textContent="Import en cours. La navigation reste verrouillee.";
+          stepStatus.innerHTML="<b>Etape 1/5</b> Analyse du fichier en cours";
+          nextStepTag.textContent="En attente";
+          toggleConfigureAccess(false);
+        }else if(state==="error"){
+          status.classList.add("status-error");
+          status.textContent="Import en echec. Corrigez le fichier avant de continuer.";
+          stepStatus.innerHTML="<b>Etape 1/5</b> Import invalide, etapes suivantes verrouillees";
+          nextStepTag.textContent="Verrouillee";
+          toggleConfigureAccess(false);
+        }else{
+          status.classList.add("status-empty");
+          status.textContent="Aucun fichier charge. Demarrez par un televersement.";
+          stepStatus.innerHTML="<b>Etape 1/5</b> En attente de fichier";
+          nextStepTag.textContent="Verrouillee";
+          toggleConfigureAccess(false);
+        }
+
+        fillKpi(state);
+        fillNextStep(state);
+      }
+
+      stateButtons.forEach((btn)=>{
+        btn.addEventListener("click",()=>setUploadState(btn.dataset.stateBtn));
+      });
+
+      setUploadState("loaded");
+    })();
+  </script>
+</body>
+</html>
+
