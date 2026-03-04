@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="Mockup Tablerreur - Etape Correctifs (hygiene)" />
+  <meta name="description" content="Mockup Tablerreur - Etape Nettoyage (hygiene)" />
   <link rel="icon" href="data:," />
-  <title>Tablerreur Correctifs Mockup Hifi V3 Hygiene</title>
+  <title>Tablerreur Nettoyage Mockup Hifi V3 Hygiene</title>
   <link rel="stylesheet" href="flow-common.css" />
   <style>
     .correctifs-hygiene{display:grid;gap:12px}
@@ -106,20 +106,20 @@
       <span class="step-sep">></span>
       <a class="step-btn" href="tablerreur-configurer-hifi-v3.html"><span class="step-num">2</span> Configurer</a>
       <span class="step-sep">></span>
-      <a class="step-btn active" href="tablerreur-correctifs-hifi-v3-large.html"><span class="step-num">3</span> Correctifs</a>
+      <a class="step-btn active" href="tablerreur-correctifs-hifi-v3-large.html"><span class="step-num">3</span> Nettoyage</a>
       <span class="step-sep">></span>
-      <a class="step-btn" href="tablerreur-valider-hifi-v1.html"><span class="step-num">4</span> Valider</a>
+      <a class="step-btn" href="tablerreur-valider-hifi-v1.html"><span class="step-num">4</span> Correctifs</a>
       <span class="step-sep">></span>
       <a class="step-btn is-disabled" href="tablerreur-resultats-hifi-v1.html" aria-disabled="true" tabindex="-1"><span class="step-num">5</span> Resultats</a>
-      <span class="step-status"><b>Etape 3/5</b> Appliquez des correctifs d'hygiene avant la validation</span>
+      <span class="step-status"><b>Etape 3/5</b> Nettoyez les donnees avant l'etape Correctifs</span>
     </nav>
 
     <main class="layout correctifs-hygiene">
       <section class="hyg-grid">
         <div class="card">
-          <div class="head"><span>Correctifs disponibles</span><span>Application en lot</span></div>
+          <div class="head"><span>Regles de nettoyage</span><span>Application en lot</span></div>
           <div class="body">
-            <p class="intro"><b>Selectionnez les correctifs a appliquer avant la validation.</b> Cette etape traite en masse les problemes de forme (espaces, caracteres, encodage).</p>
+            <p class="intro"><b>Selectionnez les regles de nettoyage a appliquer avant les correctifs manuels.</b> Cette etape traite en masse les problemes de forme (espaces, caracteres, encodage).</p>
             <div class="fix-list">
               <label class="fix-item"><input id="fix-trim" type="checkbox" /><span><b>Supprimer les espaces en debut et fin</b><small>Supprime les espaces superflus avant et apres chaque valeur.</small></span></label>
               <label class="fix-item"><input id="fix-collapse" type="checkbox" /><span><b>Reduire les espaces multiples</b><small>Remplace toute sequence d'espaces par un seul espace.</small></span></label>
@@ -149,7 +149,7 @@
                   </div>
                   <div id="scope-cols-list" class="scope-cols"></div>
                 </div>
-                <span class="scope-hint">Cochez une ou plusieurs colonnes pour cibler le correctif.</span>
+                <span class="scope-hint">Cochez une ou plusieurs colonnes pour cibler le nettoyage.</span>
               </div>
             </div>
           </div>
@@ -159,26 +159,26 @@
           <div class="head"><span>Apercu des modifications</span><span id="preview-state">Mise a jour auto</span></div>
           <div class="body">
             <div class="preview-kpis">
-              <div class="preview-kpi"><span>Correctifs selectionnes</span><b id="kpi-selected">0</b></div>
+              <div class="preview-kpi"><span>Regles selectionnees</span><b id="kpi-selected">0</b></div>
               <div class="preview-kpi"><span>Cellules concernees</span><b id="kpi-impact">--</b></div>
               <div class="preview-kpi"><span>Lignes impactees</span><b id="kpi-confidence">--</b></div>
             </div>
             <div id="preview-list" class="preview-list">
-              <div class="preview-entry">Aucun correctif selectionne.</div>
+              <div class="preview-entry">Aucune regle selectionnee.</div>
             </div>
             <div class="strategy">
               <label>Mode d'application :</label>
               <div class="strategy-list">
-                <label class="strategy-item"><input id="mode-apply" type="radio" name="apply-mode" value="apply" checked /><span><b>Corriger automatiquement</b><small>Le correctif est applique en lot avant de passer a l'etape Valider.</small></span></label>
-                <label class="strategy-item"><input id="mode-flag" type="radio" name="apply-mode" value="flag" /><span><b>Marquer pour verifier</b><small>Chaque occurrence detectee sera envoyee dans Valider pour revision manuelle.</small></span></label>
+                <label class="strategy-item"><input id="mode-apply" type="radio" name="apply-mode" value="apply" checked /><span><b>Corriger automatiquement</b><small>Le nettoyage est applique en lot avant de passer a l'etape Correctifs.</small></span></label>
+                <label class="strategy-item"><input id="mode-flag" type="radio" name="apply-mode" value="flag" /><span><b>Marquer pour verifier</b><small>Chaque occurrence detectee sera envoyee dans Correctifs pour revision manuelle.</small></span></label>
               </div>
             </div>
             <div class="preview-actions-title">Validation</div>
             <div class="preview-actions">
-              <p id="action-hint" class="intro">Vous pouvez soit appliquer les correctifs selectionnes, soit passer directement a l'etape <b>Valider</b>.</p>
+              <p id="action-hint" class="intro">Vous pouvez soit appliquer le nettoyage selectionne, soit passer directement a l'etape <b>Correctifs</b>.</p>
               <div class="actions">
-                <a class="btn" href="tablerreur-valider-hifi-v1.html">Passer sans correctifs</a>
-                <button id="btn-apply-fixes" class="btn primary" type="button">Appliquer les correctifs et continuer</button>
+                <a class="btn" href="tablerreur-valider-hifi-v1.html">Passer sans nettoyage</a>
+                <button id="btn-apply-fixes" class="btn primary" type="button">Appliquer le nettoyage et continuer</button>
               </div>
             </div>
           </div>
@@ -186,7 +186,7 @@
       </section>
     </main>
 
-    <div class="foot"><span>Flow navigation mockups - Tablerreur</span><span>Correctifs Hygiene</span></div>
+    <div class="foot"><span>Flow navigation mockups - Tablerreur</span><span>Nettoyage Hygiene</span></div>
   </div>
 
   <script src="flow-common.js"></script>
@@ -312,12 +312,12 @@
         const mode=getMode();
         if(mode==="flag"){
           btnApplyFixes.textContent="Marquer pour verifier et continuer";
-          actionHint.innerHTML="Les occurrences detectees seront marquees pour controle detaille dans <b>Valider</b>.";
+          actionHint.innerHTML="Les occurrences detectees seront marquees pour controle detaille dans <b>Correctifs</b>.";
           return;
         }
 
-        btnApplyFixes.textContent="Appliquer les correctifs et continuer";
-        actionHint.innerHTML="Vous pouvez soit appliquer les correctifs selectionnes, soit passer directement a l'etape <b>Valider</b>.";
+        btnApplyFixes.textContent="Appliquer le nettoyage et continuer";
+        actionHint.innerHTML="Vous pouvez soit appliquer le nettoyage selectionne, soit passer directement a l'etape <b>Correctifs</b>.";
       }
 
       function refreshPreview(){
@@ -328,13 +328,13 @@
         syncModeUI();
 
         if(!selected.length){
-          previewState.textContent="Aucun correctif selectionne";
+          previewState.textContent="Aucune regle selectionnee";
           kpiImpact.textContent="--";
           kpiConfidence.textContent="--";
           previewList.innerHTML=[
             "<div class='preview-entry'><b>Perimetre:</b> "+scopeInfo.label+"</div>",
             "<div class='preview-entry'><b>Mode :</b> "+getModeLabel(mode)+"</div>",
-            "<div class='preview-entry'>Selectionnez au moins un correctif.</div>"
+            "<div class='preview-entry'>Selectionnez au moins une regle.</div>"
           ].join("");
           return;
         }
@@ -356,8 +356,8 @@
         previewState.textContent="Apercu mis a jour";
 
         const modeEntry=mode==="flag"
-          ? "<div class='preview-entry'><b>Mode :</b> les occurrences seront marquees pour verification dans l'etape Valider.</div>"
-          : "<div class='preview-entry'><b>Mode :</b> corrections automatiques appliquees avant l'etape Valider.</div>";
+          ? "<div class='preview-entry'><b>Mode :</b> les occurrences seront marquees pour verification dans l'etape Correctifs.</div>"
+          : "<div class='preview-entry'><b>Mode :</b> nettoyage automatique applique avant l'etape Correctifs.</div>";
 
         const scopeLabel=scopeAll.checked?scopeInfo.label:(scopeInfo.label+" ("+scopeInfo.count+"/"+scopeInfo.total+")");
         const entries=[

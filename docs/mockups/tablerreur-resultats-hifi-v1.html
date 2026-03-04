@@ -7,6 +7,14 @@
   <link rel="icon" href="data:," />
   <title>Tablerreur Resultats Mockup Hifi V1</title>
   <link rel="stylesheet" href="flow-common.css" />
+  <style>
+    .export-controls{display:grid;gap:8px}
+    .export-controls label{font-size:.72rem;color:var(--muted);font-weight:700}
+    .export-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .export-select{min-width:190px;border:1px solid var(--line);border-radius:8px;padding:7px 8px;font-size:.74rem;background:var(--surface);color:var(--text);font-family:inherit}
+    .export-note{font-size:.72rem;color:var(--muted)}
+    [data-theme="dark"] .export-select{background:#2b3d55;border-color:#5a7397;color:#e2e8f0;box-shadow:inset 0 0 0 1px rgba(147,197,253,.16)}
+  </style>
 </head>
 <body>
   <div class="shell">
@@ -31,9 +39,9 @@
       <span class="step-sep">></span>
       <a class="step-btn" href="tablerreur-configurer-hifi-v3.html"><span class="step-num">2</span> Configurer</a>
       <span class="step-sep">></span>
-      <a class="step-btn" href="tablerreur-correctifs-hifi-v3-large.html"><span class="step-num">3</span> Correctifs</a>
+      <a class="step-btn" href="tablerreur-correctifs-hifi-v3-large.html"><span class="step-num">3</span> Nettoyage</a>
       <span class="step-sep">></span>
-      <a class="step-btn" href="tablerreur-valider-hifi-v1.html"><span class="step-num">4</span> Valider</a>
+      <a class="step-btn" href="tablerreur-valider-hifi-v1.html"><span class="step-num">4</span> Correctifs</a>
       <span class="step-sep">></span>
       <a class="step-btn active" href="tablerreur-resultats-hifi-v1.html"><span class="step-num">5</span> Resultats</a>
       <span class="step-status"><b>Etape 5/5</b> Export et synthese finale</span>
@@ -52,10 +60,22 @@
         <div class="card">
           <div class="head"><span>Exports</span><span>Fichiers</span></div>
           <div class="body stack">
-            <div class="actions">
-              <button class="btn">Exporter CSV corrige</button>
-              <button class="btn">Exporter rapport JSON</button>
-              <button class="btn">Exporter rapport PDF</button>
+            <div class="export-controls">
+              <label for="export-format">Format d'export</label>
+              <div class="export-row">
+                <select id="export-format" class="export-select">
+                  <option value="csv" selected>CSV (.csv)</option>
+                  <option value="xlsx">Excel (.xlsx)</option>
+                  <option value="json">JSON (.json)</option>
+                  <option value="pdf">PDF (.pdf)</option>
+                </select>
+                <button class="btn primary" type="button">Exporter</button>
+              </div>
+              <div class="actions">
+                <button class="btn" type="button">Table corrigee</button>
+                <button class="btn" type="button">Rapport des anomalies</button>
+              </div>
+              <div class="export-note">Le format selectionne sera applique au prochain export.</div>
             </div>
             <div class="placeholder">Liens de telechargement et historique des exports.</div>
           </div>

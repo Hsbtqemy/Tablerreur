@@ -28,3 +28,34 @@ Points à traiter pour la version desktop Tauri (ou l’UI web partagée).
 ---
 
 *Ajouter les prochaines entrées backlog ci-dessous.*
+
+---
+
+## Export depuis l'etape Correctifs (decision validee)
+
+**Objectif :** permettre un export de travail directement depuis l'etape `Correctifs`,
+sans attendre la fin complete du workflow.
+
+### Portee UX
+
+- Export d'un tableur annote (erreurs/avertissements/corrections marquees)
+- Export d'un rapport d'anomalies
+- Choix du format (xlsx/csv/ods/json, et rapport json/csv/pdf selon besoin)
+- Choix du perimetre (`all`, `issues`, `blocking`, `touched`)
+
+### Position implementation
+
+- **Faisable** avec la stack actuelle (job + issues deja disponibles)
+- **Non implemente** a ce stade (maquette OK, branchement backend a faire)
+
+### Contrat backend minimal propose
+
+- `POST /api/jobs/{job_id}/exports/annotated`
+- `POST /api/jobs/{job_id}/exports/issues-report`
+
+Options a supporter :
+
+- `scope`: `all|issues|blocking|touched`
+- `include_visual_marks`: bool
+- `include_status_column`: bool
+- `only_open`: bool

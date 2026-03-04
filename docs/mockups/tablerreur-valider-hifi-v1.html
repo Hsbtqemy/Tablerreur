@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="Mockup Tablerreur - Etape Valider (detail anomalies)" />
+  <meta name="description" content="Mockup Tablerreur - Etape Correctifs (detail anomalies)" />
   <link rel="icon" href="data:," />
-  <title>Tablerreur Valider Mockup Hifi V1 (detail)</title>
+  <title>Tablerreur Correctifs Mockup Hifi V1 (detail)</title>
   <link rel="stylesheet" href="flow-common.css" />
   <style>
     .valider-v1{display:grid;gap:12px}
@@ -123,6 +123,15 @@
     .mini-table tbody tr[data-row][data-col]{cursor:pointer}
     .mini-table tbody tr[data-row][data-col]:hover{background:#eef4ff}
     .mini-table tbody tr.mini-selected{background:#e8f0ff}
+    .export-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+    .export-field{display:grid;gap:4px}
+    .export-field label{font-size:.68rem;color:var(--muted);font-weight:700}
+    .export-field select{border:1px solid var(--line);border-radius:7px;padding:7px 8px;font-size:.74rem;background:var(--surface);color:var(--text);font-family:inherit}
+    .export-options{grid-column:1 / -1;display:grid;gap:6px;padding:2px 0}
+    .export-option{display:flex;align-items:flex-start;gap:7px;font-size:.72rem;color:var(--text)}
+    .export-option input{margin-top:2px}
+    .export-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .export-status{font-size:.68rem;color:var(--muted)}
 
     [data-theme="dark"] .context,
     [data-theme="dark"] .advice,
@@ -130,7 +139,8 @@
     [data-theme="dark"] .manual textarea,
     [data-theme="dark"] details.list-panel{background:#2b3d55;border-color:#5a7397;box-shadow:inset 0 0 0 1px rgba(147,197,253,.14)}
     [data-theme="dark"] .manual textarea{box-shadow:inset 0 0 0 1px rgba(147,197,253,.16)}
-    [data-theme="dark"] .table-toolbar select{background:#2b3d55;border-color:#5a7397;box-shadow:inset 0 0 0 1px rgba(147,197,253,.16)}
+    [data-theme="dark"] .table-toolbar select,[data-theme="dark"] .export-field select{background:#2b3d55;border-color:#5a7397;box-shadow:inset 0 0 0 1px rgba(147,197,253,.16)}
+    [data-theme="dark"] .export-option{color:#e2e8f0}
     [data-theme="dark"] details.list-panel > summary,
     [data-theme="dark"] .mini-table th{background:#2b3d55;color:#bfdbfe}
     [data-theme="dark"] .mini-sort-btn:hover{background:rgba(147,197,253,.18)}
@@ -146,6 +156,7 @@
       .goal-top{align-items:flex-start}
       .table-toolbar{grid-template-columns:1fr}
       .sheet-wrap{max-height:320px}
+      .export-grid{grid-template-columns:1fr}
     }
   </style>
 </head>
@@ -155,7 +166,7 @@
       <div class="header-top">
         <div class="brand"><span>Tablerreur</span><span>Mapala</span></div>
         <div class="head-actions">
-          <div class="pills"><span class="pill">Mockup Flow</span><span class="pill">Etape 4 - Detail anomalies</span></div>
+          <div class="pills"><span class="pill">Mockup Flow</span><span class="pill">Etape 4 - Correctifs detail</span></div>
           <button id="theme-toggle" class="btn-theme-toggle" type="button" onclick="toggleTheme()">Mode sombre</button>
         </div>
       </div>
@@ -172,9 +183,9 @@
       <span class="step-sep">></span>
       <a class="step-btn" href="tablerreur-configurer-hifi-v3.html"><span class="step-num">2</span> Configurer</a>
       <span class="step-sep">></span>
-      <a class="step-btn" href="tablerreur-correctifs-hifi-v3-large.html"><span class="step-num">3</span> Correctifs</a>
+      <a class="step-btn" href="tablerreur-correctifs-hifi-v3-large.html"><span class="step-num">3</span> Nettoyage</a>
       <span class="step-sep">></span>
-      <a class="step-btn active" href="tablerreur-valider-hifi-v1.html"><span class="step-num">4</span> Valider</a>
+      <a class="step-btn active" href="tablerreur-valider-hifi-v1.html"><span class="step-num">4</span> Correctifs</a>
       <span class="step-sep">></span>
       <a id="step-results" class="step-btn is-disabled" href="tablerreur-resultats-hifi-v1.html" aria-disabled="true" tabindex="-1"><span class="step-num">5</span> Resultats</a>
       <span id="step-status" class="step-status"><b>Etape 4/5</b> Traitez les anomalies puis passez aux resultats</span>
@@ -283,7 +294,7 @@
               <label for="manual-value">Saisie manuelle</label>
               <textarea id="manual-value">2026-01-14</textarea>
               <div class="actions">
-                <button id="btn-apply-manual" class="btn" type="button">Valider la saisie</button>
+                <button id="btn-apply-manual" class="btn" type="button">Appliquer la saisie</button>
                 <button id="btn-cancel-manual" class="btn" type="button">Annuler</button>
               </div>
             </div>
@@ -318,10 +329,46 @@
             </table>
           </div>
         </details>
+
+        <details class="list-panel" open>
+          <summary>Exporter un tableur annote (travail)</summary>
+          <div class="list-body">
+            <div class="export-grid">
+              <div class="export-field">
+                <label for="export-format">Format</label>
+                <select id="export-format">
+                  <option value="xlsx" selected>Excel (.xlsx)</option>
+                  <option value="csv">CSV (.csv)</option>
+                  <option value="ods">OpenDocument (.ods)</option>
+                  <option value="json">JSON (.json)</option>
+                </select>
+              </div>
+              <div class="export-field">
+                <label for="export-scope">Perimetre</label>
+                <select id="export-scope">
+                  <option value="all" selected>Toutes les lignes</option>
+                  <option value="issues">Lignes avec anomalies ouvertes</option>
+                  <option value="blocking">Lignes avec anomalies bloquantes</option>
+                  <option value="touched">Lignes deja modifiees</option>
+                </select>
+              </div>
+              <div class="export-options">
+                <label class="export-option"><input id="export-color" type="checkbox" checked />Conserver le marquage visuel des cellules (erreur/avertissement/corrigee)</label>
+                <label class="export-option"><input id="export-status-col" type="checkbox" checked />Ajouter une colonne "Statut_correctif"</label>
+                <label class="export-option"><input id="export-only-open" type="checkbox" />N'inclure que les anomalies encore ouvertes dans le rapport joint</label>
+              </div>
+            </div>
+            <div class="export-actions">
+              <button id="btn-export-annotated" class="btn" type="button">Exporter tableur annote</button>
+              <button id="btn-export-errors" class="btn" type="button">Exporter rapport anomalies</button>
+              <span id="export-status" class="export-status">Pret a exporter.</span>
+            </div>
+          </div>
+        </details>
       </section>
     </main>
 
-    <div class="foot"><span>Flow navigation mockups - Tablerreur</span><span>Valider - detail anomalies (30 colonnes)</span></div>
+    <div class="foot"><span>Flow navigation mockups - Tablerreur</span><span>Correctifs - detail anomalies (30 colonnes)</span></div>
   </div>
 
   <script src="flow-common.js"></script>
@@ -371,6 +418,14 @@
       const listSummary=byId("list-summary");
       const miniSortButtons=[...document.querySelectorAll(".mini-sort-btn")];
       const miniBody=byId("mini-body");
+      const exportFormat=byId("export-format");
+      const exportScope=byId("export-scope");
+      const exportColor=byId("export-color");
+      const exportStatusCol=byId("export-status-col");
+      const exportOnlyOpen=byId("export-only-open");
+      const btnExportAnnotated=byId("btn-export-annotated");
+      const btnExportErrors=byId("btn-export-errors");
+      const exportStatus=byId("export-status");
 
       const targetColumn="Date_creation";
       const columns=[
@@ -527,6 +582,35 @@
         btnContinue.title=isUnlocked?"":"Corriger les anomalies bloquantes";
       }
 
+      function nowLabel(){
+        const now=new Date();
+        const hh=String(now.getHours()).padStart(2,"0");
+        const mm=String(now.getMinutes()).padStart(2,"0");
+        return hh+"h"+mm;
+      }
+
+      function updateExportStatusBase(){
+        const openCount=getOpenIssues().length;
+        const blockingCount=getOpenBlockingCount();
+        if(!openCount){
+          exportStatus.textContent="Pret: aucune anomalie ouverte a exporter.";
+          return;
+        }
+        exportStatus.textContent="Pret: "+openCount+" anomalies ouvertes ("+blockingCount+" bloquantes).";
+      }
+
+      function simulateExport(kind){
+        const format=(exportFormat.value||"xlsx").toUpperCase();
+        const scopeLabel=exportScope.options[exportScope.selectedIndex]?.textContent||"Toutes les lignes";
+        const opts=[];
+        if(exportColor.checked)opts.push("marquage visuel");
+        if(exportStatusCol.checked)opts.push("colonne statut");
+        if(exportOnlyOpen.checked)opts.push("ouvertes uniquement");
+        const optionsLabel=opts.length?opts.join(", "):"sans options";
+        const target=kind==="errors"?"Rapport anomalies":"Tableur annote";
+        exportStatus.textContent=target+" "+format+" pret - "+scopeLabel+" - "+optionsLabel+" ("+nowLabel()+").";
+      }
+
       function updateStateButtons(activeBtn){
         stateButtons.forEach((btn)=>{
           const on=btn.dataset.stateBtn===activeBtn;
@@ -656,7 +740,7 @@
         if(blocking===0){
           goalChip.className="goal-chip ready";
           goalChip.textContent="0 bloquante restante";
-          goalText.innerHTML="<b>Objectif atteint:</b> vous pouvez passer a l etape Valider.";
+          goalText.innerHTML="<b>Objectif atteint:</b> vous pouvez passer a l etape Resultats.";
           stepStatus.innerHTML="<b>Etape 4/5</b> Toutes les anomalies bloquantes sont corrigees";
           setValidationAccess(true);
         }else{
@@ -815,6 +899,7 @@
         updateGoalAndFlow();
         renderMiniList();
         updateNavButtons();
+        updateExportStatusBase();
       }
 
       function moveIssue(step){
@@ -964,6 +1049,11 @@
           renderMiniList();
         });
       });
+      [exportFormat,exportScope,exportColor,exportStatusCol,exportOnlyOpen].forEach((control)=>{
+        control.addEventListener("change",()=>updateExportStatusBase());
+      });
+      btnExportAnnotated.addEventListener("click",()=>simulateExport("annotated"));
+      btnExportErrors.addEventListener("click",()=>simulateExport("errors"));
 
       stateButtons.forEach((btn)=>{
         btn.addEventListener("click",()=>{
