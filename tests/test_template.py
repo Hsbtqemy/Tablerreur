@@ -198,6 +198,7 @@ class TestTemplateManagerListTemplates:
         ids = [t.id for t in templates]
         assert "generic_default" in ids
         assert "generic_strict" in ids
+        assert "manual" in ids
         assert "nakala_baseline" in ids
         assert "nakala_extended" in ids
 
@@ -254,6 +255,18 @@ class TestCompileConfig:
             nakala_client=mock_client,
         )
         assert config.get("_nakala_client") is mock_client
+
+    def test_compile_config_manual_whitelist(self):
+        mgr = TemplateManager()
+        config = mgr.compile_config(
+            generic_id="manual",
+            overlay_id=None,
+            column_names=["A", "B"],
+        )
+        assert config.get("_manual_rules_only") is True
+        assert "generic.required" in config.get("rules", {})
+        assert "generic.hygiene.leading_trailing_space" not in config.get("rules", {})
+        assert "A" in config.get("columns", {})
 
     def test_compile_config_unknown_template_falls_back(self, caplog):
         import logging

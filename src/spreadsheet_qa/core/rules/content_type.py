@@ -4,8 +4,9 @@ The user declares the expected data type for a column (e.g. "date", "integer")
 and this rule verifies every cell individually.  Complementary to SoftTypingRule
 which infers the dominant type statistically.
 
-Supported types: "integer", "decimal", "date", "email", "url".
+Supported types: "text", "integer", "decimal", "date", "email", "url".
 The rule is dormant when content_type is not configured.
+The "text" type accepts any non-empty value (documentation / explicit choice in the UI).
 """
 
 from __future__ import annotations
@@ -93,6 +94,11 @@ def _is_url(value: str) -> bool:
     return bool(_URL_RE.match(value.strip()))
 
 
+def _is_text(value: str) -> bool:
+    """Free text: any non-empty string after strip (no structural check)."""
+    return bool(value.strip())
+
+
 # Maps content_type key → (validator function, FR error message template)
 _VALIDATORS: dict[str, tuple] = {
     "integer": (
@@ -114,6 +120,10 @@ _VALIDATORS: dict[str, tuple] = {
     "url": (
         _is_url,
         "URL attendue, « {value} » n'est pas une URL valide.",
+    ),
+    "text": (
+        _is_text,
+        "Texte attendu, « {value} » est vide.",
     ),
 }
 

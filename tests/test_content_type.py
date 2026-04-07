@@ -224,6 +224,16 @@ class TestContentTypeRuleEmail:
         assert rule.check(df, "E", {"content_type": "email"}) == []
 
 
+class TestContentTypeRuleText:
+    def test_any_non_empty_accepted(self):
+        df = pd.DataFrame({"T": ["hello", "à b c", "123"]})
+        assert rule.check(df, "T", {"content_type": "text"}) == []
+
+    def test_empty_cells_ignored(self):
+        df = pd.DataFrame({"T": ["", None]})
+        assert rule.check(df, "T", {"content_type": "text"}) == []
+
+
 class TestContentTypeRuleUrl:
     def test_https_valid(self):
         df = pd.DataFrame({"U": ["https://example.com"]})

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Tablerreur · Mapala — Contrôle qualité et mapping</title>
-  <link rel="stylesheet" href="/static/style.css?v=20260407" />
+  <link rel="stylesheet" href="/static/style.css?v=20260414" />
 </head>
 <body>
   <header class="app-header app-header--tablerreur" id="app-header">
@@ -13,8 +13,8 @@
       <div class="app-header-right">
         <span class="app-header-name app-header-name--right">Mapala</span>
         <div class="app-header-actions">
-          <button id="shortcuts-help-btn" class="btn-icon btn-shortcuts-help" onclick="showShortcutsHelp()" title="Afficher les raccourcis clavier (?)">?</button>
-          <button id="theme-toggle" class="btn-icon btn-theme-toggle" onclick="toggleTheme()" title="Basculer le thème sombre / clair">🌙</button>
+          <button type="button" id="shortcuts-help-btn" class="btn-icon btn-shortcuts-help" onclick="showShortcutsHelp()" title="Afficher les raccourcis clavier (?)">?</button>
+          <button type="button" id="theme-toggle" class="btn-icon btn-theme-toggle" onclick="toggleTheme()" title="Basculer le thème sombre / clair">🌙</button>
         </div>
       </div>
     </div>
@@ -70,7 +70,7 @@
           <p>Déposez votre fichier ici ou</p>
           <label class="btn btn-secondary" for="file-input">Parcourir…</label>
           <input type="file" id="file-input" accept=".csv,.xlsx,.xls,.xlsm,.tsv,.txt" hidden />
-          <p class="upload-hint">Formats acceptés : CSV, XLSX, XLS, TSV</p>
+          <p class="upload-hint">Formats acceptés : CSV, XLSX, XLS, XLSM, TSV</p>
         </div>
         <div class="upload-file-info" id="upload-file-info" hidden>
           <span id="upload-filename"></span>
@@ -101,6 +101,9 @@
             <option value="latin-1">Latin-1</option>
             <option value="cp1252">CP1252</option>
           </select>
+
+          <label for="sheet-name" id="upload-sheet-label" hidden>Feuille (Excel) :</label>
+          <select id="sheet-name" class="input-sm" hidden aria-label="Feuille du classeur à importer"></select>
         </div>
       </div>
 
@@ -148,40 +151,10 @@
     <section id="step-configure" class="step-section" hidden>
       <h2>Configuration des colonnes</h2>
       <p class="step-desc">
-        Choisissez d’abord un <strong>modèle de validation</strong> (point de départ pour les règles),
-        puis cliquez sur un en-tête de colonne pour affiner. Cette étape est facultative — vous pouvez passer directement aux correctifs.
+        Choisissez une colonne dans la liste à gauche : les <strong>contraintes</strong> se règlent dans le panneau de droite (modèle en tête).
+        Un <strong>exemple de ligne</strong> permet de vérifier le contenu du fichier ; l’aperçu tableau complet reste disponible plus bas.
+        Cette étape est facultative — vous pouvez passer directement aux correctifs.
       </p>
-
-      <div class="card mt-2">
-        <h3>Modèle de validation</h3>
-        <p class="format-hint" style="margin-bottom: 0.75rem;">
-          Les réglages par colonne restent modifiables ; un fichier <strong>.yml</strong> personnalisé se charge via « Importer un modèle » ci-dessous.
-          Si vous changez de modèle après avoir enregistré des colonnes, une confirmation vous rappelle que <strong>vos réglages enregistrés sont conservés</strong> et que le nouveau modèle complète le reste.
-        </p>
-        <div class="form-grid">
-          <label for="template-id">Choisir un modèle :</label>
-          <select id="template-id" class="input-sm">
-            <option value="generic_default">Générique — Défaut</option>
-            <option value="generic_strict">Générique — Strict</option>
-            <option value="generic_default" data-overlay="nakala_baseline">NAKALA — Référence</option>
-            <option value="generic_default" data-overlay="nakala_extended">NAKALA — Étendu</option>
-          </select>
-        </div>
-      </div>
-
-      <!-- Barre d'actions modèle -->
-      <div class="template-actions">
-        <button class="btn btn-secondary" id="btn-import-template" onclick="triggerImportTemplate()">
-          📂 Importer un modèle
-        </button>
-        <button class="btn btn-secondary" id="btn-export-template" onclick="exportTemplate()">
-          💾 Exporter la configuration
-        </button>
-      </div>
-      <input type="file" id="import-template-input" accept=".yml,.yaml" hidden />
-
-      <!-- Toast notifications -->
-      <div id="template-toast" class="template-toast" hidden role="status" aria-live="polite"></div>
 
       <div id="cells-edited-banner" class="cells-edited-banner" hidden>
         Des cellules ont été modifiées manuellement.
@@ -189,48 +162,117 @@
       </div>
 
       <div class="card preview-table-wrapper">
-        <div class="preview-table-toolbar">
-          <button class="btn btn-secondary btn-sm btn-toggle-special-chars" onclick="toggleSpecialChars()" title="Rendre visibles les espaces et caractères invisibles">¶ Caractères spéciaux</button>
-          <div class="undo-redo-bar">
-            <button id="btn-undo-configure" class="btn btn-secondary btn-sm" onclick="undoFix()" disabled title="Annuler la dernière modification (Ctrl+Z)">↩ Annuler</button>
-            <button id="btn-redo-configure" class="btn btn-secondary btn-sm" onclick="redoFix()" disabled title="Rétablir (Ctrl+Shift+Z)">↪ Rétablir</button>
+        <div class="configure-preview-layout">
+          <div class="configure-context-column">
+            <div class="preview-table-toolbar">
+              <button class="btn btn-secondary btn-sm btn-toggle-special-chars" onclick="toggleSpecialChars()" title="Rendre visibles les espaces et caractères invisibles">¶ Caractères spéciaux</button>
+              <div class="undo-redo-bar">
+                <button id="btn-undo-configure" class="btn btn-secondary btn-sm" onclick="undoFix()" disabled title="Annuler la dernière modification (Ctrl+Z)">↩ Annuler</button>
+                <button id="btn-redo-configure" class="btn btn-secondary btn-sm" onclick="redoFix()" disabled title="Rétablir (Ctrl+Shift+Z)">↪ Rétablir</button>
+              </div>
+            </div>
+            <div class="configure-list-sample-row">
+              <aside class="column-nav-wrap" aria-labelledby="column-nav-heading">
+                <h3 id="column-nav-heading" class="column-nav-heading">Colonnes</h3>
+                <p class="column-nav-hint">Cliquez pour définir les contraintes dans le panneau de droite.</p>
+                <div class="column-nav-toolbar">
+                  <label class="checkbox-label column-nav-sample-toggle" for="show-sample-values">
+                    <input type="checkbox" id="show-sample-values" />
+                    Afficher les valeurs d’exemple
+                  </label>
+                </div>
+                <div id="sample-row-line-picker" class="sample-row-toolbar" hidden>
+                  <label for="sample-row-select">Ligne d’exemple :</label>
+                  <select id="sample-row-select" class="input-sm" aria-label="Choisir une ligne d’exemple"></select>
+                </div>
+                <div id="column-nav-list" class="column-nav-list" role="navigation" aria-label="Colonnes du tableur"></div>
+                <p class="column-nav-sample-hint format-hint" hidden>Aperçu des valeurs du fichier (hors ligne d’en-tête). Vérifiez qu’il s’agit du bon jeu de données.</p>
+              </aside>
+            </div>
           </div>
-        </div>
-        <div id="preview-scroll-top" class="preview-scroll-top" hidden aria-hidden="true">
-          <div id="preview-scroll-top-inner" class="preview-scroll-top-inner"></div>
-        </div>
-        <div id="preview-table-container">
-          <div id="preview-loading" class="msg-info" style="padding: 1rem 0;">Chargement de l'aperçu…</div>
-          <table id="preview-table" class="preview-table" hidden>
-            <thead><tr id="preview-header"></tr></thead>
-            <tbody id="preview-body"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- Column config panel — static HTML, populated dynamically -->
-      <div id="column-config-panel" class="card mt-2" hidden>
+          <div class="configure-config-column">
+            <div class="configure-template-strip">
+              <h3 class="configure-template-strip-title">Modèle de validation</h3>
+              <p class="format-hint configure-template-strip-hint">Commencez ici : le modèle fixe les règles par défaut du fichier. <strong>« Aucun (manuel) »</strong> n’active que ce que vous configurez par colonne (pas d’hygiène ni de doublons automatiques). Un <strong>.yml</strong> personnalisé s’importe ci-dessous. Changer de modèle après des enregistrements peut demander confirmation : vos réglages par colonne restent prioritaires là où vous les avez définis.</p>
+              <div class="configure-template-strip-row">
+                <label for="template-id">Modèle :</label>
+                <select id="template-id" class="input-sm configure-template-select">
+                  <option value="manual" selected>— Aucun (tout configurer à la main) —</option>
+                  <option value="generic_default">Générique — Défaut</option>
+                  <option value="generic_strict">Générique — Strict</option>
+                  <option value="generic_default" data-overlay="nakala_baseline">NAKALA — Référence</option>
+                  <option value="generic_default" data-overlay="nakala_extended">NAKALA — Étendu</option>
+                </select>
+              </div>
+              <div class="template-actions">
+                <button class="btn btn-secondary" id="btn-import-template" onclick="triggerImportTemplate()">
+                  📂 Importer un modèle
+                </button>
+                <button class="btn btn-secondary" id="btn-export-template" onclick="exportTemplate()">
+                  💾 Exporter la configuration
+                </button>
+              </div>
+              <input type="file" id="import-template-input" accept=".yml,.yaml" hidden />
+              <div id="template-toast" class="template-toast" hidden role="status" aria-live="polite"></div>
+            </div>
+            <div id="configure-config-placeholder" class="configure-config-placeholder mt-2">
+              <p class="configure-config-placeholder-kicker">Contraintes par colonne</p>
+              <p class="configure-config-placeholder-text">Sélectionnez une colonne dans la liste de gauche pour afficher les contraintes ici.</p>
+              <ol class="configure-config-placeholder-steps">
+                <li>Choisir le modèle ci-dessus (ou laisser « Manuel »)</li>
+                <li>Choisir une colonne dans la liste</li>
+                <li>Régler les blocs (base, format, listes…)</li>
+                <li>Vérifier l’aperçu puis enregistrer avec <strong>Appliquer</strong></li>
+              </ol>
+            </div>
+            <!-- Column config panel — static HTML, populated dynamically -->
+            <div id="column-config-panel" class="column-config-panel" hidden>
         <div class="col-config-header">
           <h3 class="col-config-title">Configuration — <span id="col-config-name"></span></h3>
           <button class="btn-icon" onclick="closeColumnConfig()" title="Fermer">✕</button>
         </div>
-        <div class="col-config-grid">
+        <div class="col-config-scroll">
+        <div class="col-config-intro">
+        <p class="col-config-flow-hint">Ordre conseillé : <strong>Base</strong> (nature, obligation) → <strong>Format</strong> → listes ou détection si besoin, puis l’aperçu en bas avant <strong>Appliquer</strong>.</p>
+        <div id="col-config-onboarding" class="col-config-onboarding" role="note">
+          <p class="col-config-onboarding-text">Vous n’êtes pas obligé de tout remplir. Seules les colonnes que vous modifiez <strong>surchargent</strong> le modèle choisi en haut de cette colonne. Avec le modèle <strong>« Aucun (manuel) »</strong>, seules vos contraintes par colonne s’appliquent (pas de règles implicites du fichier).</p>
+          <button type="button" class="btn-link col-config-onboarding-dismiss" onclick="dismissColConfigOnboarding()" id="col-config-onboarding-dismiss">Ne plus afficher</button>
+        </div>
+        <div class="col-config-expert-toolbar" aria-label="Affichage des sections de contraintes">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="expandAllColConfigSections()">Tout afficher</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="collapseAllColConfigSections()">Tout réduire</button>
+        </div>
+        </div>
+        <div class="col-config-sections">
+          <details class="col-config-section" id="col-config-section-essential" open>
+            <summary class="col-config-section-summary">Base · nature, obligation, structure</summary>
+            <div class="col-config-section-body col-config-grid">
+          <div class="col-config-field">
+            <label for="cfg-content-type">Nature des données</label>
+            <p class="format-hint col-config-field-lead">Indiquez d’abord <strong>ce que contient</strong> la colonne (texte, nombre, date…). Les contraintes de <strong>forme précise</strong> (ISBN, date ISO stricte, regex) se règlent dans le bloc <strong>« Format »</strong> plus bas.</p>
+            <select id="cfg-content-type" class="input-sm">
+              <option value="">— Aucune contrainte de nature —</option>
+              <optgroup label="Texte">
+                <option value="text">Texte libre</option>
+              </optgroup>
+              <optgroup label="Nombres">
+                <option value="integer">Nombre entier</option>
+                <option value="decimal">Nombre décimal</option>
+              </optgroup>
+              <optgroup label="Temps">
+                <option value="date">Date (tolérant : ISO, JJ/MM/AAAA, année seule…)</option>
+              </optgroup>
+              <optgroup label="Liens et identifiants">
+                <option value="email">Adresse e-mail</option>
+                <option value="url">URL (http, https ou www)</option>
+              </optgroup>
+            </select>
+          </div>
           <div class="col-config-field col-config-full">
             <label class="checkbox-label">
               <input type="checkbox" id="cfg-required" />
               Valeur obligatoire (les cellules vides seront signalées)
             </label>
-          </div>
-          <div class="col-config-field">
-            <label for="cfg-content-type">Type de contenu</label>
-            <select id="cfg-content-type" class="input-sm">
-              <option value="">Aucun</option>
-              <option value="integer">Nombre entier</option>
-              <option value="decimal">Nombre décimal</option>
-              <option value="date">Date</option>
-              <option value="email">Adresse e-mail</option>
-              <option value="url">URL</option>
-            </select>
           </div>
           <div class="col-config-field col-config-checks">
             <label class="checkbox-label">
@@ -242,18 +284,24 @@
               Retours à la ligne autorisés
             </label>
           </div>
+            </div>
+          </details>
+          <details class="col-config-section" id="col-config-section-format" open>
+            <summary class="col-config-section-summary">Format · préréglage, longueur, casse</summary>
+            <div class="col-config-section-body col-config-grid">
+            <p class="col-config-section-lead format-hint">Affine la <strong>forme exacte</strong> attendue (norme, masque, regex). Exemple : nature <strong>Date</strong> ci-dessus = contrôle large ; format <strong>ISO stricte</strong> ici = une seule forme autorisée. Les deux peuvent se combiner.</p>
           <div class="col-config-field">
-            <label for="cfg-format-preset">Format attendu</label>
+            <label for="cfg-format-preset">Préréglage de format</label>
             <select id="cfg-format-preset" class="input-sm format-preset-select">
-              <option value="">Aucun</option>
-              <optgroup label="── Formats généraux">
+              <option value="">— Aucun préréglage —</option>
+              <optgroup label="Formats généraux">
                 <option value="year">Année (YYYY)</option>
                 <option value="yes_no">Oui / Non</option>
                 <option value="alphanum">Alphanumérique</option>
                 <option value="letters_only">Lettres uniquement</option>
                 <option value="positive_int">Nombre entier positif</option>
               </optgroup>
-              <optgroup label="── Identifiants &amp; liens">
+              <optgroup label="Identifiants et liens">
                 <option value="doi">DOI</option>
                 <option value="orcid">ORCID</option>
                 <option value="ark">ARK</option>
@@ -262,21 +310,21 @@
                 <option value="isbn10">ISBN-10</option>
                 <option value="email_preset">Adresse e-mail</option>
               </optgroup>
-              <optgroup label="── Dates">
+              <optgroup label="Dates (masque)">
                 <option value="w3cdtf">Date W3C-DTF (YYYY, YYYY-MM ou YYYY-MM-DD)</option>
                 <option value="iso_date">Date ISO stricte (YYYY-MM-DD)</option>
                 <option value="date_fr">Date française (JJ/MM/AAAA)</option>
               </optgroup>
-              <optgroup label="── Codes &amp; référentiels">
+              <optgroup label="Codes et référentiels">
                 <option value="lang_iso639">Langue ISO 639 (fr, en, de…)</option>
                 <option value="bcp47">Langue BCP 47 (fr-FR, en-GB…)</option>
                 <option value="country_iso">Pays ISO 3166 (FR, DE, US…)</option>
               </optgroup>
-              <optgroup label="── Nombres &amp; mesures">
+              <optgroup label="Nombres et mesures">
                 <option value="latitude">Latitude (-90 à 90)</option>
                 <option value="longitude">Longitude (-180 à 180)</option>
               </optgroup>
-              <optgroup label="── Avancé">
+              <optgroup label="Avancé">
                 <option value="custom">Personnalisé (regex)…</option>
               </optgroup>
             </select>
@@ -285,7 +333,6 @@
               <input type="text" id="cfg-regex" class="input-sm" placeholder="Expression régulière (ex : ^\d{5}$)" />
               <span class="format-hint">Laissez vide pour désactiver. Utilisez une expression régulière Python.</span>
             </div>
-            <!-- Oui / Non — champs personnalisés (visible uniquement si preset = yes_no) -->
             <div id="cfg-yesno-wrap" class="yesno-wrap" hidden>
               <p class="format-hint yesno-intro">Personnalisez les valeurs acceptées (séparées par des virgules).</p>
               <div class="yesno-row">
@@ -301,11 +348,11 @@
             </div>
           </div>
           <div class="col-config-field">
-            <label>Longueur min / max</label>
+            <span class="col-config-field-heading">Longueur min / max</span>
             <div class="length-row">
-              <input type="number" id="cfg-min-length" class="input-sm input-num" placeholder="Min" min="0" />
+              <input type="number" id="cfg-min-length" class="input-sm input-num" placeholder="Min" min="0" aria-label="Longueur minimale" />
               <span class="length-sep">–</span>
-              <input type="number" id="cfg-max-length" class="input-sm input-num" placeholder="Max" min="0" />
+              <input type="number" id="cfg-max-length" class="input-sm input-num" placeholder="Max" min="0" aria-label="Longueur maximale" />
             </div>
           </div>
           <div class="col-config-field">
@@ -323,6 +370,11 @@
               <option value="title">Titre</option>
             </select>
           </div>
+            </div>
+          </details>
+          <details class="col-config-section" id="col-config-section-lists">
+            <summary class="col-config-section-summary">Listes · valeurs autorisées, vocabulaires NAKALA</summary>
+            <div class="col-config-section-body col-config-grid">
           <div class="col-config-field col-config-full">
             <label for="cfg-allowed-values" id="cfg-av-label">Valeurs autorisées (une par ligne)</label>
             <div id="cfg-av-locked-msg" class="av-locked-msg" hidden>
@@ -339,7 +391,33 @@
               <input type="file" id="import-vocabulary-input" accept=".yml,.yaml,.txt" hidden />
             </div>
           </div>
-          <!-- Vocabulaire distant NAKALA -->
+          <div class="col-config-field col-config-full list-section">
+            <div class="list-section-header">Liste (valeurs multiples)</div>
+            <span class="format-hint">Laissez vide si la colonne ne contient pas de listes.</span>
+            <div class="list-section-body">
+              <div class="list-sep-row">
+                <label for="cfg-list-separator">Séparateur :</label>
+                <input type="text" id="cfg-list-separator" class="input-sm input-sep"
+                  maxlength="3" placeholder="ex : |" />
+              </div>
+              <div id="cfg-list-options" class="list-options">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="cfg-list-unique" />
+                  Éléments uniques dans la liste
+                </label>
+                <label class="checkbox-label">
+                  <input type="checkbox" id="cfg-list-no-empty" checked />
+                  Interdire les éléments vides
+                </label>
+                <div class="list-minmax-row">
+                  <label for="cfg-list-min-items">Nombre min :</label>
+                  <input type="number" id="cfg-list-min-items" class="input-sm input-num" min="1" placeholder="—" />
+                  <label for="cfg-list-max-items">max :</label>
+                  <input type="number" id="cfg-list-max-items" class="input-sm input-num" min="1" placeholder="—" />
+                </div>
+              </div>
+            </div>
+          </div>
           <div class="col-config-field col-config-full">
             <label for="cfg-nakala-vocabulary">Vocabulaire distant (NAKALA)</label>
             <div class="nakala-vocab-row">
@@ -352,7 +430,6 @@
               <button class="btn btn-sm" onclick="loadNakalaVocabulary()">Charger</button>
             </div>
             <div id="nakala-vocab-status" class="format-hint" hidden></div>
-            <!-- Sélecteur de sous-ensemble vocabulaire NAKALA -->
             <div id="cfg-vocab-selector" class="vocab-selector" hidden>
               <div class="vocab-selector-header">
                 <span id="vocab-selector-count"></span>
@@ -369,7 +446,11 @@
               </div>
             </div>
           </div>
-          <!-- Valeurs rares -->
+            </div>
+          </details>
+          <details class="col-config-section" id="col-config-section-heuristics">
+            <summary class="col-config-section-summary">Détection · valeurs rares et similaires</summary>
+            <div class="col-config-section-body col-config-grid">
           <div class="col-config-field col-config-full">
             <label class="checkbox-label">
               <input type="checkbox" id="cfg-detect-rare" />
@@ -389,7 +470,6 @@
               </div>
             </div>
           </div>
-          <!-- Valeurs similaires -->
           <div class="col-config-field col-config-full">
             <label class="checkbox-label">
               <input type="checkbox" id="cfg-detect-similar" />
@@ -404,41 +484,18 @@
               </div>
             </div>
           </div>
-          <!-- List section -->
-          <div class="col-config-field col-config-full list-section">
-            <div class="list-section-header">── Liste (valeurs multiples)</div>
-            <span class="format-hint">Laissez vide si la colonne ne contient pas de listes.</span>
-            <div class="list-section-body">
-              <div class="list-sep-row">
-                <label for="cfg-list-separator">Séparateur :</label>
-                <input type="text" id="cfg-list-separator" class="input-sm input-sep"
-                  maxlength="3" placeholder="ex : |" />
-              </div>
-              <div id="cfg-list-options" class="list-options">
-                <label class="checkbox-label">
-                  <input type="checkbox" id="cfg-list-unique" />
-                  Éléments uniques dans la liste
-                </label>
-                <label class="checkbox-label">
-                  <input type="checkbox" id="cfg-list-no-empty" checked />
-                  Interdire les éléments vides
-                </label>
-                <div class="list-minmax-row">
-                  <label>Nombre min :</label>
-                  <input type="number" id="cfg-list-min-items" class="input-sm input-num" min="1" placeholder="—" />
-                  <label>max :</label>
-                  <input type="number" id="cfg-list-max-items" class="input-sm input-num" min="1" placeholder="—" />
-                </div>
-              </div>
             </div>
-          </div>
+          </details>
         </div>
+        <div class="col-config-verify">
         <!-- Aperçu de l'impact sur les données réelles -->
         <div class="rule-preview-section">
-          <div class="rule-preview-header">── Aperçu sur vos données</div>
+          <div class="rule-preview-header">Vérification sur l’aperçu (ligne d’exemple)</div>
           <div id="rule-preview" class="rule-preview-body">
             <span class="rule-preview-empty">Aucune contrainte configurée.</span>
           </div>
+        </div>
+        </div>
         </div>
 
         <div class="col-config-actions">
@@ -446,6 +503,25 @@
           <span id="col-config-saved" class="col-config-saved" hidden>✓ Enregistré</span>
         </div>
       </div>
+          </div>
+        </div>
+      </div>
+
+      <details id="configure-full-preview-details" class="configure-full-preview-strip mt-2">
+        <summary>Aperçu tableau complet (30 lignes)</summary>
+        <div class="configure-preview-table-inner">
+          <div id="preview-scroll-top" class="preview-scroll-top" hidden aria-hidden="true">
+            <div id="preview-scroll-top-inner" class="preview-scroll-top-inner"></div>
+          </div>
+          <div id="preview-table-container">
+            <div id="preview-loading" class="msg-info" style="padding: 1rem 0;">Chargement de l'aperçu…</div>
+            <table id="preview-table" class="preview-table" hidden>
+              <thead><tr id="preview-header"></tr></thead>
+              <tbody id="preview-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </details>
 
       <!-- Résumé de config (affiché avant de passer aux correctifs) -->
       <div id="config-summary" class="card mt-2" hidden>
@@ -608,27 +684,30 @@
       <div class="card mt-2">
         <h3>Problèmes détectés</h3>
         <div class="filter-bar">
-          <label>Sévérité :
+          <div class="filter-field">
+            <label for="filter-severity">Sévérité</label>
             <select id="filter-severity" onchange="loadProblems(1)">
               <option value="">Toutes les sévérités</option>
               <option value="ERROR">Erreur</option>
               <option value="WARNING">Avertissement</option>
               <option value="SUSPICION">Suspicion</option>
             </select>
-          </label>
-          <label>Filtrer par colonne :
+          </div>
+          <div class="filter-field">
+            <label for="filter-column">Filtrer par colonne</label>
             <select id="filter-column" onchange="loadProblems(1)">
               <option value="">Toutes les colonnes</option>
             </select>
-          </label>
-          <label>Statut :
+          </div>
+          <div class="filter-field">
+            <label for="filter-status">Statut</label>
             <select id="filter-status" onchange="loadProblems(1)">
               <option value="">Tous les statuts</option>
               <option value="OPEN">Ouverts</option>
               <option value="IGNORED">Ignorés</option>
               <option value="EXCEPTED">Exclus</option>
             </select>
-          </label>
+          </div>
           <button class="btn btn-secondary btn-sm btn-toggle-special-chars" onclick="toggleSpecialChars()" title="Rendre visibles les espaces et caractères invisibles">¶ Caractères spéciaux</button>
           <button id="btn-revalidate" class="btn btn-secondary btn-sm" onclick="revalidate()" title="Relancer la validation sur les données actuelles">🔄 Re-valider</button>
         </div>

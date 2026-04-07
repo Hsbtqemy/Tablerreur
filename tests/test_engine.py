@@ -53,6 +53,19 @@ class TestValidationEngine:
         rule_ids = {i.rule_id for i in issues}
         assert "generic.hygiene.leading_trailing_space" not in rule_ids
 
+    def test_manual_rules_only_skips_unlisted_rules(self, simple_df):
+        config = {
+            "_manual_rules_only": True,
+            "rules": {
+                "generic.required": {"enabled": True},
+            },
+            "columns": {"Titre": {}},
+        }
+        issues = self.engine.validate(simple_df, columns=["Titre"], config=config).issues
+        rule_ids = {i.rule_id for i in issues}
+        assert "generic.hygiene.leading_trailing_space" not in rule_ids
+        assert "generic.pseudo_missing" not in rule_ids
+
     def test_empty_dataframe_returns_no_issues(self, empty_df):
         issues = self.engine.validate(empty_df, config={}).issues
         assert issues == []

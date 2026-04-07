@@ -37,7 +37,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from spreadsheet_qa.core.commands import Command
-from spreadsheet_qa.core.dataset import DatasetLoader
+from spreadsheet_qa.core.dataset import DatasetLoader, list_workbook_sheet_names_from_bytes
 from spreadsheet_qa.core.engine import RuleFailure, ValidationEngine
 from spreadsheet_qa.core.exporters import CSVExporter, IssuesCSVExporter, TXTReporter, XLSXExporter
 from spreadsheet_qa.core.models import IssueStatus, Severity
@@ -66,7 +66,9 @@ _CORS_ORIGINS: list[str] = (
 _CORS_ALLOW_CREDENTIALS = "*" not in _CORS_ORIGINS
 
 # Extensions et types MIME acceptés pour l'upload
-_ALLOWED_EXTENSIONS = {".csv", ".xlsx", ".xls"}
+_ALLOWED_EXTENSIONS = {".csv", ".xlsx", ".xls", ".xlsm"}
+# Classeurs pour lesquels une feuille peut être choisie à l'import
+_WORKBOOK_EXTENSIONS = frozenset({".xlsx", ".xls", ".xlsm"})
 # Les navigateurs et outils envoient parfois "application/octet-stream" pour
 # les fichiers binaires — on accepte ce type générique et on se fie à l'extension.
 _ALLOWED_CONTENT_TYPES = {
@@ -74,6 +76,7 @@ _ALLOWED_CONTENT_TYPES = {
     "application/csv",
     "text/plain",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-excel.sheet.macroenabled.12",
     "application/vnd.ms-excel",
     "application/octet-stream",
     "binary/octet-stream",
@@ -438,6 +441,31 @@ async def preview_rule(job_id: str, request: Request):
 # ---------------------------------------------------------------------------
 
 
+@app.post("/api/inspect-workbook-sheets")
+async def inspect_workbook_sheets(file: UploadFile = File(...)):
+    """Liste les feuilles d'un classeur Excel (sélection avant téléversement du job)."""
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in _WORKBOOK_EXTENSIONS:
+        raise HTTPException(
+            status_code=415,
+            detail="Ce service ne s'applique qu'aux classeurs Excel (XLSX, XLS, XLSM).",
+        )
+    ct = (file.content_type or "").split(";")[0].strip().lower()
+    if ct and ct not in _ALLOWED_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=415,
+            detail="Type de fichier non pris en charge. Formats acceptés : CSV, XLSX, XLS, XLSM.",
+        )
+    content = await file.read()
+    if len(content) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Le fichier dépasse la taille maximale autorisée ({_MAX_UPLOAD_MB} Mo).",
+        )
+    sheets = list_workbook_sheet_names_from_bytes(content, file.filename or "")
+    return {"sheets": sheets}
+
+
 @app.post("/api/jobs")
 async def create_job(
     file: UploadFile = File(...),
@@ -446,6 +474,7 @@ async def create_job(
     encoding: str = Form(""),
     template_id: str = Form("generic_default"),
     overlay_id: str = Form(""),
+    sheet_name: str = Form(""),
 ):
     """Upload a file and create a new validation job."""
     # --- Validation du type de fichier (avant création du job) ---
@@ -453,13 +482,13 @@ async def create_job(
     if suffix not in _ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=415,
-            detail="Type de fichier non pris en charge. Formats acceptés : CSV, XLSX, XLS.",
+            detail="Type de fichier non pris en charge. Formats acceptés : CSV, XLSX, XLS, XLSM.",
         )
     ct = (file.content_type or "").split(";")[0].strip().lower()
     if ct and ct not in _ALLOWED_CONTENT_TYPES:
         raise HTTPException(
             status_code=415,
-            detail="Type de fichier non pris en charge. Formats acceptés : CSV, XLSX, XLS.",
+            detail="Type de fichier non pris en charge. Formats acceptés : CSV, XLSX, XLS, XLSM.",
         )
 
     # --- Lecture et vérification de la taille ---
@@ -484,12 +513,16 @@ async def create_job(
     # Load with DatasetLoader
     try:
         loader = DatasetLoader()
-        df, meta = loader.load(
-            path=upload_path,
-            header_row=max(0, header_row - 1),
-            encoding_hint=encoding or None,
-            delimiter_hint=delimiter or None,
-        )
+        load_kw: dict[str, Any] = {
+            "path": upload_path,
+            "header_row": max(0, header_row - 1),
+            "encoding_hint": encoding or None,
+            "delimiter_hint": delimiter or None,
+        }
+        if suffix in _WORKBOOK_EXTENSIONS:
+            sn = (sheet_name or "").strip()
+            load_kw["sheet_name"] = sn if sn else 0
+        df, meta = loader.load(**load_kw)
     except Exception as exc:
         job.state = JobState.ERROR
         job.error_msg = str(exc)

@@ -25,16 +25,117 @@ const state = {
   loadedVocabLabels: {},  // cache { vocabName: {uri: labelFR} } for datatypes display
   ruleFailures: [],       // échecs d'exécution de règles (moteur)
   exportWarnings: [],     // avertissements_export (fichiers téléchargeables)
+  /** Lignes d’aperçu Configurer (GET /preview) pour l’exemple vertical */
+  previewDataRows: null,
+  /** Index 0-based de la ligne affichée pour les valeurs d’exemple dans la liste des colonnes */
+  sampleRowIndex: 0,
+  /** Afficher nom + valeur par colonne dans la liste (préférence UX) */
+  showSampleValues: false,
 };
 let _currentProblemsTotal = 0;
+
+/** Clés legacy (sessionStorage) — migrées vers ACTIVE_JOB_KEY */
+const SESSION_JOB_ID_KEY = 'tablerreur.job_id';
+const SESSION_COLUMNS_KEY = 'tablerreur.columns';
+/** Persistance du job courant : localStorage (fiable en WebView Tauri ; sessionStorage peut être vide ou bloqué). */
+const ACTIVE_JOB_KEY = 'tablerreur.active_job.v1';
+
+function _persistJobSession() {
+  if (!state.jobId) return;
+  const payload = JSON.stringify({
+    jobId: state.jobId,
+    columns: state.columns || [],
+    filename: state.filename || null,
+  });
+  try {
+    localStorage.setItem(ACTIVE_JOB_KEY, payload);
+  } catch (_) { /* quota / mode privé */ }
+  try {
+    sessionStorage.setItem(SESSION_JOB_ID_KEY, state.jobId);
+    sessionStorage.setItem(SESSION_COLUMNS_KEY, JSON.stringify(state.columns || []));
+  } catch (_) { /* secondaire */ }
+}
+
+/** Réinjecte jobId / colonnes après rechargement de page (mémoire JS vide, session serveur encore valide). */
+function _restoreJobSession() {
+  if (state.jobId) return;
+  try {
+    const blob = localStorage.getItem(ACTIVE_JOB_KEY);
+    if (blob) {
+      let data = null;
+      try {
+        data = JSON.parse(blob);
+      } catch {
+        localStorage.removeItem(ACTIVE_JOB_KEY);
+      }
+      if (data) {
+        const jid = data.jobId != null ? String(data.jobId).trim() : '';
+        if (jid.length > 0) {
+          state.jobId = jid;
+          state.columns = Array.isArray(data.columns) ? data.columns.map((c) => String(c)) : [];
+          if (typeof data.filename === 'string' && data.filename.length > 0) {
+            state.filename = data.filename;
+          }
+          return;
+        }
+      }
+    }
+  } catch (_) { /* ignore */ }
+  try {
+    const jid = sessionStorage.getItem(SESSION_JOB_ID_KEY);
+    if (!jid) return;
+    state.jobId = jid;
+    const raw = sessionStorage.getItem(SESSION_COLUMNS_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) state.columns = arr.map((c) => String(c));
+    }
+    _persistJobSession();
+  } catch (_) {
+    state.jobId = null;
+    _clearJobSessionStorage();
+  }
+}
+
+function _clearJobSessionStorage() {
+  try {
+    localStorage.removeItem(ACTIVE_JOB_KEY);
+  } catch (_) { /* ignore */ }
+  try {
+    sessionStorage.removeItem(SESSION_JOB_ID_KEY);
+    sessionStorage.removeItem(SESSION_COLUMNS_KEY);
+  } catch (_) { /* ignore */ }
+}
+
+/** Conteneur liste colonnes (id unique dans la page). */
+function _getColumnNavEl() {
+  return document.getElementById('column-nav-list');
+}
+
+function _setColumnNavNoSessionMessage() {
+  const el = _getColumnNavEl();
+  if (!el) return;
+  el.removeAttribute('aria-busy');
+  el.innerHTML = `
+    <div class="column-nav-no-session">
+      <p class="format-hint msg-warning" role="status">
+        Aucun fichier actif : rien n’a été téléversé sur le serveur pour cette page, ou la session a expiré (délai, rechargement, redémarrage).
+      </p>
+      <p class="column-nav-no-session-actions mt-2">
+        <button type="button" class="btn btn-primary btn-sm" onclick="goToStep('upload')">Aller à l’étape Téléverser</button>
+      </p>
+    </div>`;
+}
 
 const UX_PREFS_KEY = 'tablerreur.web.ux_prefs.v1';
 const UX_PREFS_DEFAULTS = {
   header_row: 1,
   delimiter: '',
   encoding: '',
-  template_key: 'generic_default::',
+  template_key: 'manual::',
   show_special_chars: false,
+  show_sample_values: false,
+  hide_column_config_onboarding: false,
 };
 
 let _uxPrefs = _loadUxPrefs();
@@ -45,7 +146,11 @@ function _loadUxPrefs() {
     if (!raw) return { ...UX_PREFS_DEFAULTS };
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') return { ...UX_PREFS_DEFAULTS };
-    return { ...UX_PREFS_DEFAULTS, ...parsed };
+    const merged = { ...UX_PREFS_DEFAULTS, ...parsed };
+    if (merged.template_key == null || String(merged.template_key).trim() === '') {
+      merged.template_key = UX_PREFS_DEFAULTS.template_key;
+    }
+    return merged;
   } catch (_) {
     return { ...UX_PREFS_DEFAULTS };
   }
@@ -69,8 +174,12 @@ function _markUserColumnConfigSaved() {
 }
 
 function _templateOptionKey(optionEl) {
-  if (!optionEl) return 'generic_default::';
-  return `${optionEl.value || 'generic_default'}::${optionEl.dataset.overlay || ''}`;
+  if (!optionEl) return 'manual::';
+  const v =
+    optionEl.value != null && String(optionEl.value).trim() !== ''
+      ? String(optionEl.value).trim()
+      : 'manual';
+  return `${v}::${optionEl.dataset.overlay || ''}`;
 }
 
 function _findTemplateOptionByKey(selectEl, key) {
@@ -112,9 +221,16 @@ function _initUxPrefs() {
   }
 
   if (templateEl) {
+    const manualOpt = _findTemplateOptionByKey(templateEl, 'manual::');
     const savedOpt = _findTemplateOptionByKey(templateEl, _uxPrefs.template_key);
     if (savedOpt) {
       savedOpt.selected = true;
+    } else if (manualOpt) {
+      manualOpt.selected = true;
+      _setUxPref('template_key', 'manual::');
+    } else if (templateEl.options.length) {
+      templateEl.options[0].selected = true;
+      _setUxPref('template_key', _templateOptionKey(templateEl.selectedOptions[0]));
     }
     /** Clé du modèle avant interaction (liste déroulante) — pour annuler ou comparer au `change`. */
     let templateKeyBeforeChange = _templateOptionKey(templateEl.selectedOptions[0]);
@@ -171,6 +287,76 @@ function _initUxPrefs() {
 
   state.showSpecialChars = !!_uxPrefs.show_special_chars;
   _syncSpecialCharsButtons();
+
+  state.showSampleValues = _uxPrefs.show_sample_values === true;
+  const showSampleEl = document.getElementById('show-sample-values');
+  if (showSampleEl) {
+    showSampleEl.checked = state.showSampleValues;
+    showSampleEl.addEventListener('change', () => {
+      state.showSampleValues = showSampleEl.checked;
+      _setUxPref('show_sample_values', state.showSampleValues);
+      _updateSampleLinePickerVisibility();
+      _buildColumnNavList(state.columns);
+    });
+  }
+  _updateSampleLinePickerVisibility();
+
+  if (_uxPrefs.hide_column_config_onboarding) {
+    const ob = document.getElementById('col-config-onboarding');
+    if (ob) ob.hidden = true;
+  }
+}
+
+/** Compte les « blocs » de réglages actifs pour l’indicateur liste colonnes (aligné sur _isColumnConfigured). */
+function _countColumnSettings(cfg) {
+  if (!cfg) return 0;
+  let n = 0;
+  if (cfg.required) n++;
+  if (cfg.content_type) n++;
+  if (cfg.unique) n++;
+  if (cfg.multiline_ok) n++;
+  if (cfg.format_preset || cfg.regex) n++;
+  if (cfg.min_length != null || cfg.max_length != null) n++;
+  if (cfg.forbidden_chars) n++;
+  if (cfg.expected_case) n++;
+  if (Array.isArray(cfg.allowed_values) && cfg.allowed_values.length) n++;
+  if (cfg.nakala_vocabulary) n++;
+  if (cfg.list_separator) n++;
+  if (cfg.detect_rare_values) n++;
+  if (cfg.detect_similar_values) n++;
+  return n;
+}
+
+function _columnNavStatLabel(cfg) {
+  const n = _countColumnSettings(cfg);
+  if (n === 0) {
+    try {
+      const t = _templateSelectionFromUI();
+      if (t.template_id === 'manual') {
+        return 'Aucune surcharge (manuel)';
+      }
+    } catch (_) { /* ignore */ }
+    return 'Défaut du modèle';
+  }
+  return n === 1 ? '1 réglage actif' : `${n} réglages actifs`;
+}
+
+function expandAllColConfigSections() {
+  document.querySelectorAll('#column-config-panel details.col-config-section').forEach(d => {
+    d.open = true;
+  });
+}
+
+function collapseAllColConfigSections() {
+  document.querySelectorAll('#column-config-panel details.col-config-section').forEach(d => {
+    d.open = false;
+  });
+}
+
+function dismissColConfigOnboarding() {
+  const el = document.getElementById('col-config-onboarding');
+  if (el) el.hidden = true;
+  _setUxPref('hide_column_config_onboarding', true);
 }
 
 async function _extractErrorDetail(resp, fallback = 'Erreur') {
@@ -297,7 +483,7 @@ function _updateStepCoach() {
       break;
     case 'configure':
       _setStepCoach(
-        '<strong>Étape 2/5.</strong> Cliquez sur un en-tête pour définir des règles. Double-cliquez une cellule pour corriger manuellement.'
+        '<strong>Étape 2/5.</strong> En haut à droite : <strong>modèle de validation</strong>, puis une colonne dans la liste pour les contraintes. Double-cliquez une cellule pour corriger manuellement.'
       );
       break;
     case 'fixes':
@@ -356,6 +542,7 @@ function goToStep(step) {
   if (btn) btn.classList.add('active');
 
   state.currentStep = step;
+  document.body.classList.toggle('tablerreur-step-configure', step === 'configure');
 
   // Step-specific init
   if (step === 'upload') {
@@ -379,6 +566,12 @@ function enableStep(step) {
   if (btn) btn.disabled = false;
 }
 
+/** Désactive l’étape Configurer si aucun job (ex. session expirée, 404 preview). */
+function _syncConfigureStepButton() {
+  const btn = document.querySelector('#step-nav [data-step="configure"]');
+  if (btn) btn.disabled = !state.jobId;
+}
+
 // ---------------------------------------------------------------------------
 // Navigation par onglet : Tablerreur ↔ Mapala
 // ---------------------------------------------------------------------------
@@ -393,6 +586,7 @@ function switchApp(appName) {
   if (appName === 'mapala') {
     tablerreur.hidden = true;
     mapala.hidden = false;
+    document.body.classList.remove('tablerreur-step-configure');
     tabT.classList.remove('active');
     tabM.classList.add('active');
     if (header) {
@@ -402,6 +596,7 @@ function switchApp(appName) {
   } else {
     mapala.hidden = true;
     tablerreur.hidden = false;
+    document.body.classList.toggle('tablerreur-step-configure', state.currentStep === 'configure');
     tabT.classList.add('active');
     tabM.classList.remove('active');
     if (header) {
@@ -418,12 +613,15 @@ function switchApp(appName) {
 const fileInput = document.getElementById('file-input');
 const uploadZone = document.getElementById('upload-zone');
 _initUxPrefs();
+_restoreJobSession();
+_syncConfigureStepButton();
 _updateStepCoach();
 
 fileInput?.addEventListener('change', () => {
   if (fileInput.files.length) {
     _resetUploadPreviewStepUI();
     showFileSelected(fileInput.files[0].name);
+    void _refreshWorkbookSheetOptions(fileInput.files[0]);
   }
 });
 
@@ -440,11 +638,68 @@ uploadZone?.addEventListener('drop', e => {
     fileInput.files = e.dataTransfer.files;
     _resetUploadPreviewStepUI();
     showFileSelected(e.dataTransfer.files[0].name);
+    void _refreshWorkbookSheetOptions(e.dataTransfer.files[0]);
   }
 });
 
 /** Nombre de lignes affichées dans l’aperçu après téléversement (étape Téléverser). */
 const UPLOAD_PREVIEW_ROWS = 10;
+
+function _hideUploadSheetSelector() {
+  const lab = document.getElementById('upload-sheet-label');
+  const sel = document.getElementById('sheet-name');
+  if (lab) lab.hidden = true;
+  if (sel) {
+    sel.hidden = true;
+    sel.innerHTML = '';
+  }
+}
+
+/**
+ * Pour un classeur Excel, remplit le sélecteur de feuille (requête avant le POST /api/jobs).
+ * Affiché dès qu’au moins une feuille est détectée (y compris une seule).
+ * @param {File} file
+ */
+async function _refreshWorkbookSheetOptions(file) {
+  if (!file?.name) {
+    _hideUploadSheetSelector();
+    return;
+  }
+  const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+  if (!['.xlsx', '.xls', '.xlsm'].includes(ext)) {
+    _hideUploadSheetSelector();
+    return;
+  }
+  const lab = document.getElementById('upload-sheet-label');
+  const sel = document.getElementById('sheet-name');
+  if (!lab || !sel) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const resp = await fetch('/api/inspect-workbook-sheets', { method: 'POST', body: fd });
+    if (!resp.ok) {
+      _hideUploadSheetSelector();
+      return;
+    }
+    const data = await resp.json();
+    const sheets = data.sheets || [];
+    sel.innerHTML = '';
+    if (sheets.length === 0) {
+      _hideUploadSheetSelector();
+      return;
+    }
+    sheets.forEach(name => {
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      sel.appendChild(opt);
+    });
+    lab.hidden = false;
+    sel.hidden = false;
+  } catch {
+    _hideUploadSheetSelector();
+  }
+}
 
 function _showUploadPreviewChrome() {
   const card = document.getElementById('upload-preview-card');
@@ -491,6 +746,7 @@ function _resetUploadPreviewStepUI() {
     btnS.removeAttribute('aria-busy');
   }
   if (btnC) btnC.hidden = true;
+  _hideUploadSheetSelector();
 }
 
 /**
@@ -582,7 +838,7 @@ async function _renderUploadPreview() {
 }
 
 function uploadContinueToConfigure() {
-  enableStep('configure');
+  _syncConfigureStepButton();
   goToStep('configure');
 }
 
@@ -605,15 +861,19 @@ function clearFile() {
 function _templateSelectionFromUI() {
   const sel = document.getElementById('template-id');
   if (!sel) {
-    return { template_id: 'generic_default', overlay_id: null, overlayForm: '' };
+    return { template_id: 'manual', overlay_id: null, overlayForm: '' };
   }
   const opt = sel.selectedOptions[0];
-  const template_id = opt?.value || 'generic_default';
+  const template_id =
+    opt?.value != null && String(opt.value).trim() !== ''
+      ? String(opt.value).trim()
+      : 'manual';
   const overlayRaw = String(opt?.dataset?.overlay ?? '').trim();
+  const isManual = template_id === 'manual';
   return {
     template_id,
-    overlay_id: overlayRaw ? overlayRaw : null,
-    overlayForm: overlayRaw,
+    overlay_id: isManual || !overlayRaw ? null : overlayRaw,
+    overlayForm: isManual ? '' : overlayRaw,
   };
 }
 
@@ -671,6 +931,11 @@ async function doUpload() {
   const tmpl = _templateSelectionFromUI();
   formData.append('template_id', tmpl.template_id);
   formData.append('overlay_id', tmpl.overlayForm);
+  const sheetLab = document.getElementById('upload-sheet-label');
+  const sheetSel = document.getElementById('sheet-name');
+  if (sheetLab && !sheetLab.hidden && sheetSel && !sheetSel.hidden && sheetSel.options.length) {
+    formData.append('sheet_name', sheetSel.value);
+  }
 
   try {
     const resp = await fetch('/api/jobs', { method: 'POST', body: formData });
@@ -685,6 +950,7 @@ async function doUpload() {
     state.rows = data.rows;
     state.cols = data.cols;
     state.columns = data.columns || [];
+    _persistJobSession();
     state.columnConfig = {};
     state.userColumnConfigSaved = false;
     state.activeColumn = null;
@@ -724,7 +990,7 @@ async function doUpload() {
     }
 
     state.uploadPreviewReady = true;
-    enableStep('configure');
+    _syncConfigureStepButton();
     _showUploadPreviewChrome();
     await _renderUploadPreview();
     document.getElementById('upload-action-row')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -884,19 +1150,168 @@ if (_previewScrollTopEl && _previewTableContainerEl) {
   window.addEventListener('resize', _refreshPreviewTopScrollbar);
 }
 
+function _populateSampleRowSelect(rowCount) {
+  const sel = document.getElementById('sample-row-select');
+  if (!sel) return;
+  sel.innerHTML = '';
+  if (rowCount < 1) {
+    sel.disabled = true;
+    return;
+  }
+  sel.disabled = false;
+  for (let i = 0; i < rowCount; i++) {
+    const opt = document.createElement('option');
+    opt.value = String(i);
+    opt.textContent = `Ligne ${i + 1} (données)`;
+    sel.appendChild(opt);
+  }
+  const idx = Math.min(state.sampleRowIndex ?? 0, rowCount - 1);
+  state.sampleRowIndex = Math.max(0, idx);
+  sel.value = String(state.sampleRowIndex);
+}
+
+/** Affiche le sélecteur de ligne et l’aide uniquement lorsque les valeurs d’exemple sont visibles et qu’il y a des lignes. */
+function _updateSampleLinePickerVisibility() {
+  const wrap = document.getElementById('sample-row-line-picker');
+  const hint = document.querySelector('.column-nav-sample-hint');
+  const hasRows = state.previewDataRows && state.previewDataRows.length > 0;
+  const show = state.showSampleValues && hasRows;
+  if (wrap) wrap.hidden = !show;
+  if (hint) hint.hidden = !show;
+}
+
+document.getElementById('sample-row-select')?.addEventListener('change', e => {
+  state.sampleRowIndex = parseInt(e.target.value, 10) || 0;
+  _buildColumnNavList(state.columns);
+});
+
+/** Met en surbrillance l’entrée correspondante dans la liste verticale des colonnes. */
+function _syncColumnNavSelection(colName) {
+  document.querySelectorAll('#column-nav-list .column-nav-item').forEach(btn => {
+    const match = Boolean(colName && btn.dataset.column === colName);
+    btn.classList.toggle('column-nav-selected', match);
+    if (match) btn.scrollIntoView({ block: 'nearest' });
+  });
+}
+
+function _buildColumnNavList(columns) {
+  const nav = _getColumnNavEl();
+  if (!nav) return;
+  nav.innerHTML = '';
+  const cols = Array.isArray(columns)
+    ? columns.map((c) => String(c))
+    : [];
+  const showValues =
+    state.showSampleValues &&
+    state.previewDataRows &&
+    state.previewDataRows.length > 0;
+  const row = showValues ? state.previewDataRows[state.sampleRowIndex] : null;
+
+  try {
+  cols.forEach((col, i) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'column-nav-item';
+    btn.dataset.column = col;
+    const cfg = state.columnConfig[col];
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'column-nav-name';
+    nameSpan.textContent = col;
+    const statSpan = document.createElement('span');
+    statSpan.className = 'column-nav-stat';
+    statSpan.textContent = _columnNavStatLabel(cfg);
+    btn.appendChild(nameSpan);
+    btn.appendChild(statSpan);
+    btn.addEventListener('click', () => openColumnConfig(col));
+    if (_isColumnConfigured(col)) {
+      btn.classList.add('column-nav-configured');
+      btn.title = _buildConfigSummary(cfg);
+    } else {
+      btn.title = 'Configurer cette colonne';
+    }
+
+    if (showValues && row) {
+      const wrap = document.createElement('div');
+      wrap.className = 'column-nav-row';
+      const valEl = document.createElement('span');
+      valEl.className = 'column-nav-value';
+      const raw = row[i] ?? '';
+      valEl.dataset.rawText = String(raw);
+      if (state.showSpecialChars) {
+        valEl.innerHTML = renderVisibleChars(raw);
+      } else {
+        valEl.textContent = raw;
+      }
+      wrap.appendChild(btn);
+      wrap.appendChild(valEl);
+      nav.appendChild(wrap);
+    } else {
+      nav.appendChild(btn);
+    }
+  });
+
+  if (cols.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'column-nav-empty format-hint';
+    empty.textContent = 'Aucune colonne dans le fichier importé.';
+    nav.appendChild(empty);
+  }
+
+  if (state.activeColumn && cols.includes(state.activeColumn)) {
+    _syncColumnNavSelection(state.activeColumn);
+  }
+  nav.setAttribute('aria-busy', 'false');
+  } catch (err) {
+    console.error('column-nav-list', err);
+    nav.innerHTML =
+      '<p class="msg-error" role="alert">Impossible d’afficher la liste des colonnes. Rechargez la page ou réessayez.</p>';
+    nav.setAttribute('aria-busy', 'false');
+  }
+}
+
 async function loadPreview() {
-  if (!state.jobId) return;
+  _restoreJobSession();
+  _syncConfigureStepButton();
+  if (!state.jobId) {
+    _setColumnNavNoSessionMessage();
+    return;
+  }
 
   const loadingEl = document.getElementById('preview-loading');
   const tableEl = document.getElementById('preview-table');
   const headerRow = document.getElementById('preview-header');
   const body = document.getElementById('preview-body');
+  if (!loadingEl || !tableEl || !headerRow || !body) {
+    console.error('loadPreview: éléments #preview-loading / #preview-table introuvables');
+    const colNavMissing = _getColumnNavEl();
+    if (colNavMissing) {
+      colNavMissing.removeAttribute('aria-busy');
+      colNavMissing.innerHTML =
+        '<p class="msg-error" role="alert">Interface d’aperçu incomplète. Rechargez la page.</p>';
+    }
+    return;
+  }
 
+  loadingEl.className = 'msg-info';
+  loadingEl.textContent = 'Chargement de l\'aperçu…';
   loadingEl.hidden = false;
   tableEl.hidden = true;
   if (_previewScrollTopEl) _previewScrollTopEl.hidden = true;
   headerRow.innerHTML = '';
   body.innerHTML = '';
+  const colNavEl = _getColumnNavEl();
+  if (colNavEl) {
+    colNavEl.setAttribute('aria-busy', 'true');
+    colNavEl.innerHTML =
+      '<p class="column-nav-loading format-hint">Chargement des colonnes…</p>';
+  }
+  state.previewDataRows = null;
+  const sampleSel = document.getElementById('sample-row-select');
+  if (sampleSel) {
+    sampleSel.innerHTML = '';
+    sampleSel.disabled = true;
+  }
+  _updateSampleLinePickerVisibility();
 
   try {
     const [previewResp, configResp] = await Promise.all([
@@ -904,7 +1319,14 @@ async function loadPreview() {
       fetch(`/api/jobs/${state.jobId}/column-config`),
     ]);
 
-    if (!previewResp.ok) throw new Error('Impossible de charger l\'aperçu');
+    if (!previewResp.ok) {
+      if (previewResp.status === 404) {
+        state.jobId = null;
+        _clearJobSessionStorage();
+        _syncConfigureStepButton();
+      }
+      throw new Error('Impossible de charger l\'aperçu');
+    }
     const preview = await previewResp.json();
 
     if (configResp.ok) {
@@ -912,8 +1334,17 @@ async function loadPreview() {
       state.columnConfig = configData.columns || {};
     }
 
+    let rawCols = Array.isArray(preview.columns) ? preview.columns : [];
+    if (rawCols.length === 0 && Array.isArray(state.columns) && state.columns.length > 0) {
+      rawCols = state.columns;
+    }
+    state.columns = rawCols.map((c) => String(c));
+    state.previewDataRows = Array.isArray(preview.rows) ? preview.rows : [];
+    _populateSampleRowSelect(state.previewDataRows.length);
+    _updateSampleLinePickerVisibility();
+
     // Build header row
-    preview.columns.forEach(col => {
+    state.columns.forEach((col) => {
       const th = document.createElement('th');
       th.textContent = col;
       th.dataset.column = col;
@@ -927,16 +1358,21 @@ async function loadPreview() {
       headerRow.appendChild(th);
     });
 
+    _buildColumnNavList(state.columns);
+
+    _persistJobSession();
+
     // Build body rows
-    preview.rows.forEach((row, rowIdx) => {
+    state.previewDataRows.forEach((row, rowIdx) => {
       const tr = document.createElement('tr');
-      row.forEach((cell, i) => {
+      const cells = Array.isArray(row) ? row : [];
+      cells.forEach((cell, i) => {
         const td = document.createElement('td');
         const rawVal = cell ?? '';
         td.dataset.rawText = rawVal;
         td.dataset.colIdx = i;
         td.dataset.row = rowIdx;
-        td.dataset.col = preview.columns[i] || '';
+        td.dataset.col = state.columns[i] || '';
         if (state.showSpecialChars) {
           td.innerHTML = renderVisibleChars(rawVal);
         } else {
@@ -951,6 +1387,19 @@ async function loadPreview() {
     tableEl.hidden = false;
     _refreshPreviewTopScrollbar();
 
+    if (state.activeColumn && state.columns.includes(state.activeColumn)) {
+      const col = state.activeColumn;
+      const colIdx = state.columns.indexOf(col);
+      document.querySelectorAll('#preview-header th').forEach(th => {
+        th.classList.toggle('column-selected', th.dataset.column === col);
+      });
+      document.querySelectorAll('#preview-body tr').forEach(tr => {
+        tr.querySelectorAll('td').forEach((td, i) => {
+          td.classList.toggle('column-selected', i === colIdx);
+        });
+      });
+    }
+
     // Apply cell-level issue highlights if validation has already been run
     if (state.validationDone) _applyCellIssueHighlights();
 
@@ -958,12 +1407,25 @@ async function loadPreview() {
     if (_pendingCellNav) {
       const nav = _pendingCellNav;
       _pendingCellNav = null;
-      setTimeout(() => _highlightCell(nav.rowIdx, nav.colName), 50);
+      setTimeout(() => {
+        const sel = document.getElementById('sample-row-select');
+        if (sel && !sel.disabled && nav.rowIdx >= 0 && nav.rowIdx < sel.options.length) {
+          state.sampleRowIndex = nav.rowIdx;
+          sel.value = String(nav.rowIdx);
+          _buildColumnNavList(state.columns);
+        }
+        _highlightCell(nav.rowIdx, nav.colName);
+      }, 50);
     }
   } catch (err) {
     loadingEl.textContent = 'Erreur lors du chargement de l\'aperçu : ' + err.message;
     loadingEl.className = 'msg-error';
     if (_previewScrollTopEl) _previewScrollTopEl.hidden = true;
+    const colNavErr = _getColumnNavEl();
+    if (colNavErr) {
+      colNavErr.setAttribute('aria-busy', 'false');
+      colNavErr.innerHTML = `<p class="msg-error" role="alert">Impossible de charger les colonnes. ${esc(err.message)}</p>`;
+    }
   }
 }
 
@@ -1006,6 +1468,7 @@ function openColumnConfig(colName) {
   document.querySelectorAll('#preview-header th').forEach(th => {
     th.classList.toggle('column-selected', th.dataset.column === colName);
   });
+  _syncColumnNavSelection(colName);
   // Highlight column cells
   const colIdx = state.columns.indexOf(colName);
   document.querySelectorAll('#preview-body tr').forEach(tr => {
@@ -1107,8 +1570,10 @@ function openColumnConfig(colName) {
   savedEl.hidden = true;
 
   // Show panel
+  const ph = document.getElementById('configure-config-placeholder');
+  if (ph) ph.hidden = true;
   document.getElementById('column-config-panel').hidden = false;
-  document.getElementById('column-config-panel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  document.querySelector('.configure-config-column')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
   // Trigger initial preview
   _schedulePreviewRule();
@@ -1120,7 +1585,10 @@ function closeColumnConfig() {
 
   document.querySelectorAll('#preview-header th').forEach(th => th.classList.remove('column-selected'));
   document.querySelectorAll('#preview-body td').forEach(td => td.classList.remove('column-selected'));
+  _syncColumnNavSelection(null);
   document.getElementById('column-config-panel').hidden = true;
+  const ph = document.getElementById('configure-config-placeholder');
+  if (ph) ph.hidden = false;
 }
 
 function _saveCurrentPanelToState() {
@@ -1239,8 +1707,15 @@ function _buildConfigSummary(cfg) {
   const parts = [];
   if (cfg.required) parts.push('Obligatoire');
   if (cfg.content_type) {
-    const types = { integer: 'Nombre entier', decimal: 'Nombre décimal', date: 'Date', email: 'E-mail', url: 'URL' };
-    parts.push('Type : ' + (types[cfg.content_type] || cfg.content_type));
+    const types = {
+      text: 'Texte libre',
+      integer: 'Nombre entier',
+      decimal: 'Nombre décimal',
+      date: 'Date',
+      email: 'E-mail',
+      url: 'URL',
+    };
+    parts.push('Nature : ' + (types[cfg.content_type] || cfg.content_type));
   }
   if (cfg.unique) parts.push('Valeurs uniques');
   if (cfg.format_preset && cfg.format_preset !== 'custom') {
@@ -1267,6 +1742,8 @@ function _buildConfigSummary(cfg) {
   }
   if (cfg.list_separator) parts.push(`Liste (séparateur "${cfg.list_separator}")`);
   if (cfg.detect_rare_values) parts.push('Valeurs rares détectées');
+  if (cfg.detect_similar_values) parts.push('Valeurs similaires détectées');
+  if (cfg.nakala_vocabulary) parts.push('Vocabulaire NAKALA');
   return parts.join(' · ') || 'Configurée';
 }
 
@@ -1276,13 +1753,26 @@ function _updateColumnBadges() {
 
 function _updateConfiguredMarker(colName) {
   const th = document.querySelector(`#preview-header th[data-column="${CSS.escape(colName)}"]`);
-  if (!th) return;
-  if (_isColumnConfigured(colName)) {
-    th.classList.add('column-configured');
-    th.title = _buildConfigSummary(state.columnConfig[colName]);
-  } else {
-    th.classList.remove('column-configured');
-    th.title = 'Cliquer pour configurer cette colonne';
+  if (th) {
+    if (_isColumnConfigured(colName)) {
+      th.classList.add('column-configured');
+      th.title = _buildConfigSummary(state.columnConfig[colName]);
+    } else {
+      th.classList.remove('column-configured');
+      th.title = 'Cliquer pour configurer cette colonne';
+    }
+  }
+  const navBtn = document.querySelector(
+    `#column-nav-list .column-nav-item[data-column="${CSS.escape(colName)}"]`
+  );
+  if (navBtn) {
+    const cfg = state.columnConfig[colName];
+    navBtn.classList.toggle('column-nav-configured', _isColumnConfigured(colName));
+    navBtn.title = _isColumnConfigured(colName)
+      ? _buildConfigSummary(cfg)
+      : 'Configurer cette colonne';
+    const stat = navBtn.querySelector('.column-nav-stat');
+    if (stat) stat.textContent = _columnNavStatLabel(cfg);
   }
 }
 
@@ -1302,6 +1792,8 @@ function _isColumnConfigured(colName) {
     cfg.expected_case ||
     (Array.isArray(cfg.allowed_values) && cfg.allowed_values.length) ||
     cfg.list_separator ||
+    cfg.nakala_vocabulary ||
+    cfg.detect_rare_values ||
     cfg.detect_similar_values
   );
 }
@@ -2299,6 +2791,7 @@ function _syncVocabToState() {
 // ---------------------------------------------------------------------------
 function resetApp() {
   state.jobId = null;
+  _clearJobSessionStorage();
   state.filename = null;
   state.rows = 0;
   state.cols = 0;
@@ -2337,6 +2830,21 @@ function resetApp() {
   if (_previewScrollTopInnerEl) _previewScrollTopInnerEl.style.width = '0px';
   document.getElementById('preview-header').innerHTML = '';
   document.getElementById('preview-body').innerHTML = '';
+  const colNav = _getColumnNavEl();
+  if (colNav) {
+    colNav.innerHTML = '';
+    colNav.removeAttribute('aria-busy');
+  }
+  const sampleSel = document.getElementById('sample-row-select');
+  if (sampleSel) {
+    sampleSel.innerHTML = '';
+    sampleSel.disabled = true;
+  }
+  state.previewDataRows = null;
+  state.sampleRowIndex = 0;
+  _updateSampleLinePickerVisibility();
+  const cfgPh = document.getElementById('configure-config-placeholder');
+  if (cfgPh) cfgPh.hidden = false;
   document.getElementById('column-config-panel').hidden = true;
   document.getElementById('config-summary').hidden = true;
   document.getElementById('cfg-required').checked = false;
@@ -2411,6 +2919,12 @@ function navigateToCell(row1based, colName) {
   }
   const rowIdx = row1based - 1;
   if (state.currentStep === 'configure') {
+    const sel = document.getElementById('sample-row-select');
+    if (sel && !sel.disabled && rowIdx >= 0 && rowIdx < sel.options.length) {
+      state.sampleRowIndex = rowIdx;
+      sel.value = String(rowIdx);
+      _buildColumnNavList(state.columns);
+    }
     _highlightCell(rowIdx, colName);
   } else {
     _pendingCellNav = { rowIdx, colName };
@@ -2420,6 +2934,8 @@ function navigateToCell(row1based, colName) {
 
 /** Scroll et flash sur le <td> ciblé dans le tableau d'aperçu. */
 function _highlightCell(rowIdx, colName) {
+  const det = document.getElementById('configure-full-preview-details');
+  if (det) det.open = true;
   const colIdx = state.columns.indexOf(colName);
   if (colIdx < 0) return;
   const rows = document.querySelectorAll('#preview-body tr');
@@ -2516,6 +3032,9 @@ function toggleSpecialChars() {
   _syncSpecialCharsButtons();
   _setUxPref('show_special_chars', state.showSpecialChars);
   _applySpecialCharsToPreview();
+  if (state.previewDataRows && state.previewDataRows.length && state.showSampleValues) {
+    _buildColumnNavList(state.columns);
+  }
   // Re-render problems table if currently visible (to update the Valeur column)
   if (state.currentStep === 'results') loadProblems(state.currentPage);
 }
@@ -2672,20 +3191,33 @@ function _showToastWithRevalidateLink(message) {
   }, 6000);
 }
 
-/** Affiche l'aide des principaux raccourcis clavier. */
+/** Affiche l'aide des principaux raccourcis clavier (bouton ? ou touche ? hors champ de saisie). */
 function showShortcutsHelp() {
+  const mapala = document.getElementById('app-mapala');
+  if (mapala && !mapala.hidden) {
+    _showToast(
+      [
+        'Raccourcis — Mapala',
+        'Les raccourcis détaillés dépendent de l’étape Mapala ouverte.',
+        'Retour à Tablerreur : cliquez l’onglet « Tablerreur » ou Alt+1 (si l’étape est disponible).',
+      ].join('\n'),
+      'info',
+      8000
+    );
+    return;
+  }
   _showToast(
     [
-      'Raccourcis clavier',
+      'Raccourcis — Tablerreur',
       'Ctrl/Cmd + O : ouvrir un fichier',
-      'Ctrl/Cmd + Entrée : action principale de l’étape',
-      'Alt + 1..5 : naviguer entre les étapes disponibles',
-      'Ctrl/Cmd + Z : annuler (Correctifs/Configurer)',
-      'Ctrl/Cmd + Shift + Z : rétablir',
-      '? : afficher cette aide',
+      'Ctrl/Cmd + Entrée : action principale de l’étape (ex. téléverser, résumé config)',
+      'Alt + 1 à 5 : aller à une étape déjà débloquée',
+      'Ctrl/Cmd + Z : annuler une correction (Configurer / Correctifs)',
+      'Ctrl/Cmd + Maj + Z : rétablir',
+      '? ou Maj + / : afficher cette aide (hors champ de texte)',
     ].join('\n'),
-    'success',
-    9000
+    'info',
+    10000
   );
 }
 

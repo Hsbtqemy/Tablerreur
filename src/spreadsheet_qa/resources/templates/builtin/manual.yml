@@ -1,0 +1,40 @@
+# Tablerreur — Modèle « manuel » (aucun préréglage métier)
+# Seules les règles listées ci-dessous sont actives ; le reste est désactivé.
+# L’utilisateur pilote tout via la configuration par colonne dans l’interface.
+version: 1
+id: manual
+name: "Manuel (aucun préréglage)"
+scope: builtin
+type: generic
+
+# Mode liste blanche : seules les règles explicitement listées s’exécutent
+# (voir ValidationEngine et la clé _manual_rules_only).
+_manual_rules_only: true
+
+rules:
+  generic.required:
+    enabled: true
+  generic.content_type:
+    enabled: true
+  generic.regex:
+    enabled: true
+  generic.length:
+    enabled: true
+  generic.allowed_values:
+    enabled: true
+  generic.list_items:
+    enabled: true
+  generic.case:
+    enabled: true
+  generic.forbidden_chars:
+    enabled: true
+  generic.unique_column:
+    enabled: true
+  generic.rare_values:
+    enabled: true
+  generic.similar_values:
+    enabled: true
+  generic.unexpected_multiline:
+    enabled: true
+
+columns: {}

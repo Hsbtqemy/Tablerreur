@@ -66,6 +66,7 @@ class ValidationEngine:
             config: Template config dict.  Structure::
 
                 {
+                    "_manual_rules_only": false,
                     "rules": {
                         "generic.hygiene.leading_trailing_space": {
                             "enabled": True,
@@ -90,6 +91,7 @@ class ValidationEngine:
 
         rules_config: dict[str, dict] = config.get("rules", {})
         columns_config: dict[str, dict] = config.get("columns", {})
+        manual_only = bool(config.get("_manual_rules_only", False))
 
         # Determine which columns to validate
         target_cols = columns if columns is not None else list(df.columns)
@@ -100,7 +102,12 @@ class ValidationEngine:
         for rule_cls in self._registry.all_rules():
             rule_inst = rule_cls()
             rule_cfg = {**rules_config.get(rule_inst.rule_id, {})}
-            enabled = rule_cfg.pop("enabled", True)
+            if manual_only:
+                if rule_inst.rule_id not in rules_config:
+                    continue
+                enabled = rule_cfg.pop("enabled", True)
+            else:
+                enabled = rule_cfg.pop("enabled", True)
             if not enabled:
                 continue
 

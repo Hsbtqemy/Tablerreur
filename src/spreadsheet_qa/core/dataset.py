@@ -25,6 +25,35 @@ import pandas as pd
 from spreadsheet_qa.core.models import DatasetMeta
 
 
+# Suffixes reconnus comme classeurs multi-feuilles (alignés sur ``DatasetLoader.load``).
+_WORKBOOK_SUFFIXES = frozenset({".xlsx", ".xls", ".xlsm", ".ods"})
+
+
+def list_workbook_sheet_names_from_bytes(content: bytes, filename: str) -> list[str]:
+    """Liste les noms de feuilles d'un classeur à partir du contenu en mémoire.
+
+    Retourne une liste vide si le fichier n'est pas un classeur pris en charge ou
+    si la lecture échoue (ex. binaire .xls sans moteur adapté).
+    """
+    suffix = Path(filename or "").suffix.lower()
+    if suffix not in _WORKBOOK_SUFFIXES:
+        return []
+    bio = io.BytesIO(content)
+    try:
+        if suffix in {".xlsx", ".xlsm"}:
+            with pd.ExcelFile(bio, engine="openpyxl") as xf:
+                return list(xf.sheet_names)
+        if suffix == ".ods":
+            with pd.ExcelFile(bio, engine="odf") as xf:
+                return list(xf.sheet_names)
+        # .xls : moteur laissé à pandas (xlrd si disponible)
+        bio.seek(0)
+        with pd.ExcelFile(bio) as xf:
+            return list(xf.sheet_names)
+    except Exception:
+        return []
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
