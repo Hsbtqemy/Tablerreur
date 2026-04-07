@@ -8,7 +8,7 @@ use std::process::Child;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use tauri::{Manager, menu::{MenuBuilder, SubmenuBuilder, MenuItemBuilder}};
+use tauri::{Manager, Runtime, menu::{MenuBuilder, SubmenuBuilder, MenuItemBuilder}};
 use tauri_plugin_opener::OpenerExt;
 
 // ---------------------------------------------------------------------------
@@ -76,6 +76,18 @@ fn to_base64(data: &[u8]) -> String {
 
 struct SidecarState(Mutex<Option<Child>>);
 
+/// Termine le processus sidecar Python (menu Quitter, croix de fenêtre, Cmd/Ctrl+Q).
+fn kill_sidecar<R: Runtime>(app: &impl Manager<R>) {
+    if let Some(state) = app.try_state::<SidecarState>() {
+        if let Ok(mut guard) = state.0.lock() {
+            if let Some(mut child) = guard.take() {
+                let _ = child.kill();
+                let _ = child.wait(); // éviter processus zombie
+            }
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
@@ -123,54 +135,66 @@ fn main() {
             let port = find_free_port(8400, 8500)
                 .expect("Aucun port libre trouvé entre 8400 et 8500");
 
-            // --- Launch the Python sidecar from the app's resource directory ---
-            //
-            // build_sidecar.py (--onedir mode) copies the bundle to:
-            //   src-tauri/binaries/tablerreur-backend-{triple}/
-            // tauri.conf.json bundles that directory via the resources array:
-            //   ["binaries/tablerreur-backend-{triple}/**/*"]
-            // Tauri preserves the relative path inside resource_dir, so at runtime:
-            //   resource_dir/binaries/tablerreur-backend-{triple}/{exe, _internal/…}
-            let exe_name = if cfg!(target_os = "windows") {
-                "tablerreur-backend.exe"
-            } else {
-                "tablerreur-backend"
-            };
-            // Build the platform triple at compile time to locate the onedir bundle.
-            let arch = if cfg!(target_arch = "aarch64") { "aarch64" } else { "x86_64" };
-            let os_part = if cfg!(target_os = "macos") { "apple-darwin" }
-                          else if cfg!(target_os = "linux") { "unknown-linux-gnu" }
-                          else { "pc-windows-msvc" };
-            let triple = format!("{arch}-{os_part}");
-            // En mode dev, Tauri ne copie pas les resources dans target/debug/.
-            // On pointe directement vers src-tauri/binaries/ via CARGO_MANIFEST_DIR.
-            let exe_path = if cfg!(dev) {
-                PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                    .join("binaries")
-                    .join(format!("tablerreur-backend-{triple}"))
-                    .join(exe_name)
-            } else {
-                let resource_dir = app.path().resource_dir()
-                    .map_err(|e| format!("Impossible de résoudre resource_dir : {e}"))?;
-                resource_dir
-                    .join("binaries")
-                    .join(format!("tablerreur-backend-{triple}"))
-                    .join(exe_name)
-            };
-            if !exe_path.exists() {
-                return Err(format!(
-                    "Sidecar introuvable : {}\n\
-                     Exécutez d'abord : python scripts/build_sidecar.py",
-                    exe_path.display()
-                ).into());
-            }
+            // --- Backend HTTP : debug = python -m depuis le dépôt ; release = sidecar PyInstaller ---
+            let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .parent()
+                .expect("CARGO_MANIFEST_DIR doit pointer vers src-tauri")
+                .to_path_buf();
 
-            let child = std::process::Command::new(&exe_path)
-                .args(["--port", &port.to_string()])
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .spawn()
-                .map_err(|e| format!("Impossible de lancer le sidecar : {e}"))?;
+            let child = if cfg!(debug_assertions) {
+                let py = std::env::var("TABLERREUR_PYTHON").unwrap_or_else(|_| {
+                    if cfg!(target_os = "windows") {
+                        "python".to_string()
+                    } else {
+                        "python3".to_string()
+                    }
+                });
+                std::process::Command::new(&py)
+                    .current_dir(&repo_root)
+                    .args(["-m", "spreadsheet_qa.web", "--port", &port.to_string()])
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::inherit())
+                    .spawn()
+                    .map_err(|e| {
+                        format!(
+                            "Impossible de lancer le backend Python ({py}) depuis {} : {e}\n\
+                             Définissez TABLERREUR_PYTHON ou installez : pip install -e \".[web]\"",
+                            repo_root.display()
+                        )
+                    })?
+            } else {
+                let exe_name = if cfg!(target_os = "windows") {
+                    "tablerreur-backend.exe"
+                } else {
+                    "tablerreur-backend"
+                };
+                let arch = if cfg!(target_arch = "aarch64") { "aarch64" } else { "x86_64" };
+                let os_part = if cfg!(target_os = "macos") { "apple-darwin" }
+                    else if cfg!(target_os = "linux") { "unknown-linux-gnu" }
+                    else { "pc-windows-msvc" };
+                let triple = format!("{arch}-{os_part}");
+                let exe_path = app
+                    .path()
+                    .resource_dir()
+                    .map_err(|e| format!("Impossible de résoudre resource_dir : {e}"))?
+                    .join("binaries")
+                    .join(format!("tablerreur-backend-{triple}"))
+                    .join(exe_name);
+                if !exe_path.exists() {
+                    return Err(format!(
+                        "Sidecar introuvable : {}\n\
+                         Exécutez d'abord : python scripts/build_sidecar.py",
+                        exe_path.display()
+                    )
+                    .into());
+                }
+                std::process::Command::new(&exe_path)
+                    .args(["--port", &port.to_string()])
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .spawn()
+                    .map_err(|e| format!("Impossible de lancer le sidecar : {e}"))?
+            };
 
             // Keep the child process alive in managed state
             app.manage(SidecarState(Mutex::new(Some(child))));
@@ -260,7 +284,10 @@ fn main() {
         })
         .on_menu_event(|app, event| {
             match event.id().as_ref() {
-                "quit" => app.exit(0),
+                "quit" => {
+                    kill_sidecar(app);
+                    app.exit(0);
+                }
                 "check-updates" => {
                     // Open releases page in the default browser
                     let _ = app.opener().open_url(
@@ -273,15 +300,7 @@ fn main() {
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
-                // Kill the sidecar when the window is closed
-                if let Some(state) = window.app_handle().try_state::<SidecarState>() {
-                    if let Ok(mut guard) = state.0.lock() {
-                        if let Some(mut child) = guard.take() {
-                            let _ = child.kill();
-                            let _ = child.wait(); // reap to avoid zombie process
-                        }
-                    }
-                }
+                kill_sidecar(window.app_handle());
             }
         })
         .run(tauri::generate_context!())

@@ -48,10 +48,8 @@ body {
   color: #fff;
   padding: 1rem 2rem;
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
+  flex-direction: column;
   gap: 0.25rem;
-  position: relative;
   /* Onglet Tablerreur actif : gauche plus claire, droite plus foncée */
   background: linear-gradient(90deg, #3b82f6 0%, #1d4ed8 50%, #1e40af 100%) !important;
 }
@@ -59,38 +57,57 @@ body {
   /* Onglet Mapala actif : gauche plus foncée, droite Mapala (vert) plus claire */
   background: linear-gradient(90deg, #1e40af 0%, #1d4ed8 35%, #059669 70%, #34d399 100%) !important;
 }
-.app-header-brand {
+/* Ligne d’en-tête : Tablerreur à gauche ; à droite bloc Mapala + boutons (même flex, pas de chevauchement) — détail aussi dans index.html */
+.app-header-top {
   display: flex;
+  flex-direction: row;
+  align-items: center;
   justify-content: space-between;
-  align-items: baseline;
+  gap: 0.75rem;
   width: 100%;
-  padding-right: 2.5rem; /* place pour le bouton thème */
+  min-width: 0;
+  box-sizing: border-box;
+}
+.app-header-right {
+  display: flex;
+  align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
+  gap: 0.65rem;
+  max-width: min(55vw, 28rem);
+}
+.app-header-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.5rem;
 }
 .app-header-name {
   font-size: 1.6rem;
   font-weight: 700;
   letter-spacing: -0.02em;
 }
-.app-header-name--left { opacity: 1; }
-.app-header-name--right { opacity: 0.9; }
+.app-header-name--left {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 1;
+}
+.app-header-name--right {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.9;
+}
 .app-header--mapala .app-header-name--left { opacity: 0.85; }
 .app-header--mapala .app-header-name--right { opacity: 1; }
-.app-header .app-subtitle { flex: 0 0 100%; }
-.app-subtitle { font-size: 0.9rem; opacity: 0.9; margin-top: 2px; }
-.app-header .btn-theme-toggle {
-  position: absolute;
-  top: 1rem;
-  right: 2rem;
-  margin-left: 0;
-}
-.app-header .btn-shortcuts-help {
-  position: absolute;
-  top: 1rem;
-  right: 4.8rem;
-  margin-left: 0;
-}
+.app-subtitle { font-size: 0.9rem; opacity: 0.9; margin-top: 0; }
 .app-header .btn-theme-toggle,
 .app-header .btn-shortcuts-help {
+  margin-left: 0; /* annule .btn-theme-toggle { margin-left: auto } hors en-tête */
   color: #ffffff;
   background: rgba(255, 255, 255, 0.18);
   border: 1px solid rgba(255, 255, 255, 0.26);
@@ -98,6 +115,15 @@ body {
 .app-header .btn-theme-toggle:hover,
 .app-header .btn-shortcuts-help:hover {
   background: rgba(255, 255, 255, 0.28);
+}
+@media (max-width: 520px) {
+  .app-header {
+    padding: 0.75rem 1rem;
+    column-gap: 0.5rem;
+  }
+  .app-header-name {
+    font-size: 1.25rem;
+  }
 }
 
 /* ---- Step nav ---- */

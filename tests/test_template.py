@@ -157,7 +157,7 @@ class TestRuleOverridesMergeInEngine:
             },
         }
         engine = ValidationEngine()
-        issues = engine.validate(df, config=config)
+        issues = engine.validate(df, config=config).issues
         colA_pseudo = [i for i in issues if i.col == "ColA" and i.rule_id == "generic.pseudo_missing"]
         colB_pseudo = [i for i in issues if i.col == "ColB" and i.rule_id == "generic.pseudo_missing"]
         assert len(colA_pseudo) == 0, "ColA pseudo_missing should be disabled by rule_override"
@@ -179,7 +179,7 @@ class TestRuleOverridesMergeInEngine:
             },
         }
         engine = ValidationEngine()
-        issues = engine.validate(df, config=config)
+        issues = engine.validate(df, config=config).issues
         pseudo_issues = [i for i in issues if i.col == "Special" and i.rule_id == "generic.pseudo_missing"]
         assert len(pseudo_issues) == 1
         from spreadsheet_qa.core.models import Severity

@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "tauri": "tauri",
+    "bootstrap": "python scripts/bootstrap_dev.py",
     "build:windows": "python scripts/build_sidecar.py && npm run tauri build && python scripts/build_portable_exe.py"
   },
   "devDependencies": {

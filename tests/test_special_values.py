@@ -209,7 +209,7 @@ def test_nakala_template_special_values_integration():
     })
 
     engine = ValidationEngine()
-    issues = engine.validate(df, config=config)
+    issues = engine.validate(df, config=config).issues
 
     # Filter to regex issues on the special-value columns
     regex_issues_creator = [

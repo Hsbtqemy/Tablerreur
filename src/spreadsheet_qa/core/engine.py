@@ -7,7 +7,8 @@ Callers are responsible for feeding the results into an IssueStore.
 from __future__ import annotations
 
 import logging
-from typing import Any, Iterable
+from dataclasses import dataclass, field
+from typing import Any
 
 import pandas as pd
 
@@ -16,16 +17,35 @@ _log = logging.getLogger(__name__)
 # Import rules module to trigger all @registry.register decorators
 import spreadsheet_qa.core.rules  # noqa: F401
 from spreadsheet_qa.core.models import Issue
-from spreadsheet_qa.core.rule_base import Rule, RuleRegistry, registry
+from spreadsheet_qa.core.rule_base import RuleRegistry, registry
+
+
+@dataclass(frozen=True)
+class RuleFailure:
+    """A rule raised an exception during check (recorded instead of crashing)."""
+
+    rule_id: str
+    column: str | None
+    exception_message: str = ""
+
+
+@dataclass
+class ValidationResult:
+    """Outcome of :meth:`ValidationEngine.validate`."""
+
+    issues: list[Issue] = field(default_factory=list)
+    rule_failures: list[RuleFailure] = field(default_factory=list)
 
 
 class ValidationEngine:
-    """Run validation rules and return Issue objects.
+    """Run validation rules and return a :class:`ValidationResult` (issues + échecs de règles).
 
     Usage::
 
         engine = ValidationEngine()
-        issues = engine.validate(df, columns=None, config=rule_config)
+        result = engine.validate(df, columns=None, config=rule_config)
+        issues = result.issues
+        failed = result.rule_failures
     """
 
     def __init__(self, rule_registry: RuleRegistry | None = None) -> None:
@@ -36,8 +56,8 @@ class ValidationEngine:
         df: pd.DataFrame,
         columns: list[str] | None = None,
         config: dict[str, Any] | None = None,
-    ) -> list[Issue]:
-        """Run all registered rules and return all found issues.
+    ) -> ValidationResult:
+        """Run all registered rules and return issues plus any rule-level failures.
 
         Args:
             df: The data DataFrame (string dtype, int-indexed).
@@ -63,7 +83,7 @@ class ValidationEngine:
                 }
 
         Returns:
-            Flat list of Issue objects.
+            ValidationResult with issues and rule_failures (rules that raised).
         """
         if config is None:
             config = {}
@@ -75,6 +95,7 @@ class ValidationEngine:
         target_cols = columns if columns is not None else list(df.columns)
 
         all_issues: list[Issue] = []
+        rule_failures: list[RuleFailure] = []
 
         for rule_cls in self._registry.all_rules():
             rule_inst = rule_cls()
@@ -99,9 +120,15 @@ class ValidationEngine:
                     try:
                         issues = rule_inst.check(df, col, merged_cfg)
                     except Exception as exc:
-                        # Never crash the whole validation because one rule fails
                         _log.exception(
                             "Rule %s failed on column %r: %s", rule_inst.rule_id, col, exc
+                        )
+                        rule_failures.append(
+                            RuleFailure(
+                                rule_id=rule_inst.rule_id,
+                                column=col,
+                                exception_message=str(exc)[:500],
+                            )
                         )
                         issues = []
                     all_issues.extend(issues)
@@ -115,7 +142,14 @@ class ValidationEngine:
                     issues = rule_inst.check(df, None, rule_cfg)
                 except Exception as exc:
                     _log.exception("Global rule %s failed: %s", rule_inst.rule_id, exc)
+                    rule_failures.append(
+                        RuleFailure(
+                            rule_id=rule_inst.rule_id,
+                            column=None,
+                            exception_message=str(exc)[:500],
+                        )
+                    )
                     issues = []
                 all_issues.extend(issues)
 
-        return all_issues
+        return ValidationResult(issues=all_issues, rule_failures=rule_failures)

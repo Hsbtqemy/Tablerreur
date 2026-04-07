@@ -4,17 +4,21 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Tablerreur · Mapala — Contrôle qualité et mapping</title>
-  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="/static/style.css?v=20260407" />
 </head>
 <body>
   <header class="app-header app-header--tablerreur" id="app-header">
-    <div class="app-header-brand">
+    <div class="app-header-top">
       <span class="app-header-name app-header-name--left">Tablerreur</span>
-      <span class="app-header-name app-header-name--right">Mapala</span>
+      <div class="app-header-right">
+        <span class="app-header-name app-header-name--right">Mapala</span>
+        <div class="app-header-actions">
+          <button id="shortcuts-help-btn" class="btn-icon btn-shortcuts-help" onclick="showShortcutsHelp()" title="Afficher les raccourcis clavier (?)">?</button>
+          <button id="theme-toggle" class="btn-icon btn-theme-toggle" onclick="toggleTheme()" title="Basculer le thème sombre / clair">🌙</button>
+        </div>
+      </div>
     </div>
     <p class="app-subtitle">Contrôle qualité et mapping de tableurs CSV/XLSX</p>
-    <button id="shortcuts-help-btn" class="btn-icon btn-shortcuts-help" onclick="showShortcutsHelp()" title="Afficher les raccourcis clavier (?)">?</button>
-    <button id="theme-toggle" class="btn-icon btn-theme-toggle" onclick="toggleTheme()" title="Basculer le thème sombre / clair">🌙</button>
   </header>
 
   <!-- Navigation principale : onglets Tablerreur / Mapala -->
@@ -520,6 +524,7 @@
       </div>
 
       <div id="validate-summary" hidden>
+        <div id="validate-rule-failures" class="msg-warning validate-rule-failures" hidden></div>
         <div class="summary-cards">
           <div class="summary-card summary-error">
             <div class="summary-count" id="sum-errors">0</div>
@@ -553,6 +558,7 @@
       <!-- Downloads -->
       <div class="card">
         <h3>Télécharger</h3>
+        <div id="results-export-warnings" class="msg-warning mb-2" hidden></div>
         <div class="download-buttons">
           <a id="dl-report" class="btn btn-download" href="#" onclick="return downloadFile('rapport.txt')">
             📄 Rapport de validation (.txt)

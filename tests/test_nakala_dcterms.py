@@ -263,7 +263,7 @@ def test_full_validation_nakala_and_dcterms_columns():
     })
 
     engine = ValidationEngine()
-    issues = engine.validate(df, config=cfg)
+    issues = engine.validate(df, config=cfg).issues
 
     # Pas d'issues sur les colonnes dcterms valides
     dcterms_issues = [i for i in issues if i.col and i.col.startswith("dcterms:")]
@@ -290,7 +290,7 @@ def test_validation_dcterms_format_invalid_mime():
     })
 
     engine = ValidationEngine()
-    issues = engine.validate(df, config=cfg)
+    issues = engine.validate(df, config=cfg).issues
     format_issues = [i for i in issues if i.col == "dcterms:format"]
     assert len(format_issues) >= 1, (
         "dcterms:format avec valeur non-MIME doit générer au moins une issue"

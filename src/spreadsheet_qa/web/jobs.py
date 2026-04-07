@@ -85,8 +85,12 @@ class Job:
     # User-set issue status overrides: issue_id → status string
     issue_statuses: dict[str, str] = field(default_factory=dict)
     exports_dirty: bool = False
+    # Messages français si un export téléchargeable a échoué (génération initiale ou régénération)
+    export_errors: list[str] = field(default_factory=list)
     # Undo/redo history for hygiene fixes
     command_history: CommandHistory = field(default_factory=CommandHistory)
+    # TTL glissant : toute activité API (get/update) prolonge la session
+    last_access_at: float = field(default_factory=time.time)
 
 
 class JobManager:
@@ -100,16 +104,22 @@ class JobManager:
     def create(self) -> Job:
         job_id = str(uuid.uuid4())
         work_dir = Path(tempfile.mkdtemp(prefix=f"tablerreur_{job_id}_"))
-        job = Job(id=job_id, work_dir=work_dir)
+        now = time.time()
+        job = Job(id=job_id, work_dir=work_dir, created_at=now, last_access_at=now)
         with self._lock:
             self._jobs[job_id] = job
         return job
 
     def get(self, job_id: str) -> Job | None:
         with self._lock:
-            return self._jobs.get(job_id)
+            job = self._jobs.get(job_id)
+            if job is None:
+                return None
+            job.last_access_at = time.time()
+            return job
 
     def update(self, job: Job) -> None:
+        job.last_access_at = time.time()
         with self._lock:
             self._jobs[job.id] = job
 
@@ -124,7 +134,7 @@ class JobManager:
         expired = []
         with self._lock:
             for job_id, job in self._jobs.items():
-                if now - job.created_at > TTL_SECONDS:
+                if now - job.last_access_at > TTL_SECONDS:
                     expired.append(job_id)
         for job_id in expired:
             self.delete(job_id)

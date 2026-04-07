@@ -30,8 +30,8 @@ class _ValidationWorker(QRunnable):
 
     def run(self) -> None:
         engine = ValidationEngine()
-        issues = engine.validate(self.df, self.columns, self.config)
-        self.signals.finished.emit(issues)
+        result = engine.validate(self.df, self.columns, self.config)
+        self.signals.finished.emit(result.issues)
 
 
 class ValidationController:

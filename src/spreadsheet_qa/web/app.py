@@ -36,7 +36,7 @@ from fastapi.staticfiles import StaticFiles
 
 from spreadsheet_qa.core.commands import Command
 from spreadsheet_qa.core.dataset import DatasetLoader
-from spreadsheet_qa.core.engine import ValidationEngine
+from spreadsheet_qa.core.engine import RuleFailure, ValidationEngine
 from spreadsheet_qa.core.exporters import CSVExporter, IssuesCSVExporter, TXTReporter, XLSXExporter
 from spreadsheet_qa.core.models import IssueStatus, Severity
 from spreadsheet_qa.core.nakala_api import NakalaClient
@@ -78,6 +78,18 @@ _ALLOWED_CONTENT_TYPES = {
 }
 
 _logger = logging.getLogger(__name__)
+
+
+def _rule_failures_payload(rule_failures: list[RuleFailure]) -> list[dict[str, str | None]]:
+    """Expose les règles en erreur à l'UI (sans détail technique)."""
+    return [
+        {
+            "règle": rf.rule_id,
+            "colonne": rf.column,
+            "message": "Cette règle n'a pas pu s'exécuter (erreur interne).",
+        }
+        for rf in rule_failures
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -796,7 +808,9 @@ async def validate_job(job_id: str):
                     if val is not None:
                         config_cols[col][key] = val
         engine = ValidationEngine()
-        issues = engine.validate(df, config=config)
+        result = engine.validate(df, config=config)
+        issues = result.issues
+        rule_failures = result.rule_failures
     except Exception as exc:
         job.state = JobState.ERROR
         job.error_msg = str(exc)
@@ -860,6 +874,7 @@ async def validate_job(job_id: str):
     # Generate downloadable outputs
     _generate_outputs(job, df, issues)
 
+    job.error_msg = ""
     job.state = JobState.DONE
     job_manager.update(job)
 
@@ -871,6 +886,8 @@ async def validate_job(job_id: str):
             "suspicions": job.summary.suspicions,
             "total": job.summary.total,
         },
+        "échecs_règles": _rule_failures_payload(rule_failures),
+        "avertissements_export": job.export_errors,
     }
 
 
@@ -897,7 +914,9 @@ async def revalidate_job(job_id: str):
                     if val is not None:
                         config_cols[col][key] = val
         engine = ValidationEngine()
-        issues = engine.validate(df, config=config)
+        result = engine.validate(df, config=config)
+        issues = result.issues
+        rule_failures = result.rule_failures
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -948,6 +967,9 @@ async def revalidate_job(job_id: str):
     job.exports_dirty = False
 
     _generate_outputs(job, df, issues)
+
+    job.error_msg = ""
+    job.state = JobState.DONE
     job_manager.update(job)
 
     return {
@@ -958,15 +980,17 @@ async def revalidate_job(job_id: str):
             "suspicions": job.summary.suspicions,
             "total": job.summary.total,
         },
+        "échecs_règles": _rule_failures_payload(rule_failures),
+        "avertissements_export": job.export_errors,
     }
 
 
 def _generate_outputs(job: Job, df: pd.DataFrame, issues: list) -> None:
     """Pre-generate all downloadable files."""
-    from datetime import datetime
-    stamp = datetime.now().strftime("%Y%m%d_%H%M")
     out = job.work_dir / "exports"
     out.mkdir(exist_ok=True)
+
+    export_errors: list[str] = []
 
     # Find a DatasetMeta-like object if available
     try:
@@ -982,25 +1006,32 @@ def _generate_outputs(job: Job, df: pd.DataFrame, issues: list) -> None:
             column_order=job.columns,
             fingerprint="",
         )
-    except Exception:
+    except Exception as exc:
+        _logger.warning("Métadonnées export : %s", exc)
         meta = None
 
     try:
         XLSXExporter().export(df, out / "nettoyé.xlsx")
-    except Exception:
-        pass
+    except Exception as exc:
+        _logger.warning("Export XLSX : %s", exc)
+        export_errors.append("Export Excel (nettoyé.xlsx) indisponible.")
     try:
         CSVExporter().export(df, out / "nettoyé.csv")
-    except Exception:
-        pass
+    except Exception as exc:
+        _logger.warning("Export CSV : %s", exc)
+        export_errors.append("Export CSV (nettoyé.csv) indisponible.")
     try:
         TXTReporter().export(issues, out / "rapport.txt", meta=meta)
-    except Exception:
-        pass
+    except Exception as exc:
+        _logger.warning("Export rapport TXT : %s", exc)
+        export_errors.append("Export du rapport texte indisponible.")
     try:
         IssuesCSVExporter().export(issues, out / "problèmes.csv", meta=meta)
-    except Exception:
-        pass
+    except Exception as exc:
+        _logger.warning("Export problèmes CSV : %s", exc)
+        export_errors.append("Export de la liste des problèmes (CSV) indisponible.")
+
+    job.export_errors = export_errors
 
 
 # ---------------------------------------------------------------------------
@@ -1027,6 +1058,7 @@ async def get_job(job_id: str):
             "total": job.summary.total,
         } if job.state == JobState.DONE else None,
         "error": job.error_msg or None,
+        "avertissements_export": job.export_errors if job.state == JobState.DONE else [],
     }
 
 
@@ -1174,7 +1206,8 @@ def _regenerate_status_exports(job: "Job") -> None:
     try:
         with open(str(job._issues_path), "rb") as _fh:
             issues = pickle.load(_fh)
-    except Exception:
+    except Exception as exc:
+        _logger.warning("Régénération exports : lecture issues.pkl : %s", exc)
         return
 
     # Apply overrides via dataclasses.replace (keeps original pickle intact)
@@ -1200,17 +1233,18 @@ def _regenerate_status_exports(job: "Job") -> None:
             column_order=job.columns,
             fingerprint="",
         )
-    except Exception:
+    except Exception as exc:
+        _logger.warning("Régénération exports : métadonnées : %s", exc)
         meta = None
 
     try:
         TXTReporter().export(modified, out / "rapport.txt", meta=meta)
-    except Exception:
-        pass
+    except Exception as exc:
+        _logger.warning("Régénération rapport.txt : %s", exc)
     try:
         IssuesCSVExporter().export(modified, out / "problèmes.csv", meta=meta)
-    except Exception:
-        pass
+    except Exception as exc:
+        _logger.warning("Régénération problèmes.csv : %s", exc)
 
     job.exports_dirty = False
     job_manager.update(job)

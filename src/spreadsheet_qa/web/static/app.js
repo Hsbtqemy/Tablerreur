@@ -19,6 +19,8 @@ const state = {
   activeColumn: null,   // name of the currently open config panel
   loadedVocabs: {},       // cache { vocabName: [...values] } to restore selector on panel reopen
   loadedVocabLabels: {},  // cache { vocabName: {uri: labelFR} } for datatypes display
+  ruleFailures: [],       // échecs d'exécution de règles (moteur)
+  exportWarnings: [],     // avertissements_export (fichiers téléchargeables)
 };
 let _currentProblemsTotal = 0;
 
@@ -304,7 +306,10 @@ function goToStep(step) {
   if (step === 'configure') { loadPreview(); updateUndoRedoButtons(); }
   if (step === 'fixes') updateUndoRedoButtons();
   if (step === 'validate') runValidation();
-  if (step === 'results') loadProblems(1);
+  if (step === 'results') {
+    loadProblems(1);
+    _renderResultsExportWarnings();
+  }
   _updateStepCoach();
 }
 
@@ -435,7 +440,13 @@ async function doUpload() {
     state.columnConfig = {};
     state.activeColumn = null;
     state.validationDone = false;
+    state.ruleFailures = [];
+    state.exportWarnings = [];
     _currentProblemsTotal = 0;
+    const vrf = document.getElementById('validate-rule-failures');
+    if (vrf) { vrf.hidden = true; vrf.innerHTML = ''; }
+    const rew = document.getElementById('results-export-warnings');
+    if (rew) { rew.hidden = true; rew.innerHTML = ''; }
 
     progEl.textContent = `Chargé : ${data.filename} (${data.rows} lignes × ${data.cols} colonnes)`;
 
@@ -1232,6 +1243,46 @@ function skipFixes() {
 // ---------------------------------------------------------------------------
 // ÉTAPE 4 — Validation
 // ---------------------------------------------------------------------------
+function _applyRuleFailAndExportWarnings(data) {
+  state.ruleFailures = data['échecs_règles'] || [];
+  state.exportWarnings = data['avertissements_export'] || [];
+  _renderValidationRuleFailures();
+  _renderResultsExportWarnings();
+}
+
+function _renderValidationRuleFailures() {
+  const el = document.getElementById('validate-rule-failures');
+  if (!el) return;
+  const rf = state.ruleFailures || [];
+  if (!rf.length) {
+    el.hidden = true;
+    el.innerHTML = '';
+    return;
+  }
+  el.hidden = false;
+  const lines = rf.map((r) => {
+    const id = r['règle'] ?? '';
+    const col = r.colonne;
+    const msg = r.message || '';
+    return `<li><strong>${esc(id)}</strong>${col ? ` — ${esc(col)}` : ''} : ${esc(msg)}</li>`;
+  });
+  el.innerHTML = `<p><strong>Attention :</strong> certaines règles n'ont pas pu s'exécuter :</p><ul>${lines.join('')}</ul>`;
+}
+
+function _renderResultsExportWarnings() {
+  const el = document.getElementById('results-export-warnings');
+  if (!el) return;
+  const ew = state.exportWarnings || [];
+  if (!ew.length) {
+    el.hidden = true;
+    el.innerHTML = '';
+    return;
+  }
+  el.hidden = false;
+  const lines = ew.map((t) => `<li>${esc(t)}</li>`).join('');
+  el.innerHTML = `<p><strong>Attention — exports :</strong></p><ul>${lines.join('')}</ul>`;
+}
+
 async function runValidation() {
   if (!state.jobId) return;
 
@@ -1248,6 +1299,7 @@ async function runValidation() {
     }
     const data = await resp.json();
     const résumé = data['résumé'] || {};
+    _applyRuleFailAndExportWarnings(data);
 
     document.getElementById('sum-errors').textContent = résumé['erreurs'] ?? 0;
     document.getElementById('sum-warnings').textContent = résumé['avertissements'] ?? 0;
@@ -2610,6 +2662,7 @@ async function revalidate() {
     const data = await resp.json();
     const résumé = data['résumé'] || {};
     const newTotal = résumé['total'] ?? 0;
+    _applyRuleFailAndExportWarnings(data);
 
     state.validationDone = true;
     _hideCellsEditedBanner();

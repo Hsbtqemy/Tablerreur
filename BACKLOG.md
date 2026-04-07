@@ -1,349 +1,320 @@
-﻿# Backlog Tablerreur â€” Validation par colonne & UX
+﻿# Backlog Tablerreur — Validation par colonne & UX
 
-> DerniÃ¨re mise Ã  jour : mars 2026
-> Statuts : âœ… Fait | ðŸ”œ Prochaine itÃ©ration | ðŸ“‹ Backlog | ðŸ”® Long terme
+> Dernière mise à jour : avril 2026 (vérifiée contre le code du dépôt ; backlog audit exécutable § dédié)
+> Statuts : **Fait** | **Prochaine itération** | **Backlog** | **Long terme**
+
+**Révision avril 2026** : synchronisation avec `src/spreadsheet_qa/web/`, `src-tauri/src/main.rs` et `core/`. Les entrées ci-dessous reflètent l’état **actuel** du code ; les lignes obsolètes (ex. « menu Aide non câblé ») ont été corrigées.
 
 ---
 
-## Ã‰valuation et prioritÃ©s (vue consolidÃ©e)
+## Évaluation et priorités (vue consolidée)
 
-AprÃ¨s Ã©valuation de la **faisabilitÃ©** (technique, dÃ©pendances, effort) et **priorisation**, voici le classement des idÃ©es du backlog.
+Après évaluation de la **faisabilité** (technique, dépendances, effort) et **priorisation**, voici le classement des idées du backlog.
 
-### LÃ©gende faisabilitÃ©
+### Légende faisabilité
 
 | Symbole | Signification |
 |--------|----------------|
-| ðŸŸ¢ | Faisable sans blocant â€” stack actuelle suffisante, effort raisonnable |
-| ðŸŸ¡ | Faisable avec prÃ©alable ou effort moyen â€” doc API, refactor lÃ©ger, ou UX non triviale |
-| ðŸ”´ | Ã€ clarifier â€” dÃ©pend d'un acteur externe (API, schÃ©ma) ou pÃ©rimÃ¨tre Ã  dÃ©finir |
-| ðŸ”® | Long terme â€” complexitÃ© forte ou prioritÃ© mÃ©tier faible |
+| 🟢 | Faisable sans blocant — stack actuelle suffisante, effort raisonnable |
+| 🟡 | Faisable avec préalable ou effort moyen — doc API, refactor léger, ou UX non triviale |
+| 🔴 | À clarifier — dépend d'un acteur externe (API, schéma) ou périmètre à définir |
+| 🔮 | Long terme — complexité forte ou priorité métier faible |
 
-### PrioritÃ© globale (ordre recommandÃ©)
+### Priorité globale (ordre recommandé)
 
-| PrioritÃ© | ThÃ¨me | IdÃ©es | FaisabilitÃ© |
-|----------|--------|--------|-------------|
-| **P0 â€” Haute** | Distribution | Menu Aide â†’ URL releases | ðŸŸ¢ |
-| **P1 â€” Moyenne** | Curation & Ã©dition | Ã‰tape Curation, Ã©dition in-place, persistance, export aprÃ¨s curation, curation ciblÃ©e (issues â†’ cellule) | ðŸŸ¢ |
-| **P1** | NAKALA â€” sÃ©lection | Choisir un sous-ensemble dans le vocabulaire chargÃ© (liste Ã  cocher ou select multiple), cohÃ©rence rÃ¨gles NAKALA | ðŸŸ¢ |
-| **P1** | UX avancÃ©e | VisibilitÃ© des caractÃ¨res invisibles/espaces dans cellules en erreur, intÃ©gration Mapala | ðŸŸ¢ / ðŸŸ¡ |
-| **P2** | NAKALA â€” template API | Doc/dÃ©couverte API NAKALA (prÃ©alable), puis gÃ©nÃ©ration template Â« NAKALA pur Â» | ðŸ”´ â†’ ðŸŸ¡ (aprÃ¨s doc) |
-| **P2** | Presets & rÃ¨gles | Presets ISBN, Date FR, BCP 47, Pays ISO, Lat/Long ; normalisation casse (suggestion) | ðŸŸ¢ |
-| **P2** | Curation avancÃ©e | Historique / undo dans l'Ã©tape curation (rÃ©utilisation CommandHistory si pertinent) | ðŸŸ¢ |
-| **P2** | NAKALA dÃ©tail | Option Â« une seule valeur Â», dÃ©verrouiller / personnaliser aprÃ¨s chargement | ðŸŸ¢ |
-| **P3 â€” Basse** | Presets secondaires | Email, URL, Handle, slug, intervalle annÃ©es, code postal FR ; coordonnÃ©es east/north (parsing structurÃ©) | ðŸŸ¢ / ðŸ”® |
-| **Long terme** | Enrichissement | Auto-update Tauri, constructeur visuel regex, dÃ©tection automatique du format | ðŸŸ¡ / ðŸ”® |
+| Priorité | Thème | Idées | Faisabilité | État code (avril 2026) |
+|----------|--------|--------|-------------|-------------------------|
+| **P0 — Haute** | Distribution | Menu Aide → URL releases | 🟢 | **Fait** — `src-tauri/src/main.rs` ouvre une URL releases au clic sur « Vérifier les mises à jour » ; **remplacer** le placeholder `https://github.com/VOTRE_ORGANISATION/tablerreur/releases` par le dépôt réel. |
+| **P1 — Moyenne** | Curation & édition | Étape Curation dédiée, persistance, export après curation, curation ciblée | 🟢 | **Partiel** — édition in-place (double-clic), `POST /api/jobs/{id}/edit-cell`, `POST /revalidate`, bandeau « cellules modifiées » ; pas d’étape workflow séparée « Curation ». |
+| **P1** | NAKALA — sélection | Sous-ensemble du vocabulaire chargé | 🟢 | **Fait** — `app.js` : sélecteur à cases à cocher après chargement (`#vocab-selector-list`), persistance dans `allowed_values` + `nakala_vocabulary`. |
+| **P1** | UX avancée | Caractères invisibles/espaces ; Mapala | 🟢 / 🟡 | **Fait (Tablerreur)** — toggle « Caractères spéciaux » (`renderVisibleChars`), persistance préférence UX. **Fait (Mapala)** — onglet Mapala + API `/api/mapala/*` dans la même app web (`mapala.js`). |
+| **P2** | NAKALA — template API | Doc API puis template « NAKALA pur » | 🔴 → 🟡 | **Backlog** — inchangé. |
+| **P2** | Presets & règles | Presets ISBN, Date FR, BCP 47, Pays ISO, Lat/Long ; normalisation casse (suggestion) | 🟢 | **Presets** — **déjà dans l’UI** (`FORMAT_PRESETS` + `index.html`) : ISBN-13/10, date FR, BCP 47, pays ISO, latitude/longitude, e-mail (preset). **Reste** : normalisation casse en mode suggestion, etc. |
+| **P2** | Curation avancée | Undo dans l’étape curation | 🟢 | **Backlog** — undo/redo global des **correctifs** existe ; pas d’historique dédié aux seules éditions manuelles de cellules. |
+| **P2** | NAKALA détail | « Une seule valeur », déverrouiller après chargement | 🟢 | **Backlog** — la sélection partielle couvre une partie du besoin ; bouton « Personnaliser » / liste déroulante stricte encore ouverts. |
+| **P3 — Basse** | Presets secondaires | URL (preset dédié), Handle, slug, intervalle années, code postal FR ; coordonnées east/north | 🟢 / 🔮 | **Backlog** — l’URL existe comme **type de contenu** (`content_type: url`), pas comme entrée du catalogue « Format attendu » au même titre que les autres presets. |
+| **Long terme** | Enrichissement | Auto-update Tauri, constructeur visuel regex, détection automatique du format | 🟡 / 🔮 | **Backlog** — inchangé. |
 
-### FaisabilitÃ© par bloc (rÃ©sumÃ©)
+### Faisabilité par bloc (résumé)
 
-- **Briques de base (Â§1)** : Valeurs rÃ©pÃ©tÃ©es autorisÃ©es = ðŸŸ¢ (label UI uniquement). Reste 1 item.
-- **Presets (Â§2)** : Actuels tous âœ…. Restants ðŸŸ¢ sauf coordonnÃ©es structurÃ©es ðŸ”®.
-- **CohÃ©rence (Â§4)** : `similar_values` âœ… exposÃ© dans l'UI ; vocab NAKALA âœ….
-- **NAKALA sÃ©lection (Â§7A)** : ðŸŸ¢ â€” uniquement UI (checkboxes/select), `allowed_values` dÃ©jÃ  gÃ©rÃ©.
-- **NAKALA template (Â§7B)** : ðŸ”´ tant que l'API NAKALA n'a pas Ã©tÃ© vÃ©rifiÃ©e ; ðŸŸ¡ aprÃ¨s doc.
-- **Curation (Â§8)** : ðŸŸ¢ â€” endpoints et Ã©tat job existants ; CommandHistory rÃ©utilisable.
-- **Infra (Â§6)** : Signing macOS hors pÃ©rimÃ¨tre (compte Apple payant non prÃ©vu) ; onedir âœ…, Dockerfile âœ…, limites upload âœ….
+- **Briques de base (§1)** : « Valeurs répétées autorisées » (libellé inverse de `unique`) = 🟢, **toujours backlog** (UI n’a que « Valeurs uniques obligatoires »).
+- **Presets (§2)** : le catalogue **étendu** dans `app.js` / `index.html` couvre une grande partie de l’ancienne liste « à ajouter » ; voir §2.
+- **Cohérence (§4)** : `similar_values` et vocab NAKALA **fait** ; messages NAKALA en français dans le **core** (`nakala_rules.py`) — **fait**.
+- **NAKALA sélection (§7A)** : **fait** (UI).
+- **NAKALA template (§7B)** : 🔴 tant que l’API NAKALA n’est pas cadrée ; overlay NAKALA à l’upload (`template_id` + `overlay_id`) — **fait**.
+- **Curation (§8)** : **partiel** (édition + API + revalidation).
+- **Infra (§6)** : signing macOS hors périmètre ; onedir, Dockerfile, limites upload — **fait**.
 
 ---
 
-## 1. Briques de base (contrÃ´les par colonne)
+## 1. Briques de base (contrôles par colonne)
 
-### A. PrÃ©sence et cardinalitÃ©
+### A. Présence et cardinalité
 
-| FonctionnalitÃ© | Statut | DÃ©tail |
+| Fonctionnalité | Statut | Détail |
 |---|---|---|
-| Valeurs uniques | âœ… | `generic.unique_column` â€” exposÃ© dans UI web |
-| Pseudo-manquants (NA, N/A, null, -â€¦) | âœ… | `generic.pseudo_missing` â€” tokens configurables |
-| Obligatoire / facultatif par colonne | âœ… | `generic.required` â€” signale les cellules vides si `required: true` |
-| Valeurs rÃ©pÃ©tÃ©es autorisÃ©es (inverse d'unique) | ðŸ“‹ | Variante UX de `unique` â€” pas de nouvelle rÃ¨gle, juste un label inversÃ© dans l'UI |
+| Valeurs uniques | Fait | `generic.unique_column` — UI web |
+| Pseudo-manquants (NA, N/A, null, …) | Fait | `generic.pseudo_missing` — tokens configurables |
+| Obligatoire / facultatif par colonne | Fait | `generic.required` |
+| Valeurs répétées autorisées (inverse d'unique) | Backlog | Variante UX de `unique` — label inversé dans l'UI (pas de nouvelle règle) |
 
-### B. Forme gÃ©nÃ©rale
+### B. Forme générale
 
-| FonctionnalitÃ© | Statut | DÃ©tail |
+| Fonctionnalité | Statut | Détail |
 |---|---|---|
-| Longueur min/max | âœ… | `generic.length` â€” exposÃ© dans UI web |
-| Multiligne autorisÃ© | âœ… | `generic.unexpected_multiline` â€” exposÃ© dans UI web |
-| Nettoyages (trim, espaces, NBSP, invisibles, Unicode, retours ligne) | âœ… | Correctifs typiques, Ã©tape 3 du web |
+| Longueur min/max | Fait | `generic.length` — UI web |
+| Multiligne autorisé | Fait | `generic.unexpected_multiline` — UI web |
+| Nettoyages (trim, espaces, NBSP, invisibles, Unicode, retours ligne) | Fait | Correctifs, étape « Correctifs » du flux web |
 
-### C. Jeu de caractÃ¨res & casse
+### C. Jeu de caractères & casse
 
-| FonctionnalitÃ© | Statut | DÃ©tail |
+| Fonctionnalité | Statut | Détail |
 |---|---|---|
-| Uniquement chiffres | âœ… | Couvert par preset regex `positive_int` ou `content_type: integer` |
-| AlphanumÃ©rique | âœ… | Couvert par preset regex `alphanum` |
-| Lettres uniquement (+ accents, tirets, apostrophes) | âœ… | Couvert par preset regex `letters_only` |
-| Interdire certains caractÃ¨res | âœ… | `generic.forbidden_chars` â€” config : liste de caractÃ¨res interdits |
-| Casse imposÃ©e (UPPER / lower / Title) | âœ… | `generic.case` â€” config : `case: upper\|lower\|title` |
+| Uniquement chiffres | Fait | Preset `positive_int` ou `content_type: integer` |
+| Alphanumérique | Fait | Preset `alphanum` |
+| Lettres uniquement | Fait | Preset `letters_only` |
+| Interdire certains caractères | Fait | `generic.forbidden_chars` |
+| Casse imposée (UPPER / lower / Title) | Fait | `generic.case` |
 
 ---
 
 ## 2. Presets de format (catalogue regex)
 
-### Actuellement disponibles
+Implémentation : `FORMAT_PRESETS` dans `web/static/app.js` et liste déroulante `#cfg-format-preset` dans `index.html` (groupes : Généraux, Identifiants, Dates, Codes, Avancé).
 
-| Preset | Statut | Regex |
+### Actuellement disponibles (liste alignée sur le code)
+
+| Preset (clé) | Statut | Remarque |
 |---|---|---|
-| AnnÃ©e (YYYY) | âœ… | `^\d{4}$` |
-| Oui / Non | âœ… | `(?i)^(oui\|non\|â€¦)$` â€” mapping personnalisable |
-| AlphanumÃ©rique | âœ… | `^[A-Za-z0-9]+$` |
-| Lettres uniquement | âœ… | `^[A-Za-zÃ€-Ã¿\s\-']+$` |
-| Entier positif | âœ… | `^\d+$` |
-| PersonnalisÃ© (avancÃ©) | âœ… | Champ regex libre |
-| DOI | âœ… | `^10\.\d{4,9}/[^\s]+$` |
-| ORCID | âœ… | `^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$` |
-| ARK | âœ… | `^ark:/\d{5}/.+$` |
-| ISSN | âœ… | `^\d{4}-\d{3}[\dX]$` |
-| Date W3C-DTF | âœ… | `^\d{4}(-\d{2}(-\d{2})?)?$` |
-| Date ISO stricte (YYYY-MM-DD) | âœ… | `^\d{4}-\d{2}-\d{2}$` |
-| Langue ISO 639 (fr, en, deâ€¦) | âœ… | `(?i)^[a-z]{2,3}$` |
+| Année, Oui/Non, Alphanumérique, Lettres uniquement, Entier positif | Fait | |
+| DOI, ORCID, ARK, ISSN | Fait | |
+| ISBN-13, ISBN-10 | Fait | `isbn13`, `isbn10` |
+| Adresse e-mail (preset) | Fait | `email_preset` (distinct du `content_type: email`) |
+| Date W3C-DTF, Date ISO stricte, Date française (JJ/MM/AAAA) | Fait | `w3cdtf`, `iso_date`, `date_fr` |
+| Langue ISO 639, BCP 47, Pays ISO 3166-1 alpha-2 | Fait | `lang_iso639`, `bcp47`, `country_iso` |
+| Latitude, Longitude | Fait | `latitude`, `longitude` |
+| Personnalisé (regex) | Fait | `custom` |
 
-### Ã€ ajouter â€” Identifiants & liens
+### Reste à ajouter ou à clarifier
 
-| Preset | Statut | Regex / logique | PrioritÃ© |
-|---|---|---|---|
-| Email (comme preset, pas seulement content_type) | ðŸ“‹ | `^[^@\s]+@[^@\s]+\.[^@\s]+$` | Basse |
-| URL (comme preset) | ðŸ“‹ | `https?://\S+` | Basse |
-| ISBN-13 | ðŸ“‹ | `^97[89]\d{10}$` (sans tirets) | Moyenne |
-| ISBN-10 | ðŸ“‹ | `^\d{9}[\dX]$` | Moyenne |
-| Handle | ðŸ“‹ | `^\d+(\.\d+)*/.+$` | Basse |
-| Identifiant interne (slug) | ðŸ“‹ | `^[a-z0-9\-]+$` | Basse |
-
-### Ã€ ajouter â€” Dates & temps
-
-| Preset | Statut | Regex / logique | PrioritÃ© |
-|---|---|---|---|
-| Date FR (JJ/MM/AAAA) | ðŸ“‹ | `^\d{2}/\d{2}/\d{4}$` + bornes | Moyenne |
-| Intervalle d'annÃ©es (YYYY-YYYY) | ðŸ“‹ | `^\d{4}-\d{4}$` | Basse |
-
-### Ã€ ajouter â€” Codes & rÃ©fÃ©rentiels
-
-| Preset | Statut | Regex / logique | PrioritÃ© |
-|---|---|---|---|
-| Langue BCP 47 (fr-FR, en-GB, ocâ€¦) | ðŸ“‹ | `^[a-z]{2,3}(-[A-Z]{2})?$` | Moyenne |
-| Pays ISO 3166-1 alpha-2 (FR, DEâ€¦) | ðŸ“‹ | Liste fermÃ©e 2 lettres majuscules | Moyenne |
-| Code postal FR | ðŸ“‹ | `^\d{5}$` | Basse |
-
-### Ã€ ajouter â€” Nombres & mesures
-
-| Preset | Statut | DÃ©tail | PrioritÃ© |
-|---|---|---|---|
-| Latitude | ðŸ“‹ | DÃ©cimal entre -90 et 90 | Moyenne |
-| Longitude | ðŸ“‹ | DÃ©cimal entre -180 et 180 | Moyenne |
-| CoordonnÃ©es "east=â€¦; north=â€¦" | ðŸ”® | Parsing structurÃ© | Basse |
+| Preset / besoin | Statut | Priorité |
+|---|---|---|
+| URL comme entrée du même catalogue « Format attendu » (regex type `https?://…`) | Backlog | Basse — aujourd’hui couvert par **type de contenu** URL |
+| Handle (Handle.net) | Backlog | Basse |
+| Identifiant interne (slug) | Backlog | Basse |
+| Intervalle d'années (YYYY-YYYY) | Backlog | Basse |
+| Code postal FR | Backlog | Basse |
+| Coordonnées « east=…; north=… » (parsing structuré) | Long terme | Basse |
 
 ---
 
-## 3. ContrÃ´les "valeurs multiples dans une cellule"
+## 3. Contrôles « valeurs multiples dans une cellule »
 
-| FonctionnalitÃ© | Statut | DÃ©tail | PrioritÃ© |
-|---|---|---|---|
-| Liste simple (sÃ©parateur configurable) : split + trim items | âœ… | `generic.list_items` â€” config : `list_separator` |  |
-| Liste contrÃ´lÃ©e : chaque item dans allowed_values | âœ… | Extension de `generic.allowed_values` pour mode liste |  |
-| Items uniques dans la liste | âœ… | Option `list_unique: true` |  |
-| Nombre min / max d'items | âœ… | Options `list_min_items`, `list_max_items` |  |
-| Interdire les items vides | âœ… | Option `list_no_empty: true` (dÃ©faut) |  |
-| Paires clÃ©=valeur | ðŸ”® | Parsing structurÃ© | Basse |
+| Fonctionnalité | Statut | Détail |
+|---|---|---|
+| Liste simple, liste contrôlée, items uniques, min/max items, pas d'items vides | Fait | `generic.list_items` / `generic.allowed_values` (mode liste) |
+| Paires clé=valeur | Long terme | Parsing structuré |
 
 ---
 
-## 4. CohÃ©rence interne (au-delÃ  du regex)
+## 4. Cohérence interne (au-delà du regex)
 
-| FonctionnalitÃ© | Statut | DÃ©tail | PrioritÃ© |
-|---|---|---|---|
-| Valeurs rares (suspicion de faute de saisie) | âœ… | `generic.rare_values` â€” seuil et minimum configurables |  |
-| Valeurs trÃ¨s proches (typo probable, similaritÃ©) | âœ… | `generic.similar_values` â€” via rapidfuzz, exposÃ© dans l'UI web (checkbox + seuil) |  |
-| Normalisation suggÃ©rÃ©e (FR vs Fr vs fr) | ðŸ“‹ | Extension de `generic.case` â€” mode suggestion | Moyenne |
-| Dictionnaire contrÃ´lÃ© distant (vocab NAKALA) | âœ… | `nakala_api.py` + rÃ¨gles `nakala.deposit_type` / `nakala.license` / `nakala.language` ; chargement vocabulaire dans l'UI via endpoint `/api/nakala/vocabulary/{vocab_name}` | SÃ©lection sous-ensemble en backlog |
+| Fonctionnalité | Statut | Détail |
+|---|---|---|
+| Valeurs rares | Fait | `generic.rare_values` |
+| Valeurs très proches (rapidfuzz) | Fait | `generic.similar_values` — UI |
+| Normalisation suggérée (FR vs Fr vs fr) | Backlog | Extension `generic.case` — mode suggestion |
+| Dictionnaire NAKALA + règles `nakala.*` | Fait | + chargement vocab dans l’UI |
+| Messages d'erreur des règles `nakala.*` en français | Fait | `core/rules/nakala_rules.py` (libellés FR) |
+| Sélection sous-ensemble vocabulaire NAKALA | Fait | Voir §7A |
 
 ---
 
 ## 5. UX de la configuration par colonne
 
-| FonctionnalitÃ© | Statut | DÃ©tail |
+| Fonctionnalité | Statut | Détail |
 |---|---|---|
-| Panneau inline au clic sur en-tÃªte | âœ… | ImplÃ©mentÃ© dans l'Ã©tape "Configurer" |
-| Dropdown "Format attendu" (presets) | âœ… | 13 presets en 5 groupes (optgroup) |
-| Texte d'aide contextuel par preset | âœ… | Exemples valides/invalides |
-| Mode regex avancÃ© | âœ… | Champ libre cachÃ© par dÃ©faut |
-| PrÃ©-remplissage depuis template | âœ… | Template â†’ config initiale, Ã©ditable |
-| Oui/Non avec mapping personnalisable | âœ… | Config : `yes_no_true_values`, `yes_no_false_values` |
-| Mode "SÃ©lection" (liste fermÃ©e non Ã©ditable) | âœ… | `allowed_values_locked: true` â€” textarea en lecture seule |
-| CatÃ©gorisation des presets (groupes dans le dropdown) | âœ… | 5 groupes : GÃ©nÃ©raux, Identifiants, Dates, Codes, AvancÃ© |
-| AperÃ§u temps rÃ©el (3 OK / 3 rejetÃ©es) | âœ… | Endpoint `POST /preview-rule`, debounce 300ms |
-| Badges sur colonnes configurÃ©es | âœ… | Point vert `â—` sur `<th>`, tooltip rÃ©sumÃ© |
-| RÃ©sumÃ© de configuration avant Ã©tape suivante | âœ… | Tableau rÃ©capitulatif + boutons Modifier / Continuer |
-| Surlignage des cellules en erreur dans l'aperÃ§u | âœ… | Endpoint `GET /preview-issues`, classes `cell-error/warning/suspicion` |
-| Import de template YAML depuis l'UI | âœ… | Upload `.yaml` Ã  l'Ã©tape Upload et Ã  l'Ã©tape Configurer ; endpoint `POST /import-template` |
-| Export de template YAML depuis l'UI | âœ… | TÃ©lÃ©charger la config courante en `.yaml` ; endpoint `GET /export-template` |
-| Import de vocabulaire personnalisÃ© | âœ… | Upload `.yaml` de vocabulaire ; endpoint `POST /import-vocabulary` |
-| SÃ©lecteur vocabulaire NAKALA dans le panneau | âœ… | Bouton Â« Charger vocabulaire NAKALA Â» dans le panneau de config colonne |
-| DÃ©tection valeurs similaires | âœ… | Checkbox + seuil dans le panneau de config colonne ; `generic.similar_values` via rapidfuzz |
-| Enrichir le menu Â« Type de contenu Â» | ðŸ“‹ | Aujourd'hui seulement 5 types (entier, dÃ©cimal, date, email, URL). Voir ciâ€‘dessous les types manquants. | Moyenne |
-| Restreindre les formats attendus selon le type choisi | ðŸ“‹ | Filtrer le dropdown Â« Format attendu Â» selon le type sÃ©lectionnÃ© (ex. type Date â†’ AnnÃ©e, W3C-DTF, ISO). Voir `docs/type-format-mapping.md`. | Moyenne |
-| Un seul type Â« Nombre Â» avec formats (entier, dÃ©cimal, etc.) | ðŸ“‹ | Fusionner Â« Nombre entier Â» et Â« Nombre dÃ©cimal Â» en un type **Nombre** avec formats. Voir `docs/type-format-mapping.md`. | Moyenne |
-| Constructeur visuel de regex | ðŸ”® | Interface drag-and-drop de blocs | Long terme |
-| DÃ©tection automatique du format probable | ðŸ”® | Heuristique sur les donnÃ©es chargÃ©es | Long terme |
+| Panneau inline, presets groupés, aide, regex avancé, template, Oui/Non, liste verrouillée | Fait | |
+| Aperçu temps réel | Fait | `POST /api/jobs/{id}/preview-rule` (debounce 300 ms côté client) |
+| Badges colonnes, résumé avant étape suivante, surlignage cellules | Fait | `GET /api/jobs/{id}/preview-issues` |
+| Import/export YAML, import vocabulaire, NAKALA, similar_values | Fait | |
+| Enrichir le menu « Type de contenu » | Backlog | Toujours 5 types dans l’UI ; voir `docs/type-format-mapping.md` |
+| Restreindre les formats selon le type choisi | Backlog | |
+| Un seul type « Nombre » avec sous-formats | Backlog | |
+| Constructeur visuel de regex | Long terme | |
+| Détection automatique du format probable | Long terme | |
 
 #### Types de contenu manquants (candidats)
 
-| Type proposÃ© | Existant en format ? | FaisabilitÃ© | PrioritÃ© |
-|-------------|----------------------|-------------|----------|
-| **Texte** (`text`) | â€” | Aucun type Â« texte Â» actuellement ; formats `alphanum`, `letters_only`, `yes_no` sans type dÃ©diÃ©. Voir `docs/type-format-mapping.md`. | Moyenne |
-| AnnÃ©e (YYYY) | âœ… `year` | Pas de nouveau type : une annÃ©e est une date partielle. Garder Type = Date + Format = AnnÃ©e. DÃ©jÃ  couvert. | â€” |
-| Oui / Non (boolÃ©en) | âœ… `yes_no` | Peut rester en format uniquement | Basse |
-| Code langue (ISO 639) | âœ… `lang_iso639` | Utile pour NAKALA | Moyenne |
-| **Identifiant** (DOI, ORCID, ARK, ISSNâ€¦) | âœ… presets dÃ©diÃ©s | Un seul type **Identifiant** ; formats = DOI, ORCID, ARK, ISSN (puis ISBN, Handle). Voir `docs/type-format-mapping.md`. | Moyenne |
-| **Adresse** (e-mail, URL) | âœ… types actuels | Fusionner en un type **Adresse** ; formats = E-mail, URL. Voir `docs/type-format-mapping.md`. | Moyenne |
-| **Type NAKALA** | âœ… rÃ¨gles + API | Un seul type **NAKALA** ; formats = Type de ressource, Licence, Langue, Date crÃ©Ã©e, CrÃ©ateur. Voir `docs/type-format-mapping.md`. | Basse |
-| Texte court / Texte long | â€” | Variante du type Texte ; longueur min/max + multiligne. | Basse |
-| Autres types envisagÃ©s | â€” | **Langue** (ISO 639, BCP 47), **BoolÃ©en** (Oui/Non), **Pays** (ISO 3166), **CoordonnÃ©es** (lat/long), **URI** (gÃ©nÃ©rique). Voir `docs/type-format-mapping.md` Â§1c. | Basse Ã  Moyenne |
+| Type proposé | Existant en format ? | Priorité |
+|-------------|----------------------|----------|
+| Texte, Identifiant fusionné, Adresse fusionnée, NAKALA type unique, etc. | Voir `docs/type-format-mapping.md` | Moyenne à basse |
 
 ---
 
 ## 6. Infrastructure & distribution
 
-| FonctionnalitÃ© | Statut | DÃ©tail | PrioritÃ© |
-|---|---|---|---|
-| Launcher standalone (`python -m spreadsheet_qa.web`) | âœ… | Port auto + navigateur | |
-| Endpoint `/health` | âœ… | Retourne `{"status": "ok", "version": "..."}` | |
-| Tauri â€” init projet | âœ… | `src-tauri/`, Cargo.toml, tauri.conf.json | |
-| Tauri â€” sidecar Python | âœ… | PyInstaller via `build_sidecar.py` | |
-| Tauri â€” sidecar onedir (dÃ©marrage ~1,4s) | âœ… | Mode `--onedir` PyInstaller, dossier `_internal/`, plus d'extraction au lancement | |
-| Tauri â€” splash screen FR | âœ… | HTML embarquÃ© en data URI (`include_str!`), adaptÃ© mode sombre | |
-| Tauri â€” menu natif (Fichier, Aide) | âœ… | Fichier â†’ Quitter ; Aide â†’ VÃ©rifier MÃ J | |
-| Tauri â€” health check avant navigation | âœ… | Poll TCP toutes les 200ms, port 8400â€“8500 | |
-| Tauri â€” icÃ´ne `.icns` / `.ico` / PNG | âœ… | Lettre T blanche, fond bleu #2563eb | |
-| Tauri â€” `.dmg` debug (non signÃ©) | âœ… | GÃ©nÃ©rÃ© via `npm run tauri build` | |
-| DÃ©ploiement online (Dockerfile) | âœ… | Dockerfile multi-stage (sans PySide6) + docker-compose.yml | |
-| Limites upload (taille, types MIME) | âœ… | `TABLERREUR_MAX_UPLOAD_MB`, validation extension/MIME | |
-| CORS configurable | âœ… | `TABLERREUR_CORS_ORIGINS` | |
-| Variable `TABLERREUR_ENV` (dev/prod) | âœ… | ContrÃ´le comportements dev vs prod | |
-| Tauri â€” menu Aide cÃ¢blÃ© (ouvre URL releases) | ðŸ“‹ | Item prÃ©sent, action non implÃ©mentÃ©e | Moyenne |
-| Tauri â€” signing macOS (certificat Apple Developer) | â€” | Hors pÃ©rimÃ¨tre (compte Apple 99 â‚¬/an non prÃ©vu) ; .dmg reste non signÃ© | â€” |
-| Tauri â€” auto-update | ðŸ”® | Plugin Tauri updater | Long terme |
+| Fonctionnalité | Statut | Détail |
+|---|---|---|
+| Launcher `python -m spreadsheet_qa.web`, `/health`, Docker, CORS, limites upload, `TABLERREUR_ENV` | Fait | |
+| Tauri : sidecar, onedir, splash, menu, health check, icônes | Fait | |
+| Tauri : menu Aide → ouvrir URL (releases) | Fait | Remplacer l’URL placeholder dans `main.rs` |
+| Tauri : signing macOS | Hors périmètre | |
+| Tauri : auto-update | Long terme | Plugin updater |
 
 ---
 
-## Ordre recommandÃ© (prochaines sessions)
+## Ordre recommandé (prochaines sessions)
 
-1. **Haute prioritÃ© â€” Distribution**
-   - Menu Aide â†’ ouvrir URL GitHub releases
+Pour le **périmètre audit / sécurité / robustesse**, suivre la section **« Backlog audit technique & sécurité (exécutable) »** en fin de document (items `AUD-Px-xx`), en priorité **P0** puis **P1**.
 
-2. **Moyenne prioritÃ© â€” Fonctionnel**
-   - Ã‰tape Curation (Ã©dition in-place des cellules, persistance, export)
-   - SÃ©lection d'un sous-ensemble dans le vocabulaire NAKALA chargÃ©
-   - VisibilitÃ© des caractÃ¨res invisibles/espaces dans les cellules en erreur
-
-3. **Enrichissement**
-   - Presets supplÃ©mentaires (ISBN, Date FR, BCP 47, Pays ISO, Lat/Long)
-   - NAKALA : template depuis l'API, valeurs spÃ©ciales (Inconnue, Anonyme)
-   - Auto-update Tauri
-   - DÃ©tection automatique de format
-   - Constructeur visuel de regex
+1. **Distribution** — Remplacer l’URL GitHub placeholder dans `src-tauri/src/main.rs` par celle du projet.
+2. **Export de travail (§11)** — Brancher les endpoints d’export annoté / rapport depuis l’étape Correctifs (toujours non implémenté).
+3. **Curation** — Optionnel : étape dédiée, undo local des éditions cellule, parité avec critères §11 (passage Correctifs → Valider si ERROR ouverts).
+4. **NAKALA** — Template depuis API (§7B), raffinages (personnaliser après chargement, etc.).
+5. **UX config** — Filtre formats par type, fusion type Nombre, presets restants (URL catalogue, code postal, …).
 
 ---
 
-## 7. Vocabulaires NAKALA â€” sÃ©lection et templates
+## 7. Vocabulaires NAKALA — sélection et templates
 
-### A. SÃ©lection dans le vocabulaire chargÃ©
+### A. Sélection dans le vocabulaire chargé
 
-Actuellement : Â« Charger le vocabulaire NAKALA Â» remplit *toute* la liste des valeurs autorisÃ©es et la verrouille ; la colonne accepte n'importe quelle valeur du vocabulaire.
-
-| IdÃ©e | Statut | DÃ©tail | PrioritÃ© |
-|------|--------|--------|----------|
-| Choisir un sous-ensemble dans le vocabulaire chargÃ© | ðŸ“‹ | AprÃ¨s chargement, permettre de sÃ©lectionner une ou plusieurs valeurs (ex. une seule licence, ou quelques types de ressource) au lieu d'accepter l'intÃ©gralitÃ© du vocabulaire. | Moyenne |
-| UI : liste Ã  cocher aprÃ¨s chargement | ðŸ“‹ | Afficher les valeurs du vocabulaire en cases Ã  cocher ; l'utilisateur coche celles qu'il veut autoriser ; `allowed_values` = sÃ©lection. | Moyenne |
-| UI : select multiple | ðŸ“‹ | Alternative : `<select multiple>` pour choisir les valeurs ; mÃªme rÃ©sultat (liste filtrÃ©e â†’ `allowed_values`). | Moyenne |
-| Option Â« une seule valeur Â» (liste dÃ©roulante) | ðŸ“‹ | Cas particulier : une seule valeur sÃ©lectionnable (ex. Â« cette colonne = CC-BY-4.0 Â») ; `allowed_values` Ã  un Ã©lÃ©ment. | Basse |
-| DÃ©verrouiller / personnaliser aprÃ¨s chargement | ðŸ“‹ | Bouton Â« Personnaliser Â» pour dÃ©verrouiller le textarea et Ã©diter la liste tout en gardant la trace `nakala_vocabulary`. | Basse |
-| CohÃ©rence rÃ¨gles NAKALA | ðŸ“‹ | Si l'utilisateur ne garde qu'un sous-ensemble : les rÃ¨gles `nakala.deposit_type` / `nakala.license` / `nakala.language` pourraient soit utiliser la liste configurÃ©e (allowed_values) au lieu du vocabulaire complet, soit rester sur le vocabulaire complet (comportement Ã  trancher). | Moyenne |
+| Idée | Statut | Détail |
+|------|--------|--------|
+| Choisir un sous-ensemble après chargement | Fait | Cases à cocher dans le panneau colonne (`app.js`) |
+| Option « une seule valeur » / liste déroulante stricte | Backlog | |
+| Déverrouiller / personnaliser après chargement | Backlog | Bouton « Personnaliser » |
+| Cohérence règles NAKALA vs sous-ensemble | Backlog | Comportement à trancher si besoin |
 
 ### B. Template depuis l'API NAKALA
 
-CrÃ©er un template de validation (colonnes + rÃ¨gles) uniquement Ã  partir de ce que l'API NAKALA expose (vocabulaires, champs requis/recommandÃ©s), sans repartir d'un YAML builtin.
+| Idée | Statut | Détail |
+|------|--------|--------|
+| Découverte champs / schéma via API | Backlog | À préciser |
+| Génération template « NAKALA pur » | Backlog | |
+| Documentation API officielle | Backlog | Préalable |
+| **Overlay NAKALA à l’upload** (`generic_default` + `nakala_baseline` / `nakala_extended`) | Fait | `doUpload()` envoie `template_id` + `overlay_id` |
 
-| IdÃ©e | Statut | DÃ©tail | PrioritÃ© |
-|------|--------|--------|----------|
-| DÃ©couverte des champs NAKALA via l'API | ðŸ“‹ | Si l'API NAKALA expose une liste de champs (requis / recommandÃ©s / optionnels) ou un schÃ©ma, l'utiliser pour gÃ©nÃ©rer la structure du template. | Ã€ prÃ©ciser |
-| GÃ©nÃ©ration de template Â« NAKALA pur Â» | ðŸ“‹ | Endpoint ou flux UI : Â« CrÃ©er un template depuis NAKALA Â» â†’ appel API â†’ template YAML ou config en mÃ©moire. | Moyenne |
-| Template = colonnes + vocabulaires branchÃ©s | ðŸ“‹ | Le template gÃ©nÃ©rÃ© attache les vocabulaires aux colonnes correspondantes ; l'utilisateur peut ensuite appliquer la sÃ©lection (cf. Â§ A). | Moyenne |
-| Documentation / dÃ©couverte API | ðŸ“‹ | VÃ©rifier la doc officielle NAKALA (champs, vocabulaires, Ã©ventuels endpoints de schÃ©ma). RÃ©fÃ©rence : `docs/nakala-validation-formats.md`. | Haute (avant implÃ©mentation) |
-| Appliquer NAKALA (RÃ©fÃ©rence / Ã‰tendu) en overlay Ã  l'upload | ðŸ“‹ | Corriger : envoyer generic_id=generic_default + overlay_id=nakala_baseline|nakala_extended pour que la config = base gÃ©nÃ©rique + overlay NAKALA. | Moyenne |
-| Transformation libellÃ© â†’ URI (COAR, etc.) | ðŸ“‹ | Correctif Â« Remplacer par l'URI COAR Â» quand la valeur est un libellÃ© reconnu ; ou mapping libellÃ© â†’ URI Ã  l'import/export. | Moyenne |
-| Appliquer le type selon le champ dcterms/nakala souhaitÃ© | ðŸ“‹ | En configuration de colonne : indiquer quel champ dcterms/nakala est ciblÃ© ; l'interface applique vocabulaire et rÃ¨gle adaptÃ©s. | Moyenne |
-| Afficher les valeurs NAKALA en libellÃ©s avec stockage URI | ðŸ“‹ | Proposer une liste en libellÃ©s (image, video, sonâ€¦) avec stockage/validation en URI. **Ã€ vÃ©rifier dans la pratique** â€” ne pas implÃ©menter de suite. | Ã€ vÃ©rifier |
-| Champs dcterms manquants + schÃ©ma d'export NAKALA | ðŸ“‹ | IntÃ©grer dcterms:creator, dcterms:contributor, dcterms:publisher, dcterms:rightsHolder, etc. Voir `docs/nakala.md`. | Moyenne |
-| Validation propriÃ©tÃ©s/encodages via API NAKALA | ðŸ“‹ | Utiliser `GET /vocabularies/properties` et `GET /vocabularies/metadatatypes` pour valider propriÃ©tÃ©s et encodages. Voir `docs/nakala-validation-formats.md`. | Moyenne |
-| Relations DataCite (RelationType) | ðŸ“‹ | Valider que le type de relation appartient Ã  la liste fermÃ©e DataCite. Voir `docs/nakala-validation-formats.md` Â§6. | Moyenne |
-| Encodages structurÃ©s dcterms (Box, Point, Period) | ðŸ“‹ | Valider les formats dcterms:Box, dcterms:Point, dcterms:Period. Voir `docs/nakala-validation-formats.md` Â§5. | Basse |
-| Collections NAKALA (statut, titre) | ðŸ“‹ | Support spÃ©cifique collections : statut privÃ©/public via `GET /vocabularies/collectionStatuses`. Voir `docs/nakala-validation-formats.md` Â§7. | Basse |
-| Messages d'erreur NAKALA en franÃ§ais | ðŸ“‹ | Les rÃ¨gles `nakala.*` renvoient des messages en anglais. Traduire pour l'UI web et les exports. Voir `docs/nakala-validation-formats.md` Â§9.1. | Moyenne |
-| Valeurs spÃ©ciales NAKALA : Â« Inconnue Â» (date), Â« Anonyme Â» (crÃ©ateur) | ðŸ“‹ | Accepter Â« Inconnue Â» pour `nakala:created` et Â« Anonyme Â» pour `nakala:creator`. Voir `docs/nakala-validation-formats.md` Â§9.2. | Moyenne |
+Les autres lignes (libellé ↔ URI, champs dcterms, DataCite, collections, etc.) restent **Backlog** — voir `docs/nakala-validation-formats.md` et `docs/nakala.md`.
 
-### Ordre suggÃ©rÃ© (NAKALA)
+### Ordre suggéré (NAKALA)
 
-1. **Documentation** : confirmer ce que l'API NAKALA expose (champs, schÃ©ma, vocabulaires). RÃ©fÃ©rence : `docs/nakala-validation-formats.md`.
-2. **SÃ©lection** : UI pour choisir un sous-ensemble dans le vocabulaire chargÃ©, puis cohÃ©rence avec les rÃ¨gles NAKALA.
-3. **Template depuis l'API** : gÃ©nÃ©ration d'un template (colonnes + rÃ¨gles) Ã  partir des donnÃ©es NAKALA disponibles.
+1. **Documentation** : confirmer ce que l'API expose.
+2. **Affinements** : personnalisation liste, template API.
+3. **Sélection** : déjà en place ; ajuster cohérence règles si nécessaire.
 
 ---
 
-## 8. Ã‰tape curation â€” Ã©dition manuelle des cellules
+## 8. Étape curation — édition manuelle des cellules
 
-PossibilitÃ© pour l'utilisateur de modifier directement certaines cellules dans l'interface (correction manuelle, curation), dans une Ã©tape dÃ©diÃ©e ou intÃ©grÃ©e au flux actuel.
-
-| IdÃ©e | Statut | DÃ©tail | PrioritÃ© |
-|------|--------|--------|----------|
-| Ã‰tape Â« Curation Â» dans le workflow | ðŸ“‹ | Ajouter une Ã©tape (ex. aprÃ¨s Validation ou Correctifs) oÃ¹ l'utilisateur peut Ã©diter les valeurs du tableau : clic sur une cellule â†’ Ã©dition in-place, sauvegarde dans le job. | Moyenne |
-| Ã‰dition in-place dans le tableau d'aperÃ§u | ðŸ“‹ | Rendre les cellules du tableau d'aperÃ§u Ã©ditables : focus â†’ saisie â†’ validation â†’ mise Ã  jour du DataFrame cÃ´tÃ© backend. | Moyenne |
-| Curation ciblÃ©e (cellules en erreur) | ðŸ“‹ | Proposer d'Ã©diter en prioritÃ© les cellules signalÃ©es par la validation (liste des issues â†’ clic â†’ ouvrir la cellule en Ã©dition avec suggestion si disponible). | Moyenne |
-| Persistance des modifications | ðŸ“‹ | Les changements de curation doivent Ãªtre renvoyÃ©s au backend (endpoint type PATCH/PUT sur les donnÃ©es du job), re-validation optionnelle aprÃ¨s Ã©dition. | Moyenne |
-| Historique / annuler une modification | ðŸ“‹ | Undo/redo dans l'Ã©tape curation (peut s'appuyer sur `CommandHistory` / `ApplyCellFixCommand` cÃ´tÃ© core). | Basse |
-| Export aprÃ¨s curation | ðŸ“‹ | S'assurer que l'export (CSV, XLSX) reflÃ¨te les valeurs Ã©ditÃ©es lors de la curation. | Moyenne |
+| Idée | Statut | Détail |
+|------|--------|--------|
+| Étape « Curation » dédiée dans le workflow | Backlog | Pas d’étape séparée aujourd’hui |
+| Édition in-place sur le tableau d'aperçu | Fait | Double-clic ; `POST .../edit-cell` |
+| Curation ciblée (issue → cellule) | Partiel | Navigation / flash cellule côté résultats ; pas d’ouverture automatique en mode édition |
+| Persistance + revalidation | Fait | `POST .../revalidate` |
+| Historique / undo éditions manuelles | Backlog | |
+| Export reflétant les edits | Fait | Données du job à jour ; exports existants utilisent le DataFrame courant |
 
 ---
 
-## 9. UX avancÃ©e â€” nouveaux items
+## 9. UX avancée — nouveaux items
 
-| IdÃ©e | Statut | DÃ©tail | PrioritÃ© |
-|------|--------|--------|----------|
-| VisibilitÃ© des caractÃ¨res invisibles/espaces | ðŸ“‹ | Dans les cellules signalÃ©es par `generic.hygiene.invisible_chars` ou `generic.hygiene.leading_trailing_space`, afficher visuellement les caractÃ¨res problÃ©matiques (ex. pilcrow Â¶, point mÃ©dian Â·, surlignage) pour que l'utilisateur comprenne l'erreur. | Moyenne |
-| IntÃ©gration Mapala | ðŸ“‹ | IntÃ©gration avec Mapala (mapping de tableur) dans le mÃªme Tauri ou en fenÃªtre liÃ©e. PÃ©rimÃ¨tre Ã  dÃ©finir. | Ã€ prÃ©ciser |
+| Idée | Statut | Détail |
+|------|--------|--------|
+| Visibilité des caractères invisibles/espaces | Fait | Toggle « Caractères spéciaux » (aperçu + résultats) |
+| Intégration Mapala | Fait | Onglet Mapala, `mapala.js`, endpoints `/api/mapala/*` dans la même application |
 
 ---
 
-## 10. Decisions figees - Correctifs (mars 2026)
+## 10. Décisions — statuts des anomalies (état code)
 
-Decisions validees avant passage a l'onglet suivant :
+**État actuel (interface)** : les statuts **OPEN**, **IGNORED** et **EXCEPTED** sont affichés et actionnables (filtres, ignorer / exclure / rouvrir).
 
-- Statuts UX retenus : `OPEN` et `IGNORED` uniquement.
-- `EXCEPTED` : retire/masque de l'interface utilisateur.
+> **Note** : une décision antérieure (mars 2026) mentionnait de ne garder que OPEN et IGNORED côté UX et de masquer EXCEPTED. Le **code actuel** expose les trois — cette section a été alignée sur le dépôt. Si le produit doit revenir à l’ancienne règle, il faudra modifier `app.js` + textes.
+
 - Pas de justification obligatoire pour ignorer une anomalie.
 
-## 11. Decision figee - Export depuis l'etape Correctifs (mars 2026)
+---
 
-Decision validee :
+## 11. Décision — Export depuis l'étape Correctifs
 
-- Ajouter un **export de travail** directement dans l'etape `Correctifs` (etape 4),
-  afin de sortir un tableur annote avec les erreurs marquees, avant la validation finale.
+**Décision** : ajouter un **export de travail** depuis l’étape **Correctifs** (étape **3** du flux : Téléverser → Configurer → **Correctifs** → Valider → Résultats), pour sortir un tableur annoté avant la validation finale.
 
-Position technique :
+**État technique** : le branchement reste **à faire** — pas d’endpoint `POST /api/jobs/{id}/exports/annotated` ni `.../exports/issues-report` dans `app.py` à ce jour.
 
-- Le branchement backend est **possible** avec la stack actuelle (job en memoire + liste d'issues).
-- Ce n'est **pas encore implemente** : la maquette UX est prete, il faut brancher les endpoints.
-
-Perimetre backend minimal a prevoir :
+**Périmètre backend envisagé** (inchangé) :
 
 - `POST /api/jobs/{job_id}/exports/annotated`
-  : genere un tableur annote (xlsx/csv/ods/json selon format demande).
 - `POST /api/jobs/{job_id}/exports/issues-report`
-  : genere un rapport d'anomalies (json/csv/pdf selon format demande).
-- Options supportees : perimetre (`all|issues|blocking|touched`), marquage visuel, colonne statut, only_open.
+- Options : périmètre (`all|issues|blocking|touched`), marquage visuel, colonne statut, only_open.
 
-Critere d'acceptation :
+**Critères d'acceptation** (référence produit) :
 
-- Depuis l'etape `Correctifs`, l'utilisateur peut exporter un fichier de travail
-  contenant les erreurs marquees et/ou un rapport des anomalies, sans devoir terminer tout le workflow.
-- Passage Correctifs -> Valider : autorise uniquement s'il ne reste plus d'anomalie `ERROR` en `OPEN`.
-- Une cellule deja modifiee reste re-editable.
-- La liste des anomalies est re-calculee a la `Re-valider` (source de verite finale).
-- En vue Resultats, l'action de correction rapide reste limitee a l'apercu (30 premieres lignes) tant que la contrainte n'est pas levee.
+- Export depuis Correctifs sans terminer tout le workflow.
+- Passage Correctifs → Valider : soumis à la politique d’erreurs (voir maquette / spec).
+- Re-validation après éditions : `POST /revalidate` existe déjà.
+
+---
+
+## Backlog audit technique & sécurité (exécutable)
+
+Synthèse des passes d’audit code (architecture, API, Tauri, core, ops). **Cocher** `- [x]` au fil des implémentations. Identifiants **`AUD-Px-xx`** pour les tickets / commits.
+
+### Légende priorités
+
+| Code | Sens |
+|------|------|
+| **P0** | Critique — avant exposition réseau large ou release sensible |
+| **P1** | Haute — robustesse, sécurité opérationnelle, CI |
+| **P2** | Moyenne — cohérence produit, durcissement, dette technique |
+| **P3** | Basse — documentation, sensibilisation, long terme |
+
+### P0 — Critique
+
+- [x] **AUD-P0-01** — Si l’API est joignable hors poste isolé : **authentification** ou **réseau privé uniquement** ; documenter « non prévu pour Internet public sans garde-fous » (accès par `job_id` seul). → **`docs/deployment-security.md`**
+- [x] **AUD-P0-02** — **`POST /api/mapala/upload`** : plafonner la taille des deux fichiers (ex. aligné sur `TABLERREUR_MAX_UPLOAD_MB` ou variable dédiée) ; éviter un `read()` illimité en mémoire. → **`mapala_routes.py`** + `tests/test_mapala_upload_limit.py`
+- [x] **AUD-P0-03** — **Tauri** : au menu **Fichier → Quitter**, **tuer le sidecar** Python comme sur `CloseRequested` (`kill` / `wait` dans `src-tauri/src/main.rs`).
+
+### P1 — Haute priorité
+
+- [x] **AUD-P1-01** — **`engine.py`** : `ValidationResult` + `rule_failures` ; API/UI `échecs_règles`.
+- [x] **AUD-P1-02** — **`app.py`** : logs sur exports / régénération ; `job.export_errors` + `avertissements_export` + bandeau résultats.
+- [ ] **AUD-P1-03** — **Docker / prod** : CORS autre que `*` par défaut ; aligner **Dockerfile** vs **docker-compose** pour `TABLERREUR_CORS_ORIGINS`.
+- [ ] **AUD-P1-04** — **Prod** : désactiver ou restreindre **`/docs`**, **`/redoc`**, **`/openapi.json`** si l’API est exposée.
+- [ ] **AUD-P1-05** — **CI** : exécuter **`pytest`** sur les PR (sans `-x` ou job dédié) ; optionnel **ruff** + `scripts/check_english_strings.py` sur `ui/`.
+- [ ] **AUD-P1-06** — **Gros CSV** (`dataset.py`) : documenter limites ; envisager streaming / refus au-delà d’un seuil pour limiter l’OOM (double charge mémoire).
+
+### P2 — Priorité moyenne
+
+- [ ] **AUD-P2-01** — **`.ods`** : support réel ou retrait du chemin openpyxl / message d’erreur explicite (`dataset.py`).
+- [ ] **AUD-P2-02** — **Erreurs API** : éviter `detail=str(exc)` systématique — message générique client, détail en logs serveur.
+- [ ] **AUD-P2-03** — **Rate limiting** (si API partagée) : upload, `validate`, `preview-rule`, Mapala.
+- [ ] **AUD-P2-04** — **YAML** (import template) : plafonds taille / profondeur contre DoS parsing.
+- [ ] **AUD-P2-05** — **Pickle / multi-tenant** : documenter modèle de confiance (permissions `work_dir`, pas de partage de répertoires entre clients).
+- [x] **AUD-P2-06** — **Jobs TTL 1 h** : **expiration glissante** via `last_access_at` à chaque `get`/`update` (`jobs.py`). Message 404 existant côté client.
+- [ ] **AUD-P2-07** — **FastAPI** : migrer `@app.on_event("startup")` vers **lifespan**.
+- [ ] **AUD-P2-08** — **`pytest.ini`** : ne pas imposer `-x` en CI (override dans la commande CI).
+- [ ] **AUD-P2-09** — **Tauri** : optionnellement poll **`GET /health`** au lieu du seul TCP pour « prêt ».
+- [ ] **AUD-P2-10** — **Tauri** : durcir **CSP** webview si le périmètre contenu évolue.
+- [ ] **AUD-P2-11** — Remplacer l’**URL GitHub placeholder** des releases dans `main.rs` par le dépôt réel.
+- [ ] **AUD-P2-12** — **`tablerreur-backend.spec`** : éviter chemins absolus ; s’appuyer sur `scripts/build_sidecar.py`.
+- [ ] **AUD-P2-13** — **`commands.py` / patch** : ordre persistance vs mutation DataFrame ; documenter ou transactionnaliser le bulk.
+- [ ] **AUD-P2-14** — **`issue_store.replace_for_columns`** : optimiser si perf sur gros volumes (éviter `list.remove` répété sur grosses listes).
+
+### P3 — Basse priorité / long terme
+
+- [ ] **AUD-P3-01** — Documenter le risque **injection de formules** à l’ouverture des exports dans Excel (CSV/XLSX).
+- [ ] **AUD-P3-02** — Étendre un contrôle **chaînes non françaises** au **`web/static`** (le script actuel cible surtout `ui/` PySide).
+- [ ] **AUD-P3-03** — **Lockfile** pip / versions figées pour images Docker et builds reproductibles.
+- [ ] **AUD-P3-04** — **Tests** : couvrir **Mapala** (`mapala_routes` / core) dans `tests/`.
+- [ ] **AUD-P3-05** — **Accessibilité** : passe clavier / focus / tableaux si besoin institutionnel.
+- [ ] **AUD-P3-06** — **Signing macOS**, **auto-update Tauri** : suivre la roadmap distribution existante.
+
+### Suivi
+
+| Champ | Usage |
+|--------|--------|
+| Branche / PR | Lier `AUD-Px-xx` dans le titre ou la description |
+| Fait | Cocher la case et éventuellement noter la date en commentaire de commit |

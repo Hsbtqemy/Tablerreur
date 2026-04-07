@@ -10,6 +10,7 @@ Endpoints :
 
 from __future__ import annotations
 
+import os
 import shutil
 import tempfile
 import threading
@@ -24,6 +25,41 @@ from fastapi.responses import FileResponse
 
 from spreadsheet_qa.core.mapala import list_sheets, load_sheet, save_mapala_output
 from spreadsheet_qa.web.jobs import TTL_SECONDS, JobState, job_manager
+
+def _max_upload_mb_and_bytes() -> tuple[int, int]:
+    """Lit TABLERREUR_MAX_UPLOAD_MB (comme POST /api/jobs) avec repli si valeur invalide."""
+    raw = os.environ.get("TABLERREUR_MAX_UPLOAD_MB", "50")
+    try:
+        mb = int(str(raw).strip())
+    except ValueError:
+        mb = 50
+    if mb < 1:
+        mb = 1
+    return mb, mb * 1024 * 1024
+
+
+# Même plafond que POST /api/jobs (variable d'environnement TABLERREUR_MAX_UPLOAD_MB).
+_MAX_UPLOAD_MB, _MAX_UPLOAD_BYTES = _max_upload_mb_and_bytes()
+
+
+async def _read_upload_limited(upload: UploadFile, max_bytes: int) -> bytes:
+    """Lit le corps d'un UploadFile sans dépasser max_bytes (réponse 413)."""
+    out = bytearray()
+    chunk_size = min(1024 * 1024, max(1, max_bytes))
+    while True:
+        chunk = await upload.read(chunk_size)
+        if not chunk:
+            break
+        if len(out) + len(chunk) > max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"Fichier trop volumineux (max. {_MAX_UPLOAD_MB} Mo par fichier, "
+                    "comme pour le téléversement Tablerreur)."
+                ),
+            )
+        out.extend(chunk)
+    return bytes(out)
 
 
 # ---------------------------------------------------------------------------
@@ -119,19 +155,22 @@ async def mapala_upload(
     source_file: UploadFile = File(...),
 ):
     """Upload template + source, retourne les listes de feuilles disponibles."""
+    template_bytes = await _read_upload_limited(template_file, _MAX_UPLOAD_BYTES)
+    source_bytes = await _read_upload_limited(source_file, _MAX_UPLOAD_BYTES)
+
     job = _create_mapala_job()
 
     # Sauvegarde du template
     template_ext = Path(template_file.filename or "template.xlsx").suffix or ".xlsx"
     template_path = job.work_dir / f"template{template_ext}"
-    template_path.write_bytes(await template_file.read())
+    template_path.write_bytes(template_bytes)
     job.template_path = template_path
     job.template_filename = template_file.filename or ""
 
     # Sauvegarde de la source
     source_ext = Path(source_file.filename or "source.xlsx").suffix or ".xlsx"
     source_path = job.work_dir / f"source{source_ext}"
-    source_path.write_bytes(await source_file.read())
+    source_path.write_bytes(source_bytes)
     job.source_path = source_path
     job.source_filename = source_file.filename or ""
 
