@@ -1,6 +1,6 @@
 ﻿# Backlog Tablerreur — Validation par colonne & UX
 
-> Dernière mise à jour : avril 2026 (vérifiée contre le code du dépôt ; backlog audit exécutable § dédié)
+> Dernière mise à jour : avril 2026 — **§12 (flux import / modèle)** : **livré (6/6)** — FLUX-03 : confirmation + texte d’aide + toast après changement de modèle si réglages colonne déjà enregistrés (`app.js`, `index.html`). Vérifiée contre le code du dépôt ; backlog audit exécutable en fin de document.
 > Statuts : **Fait** | **Prochaine itération** | **Backlog** | **Long terme**
 
 **Révision avril 2026** : synchronisation avec `src/spreadsheet_qa/web/`, `src-tauri/src/main.rs` et `core/`. Les entrées ci-dessous reflètent l’état **actuel** du code ; les lignes obsolètes (ex. « menu Aide non câblé ») ont été corrigées.
@@ -25,6 +25,7 @@ Après évaluation de la **faisabilité** (technique, dépendances, effort) et *
 | Priorité | Thème | Idées | Faisabilité | État code (avril 2026) |
 |----------|--------|--------|-------------|-------------------------|
 | **P0 — Haute** | Distribution | Menu Aide → URL releases | 🟢 | **Fait** — `src-tauri/src/main.rs` ouvre une URL releases au clic sur « Vérifier les mises à jour » ; **remplacer** le placeholder `https://github.com/VOTRE_ORGANISATION/tablerreur/releases` par le dépôt réel. |
+| **P1 — Moyenne** | Flux UX | **Prévisualisation des données** (aperçu `GET /preview` à l’étape **Configurer**), **choix du modèle** (builtin / overlay NAKALA / YAML) sur **Configurer** — pas sur Téléverser | 🟡 | **Fait (§12)** — `POST /api/jobs` + `PATCH …/template` ; **FLUX-03** : dialogue de confirmation et rappel de fusion si l’utilisateur a déjà enregistré des réglages colonne. |
 | **P1 — Moyenne** | Curation & édition | Étape Curation dédiée, persistance, export après curation, curation ciblée | 🟢 | **Partiel** — édition in-place (double-clic), `POST /api/jobs/{id}/edit-cell`, `POST /revalidate`, bandeau « cellules modifiées » ; pas d’étape workflow séparée « Curation ». |
 | **P1** | NAKALA — sélection | Sous-ensemble du vocabulaire chargé | 🟢 | **Fait** — `app.js` : sélecteur à cases à cocher après chargement (`#vocab-selector-list`), persistance dans `allowed_values` + `nakala_vocabulary`. |
 | **P1** | UX avancée | Caractères invisibles/espaces ; Mapala | 🟢 / 🟡 | **Fait (Tablerreur)** — toggle « Caractères spéciaux » (`renderVisibleChars`), persistance préférence UX. **Fait (Mapala)** — onglet Mapala + API `/api/mapala/*` dans la même app web (`mapala.js`). |
@@ -170,9 +171,10 @@ Pour le **périmètre audit / sécurité / robustesse**, suivre la section **« 
 
 1. **Distribution** — Remplacer l’URL GitHub placeholder dans `src-tauri/src/main.rs` par celle du projet.
 2. **Export de travail (§11)** — Brancher les endpoints d’export annoté / rapport depuis l’étape Correctifs (toujours non implémenté).
-3. **Curation** — Optionnel : étape dédiée, undo local des éditions cellule, parité avec critères §11 (passage Correctifs → Valider si ERROR ouverts).
-4. **NAKALA** — Template depuis API (§7B), raffinages (personnaliser après chargement, etc.).
-5. **UX config** — Filtre formats par type, fusion type Nombre, presets restants (URL catalogue, code postal, …).
+3. **Flux import / modèle (§12)** — **Complet** (y compris FLUX-03). Re-téléversement + `POST` couvrent les sidecars sans `PATCH`.
+4. **Curation** — Optionnel : étape dédiée, undo local des éditions cellule, parité avec critères §11 (passage Correctifs → Valider si ERROR ouverts).
+5. **NAKALA** — Template depuis API (§7B), raffinages (personnaliser après chargement, etc.).
+6. **UX config** — Filtre formats par type, fusion type Nombre, presets restants (URL catalogue, code postal, …).
 
 ---
 
@@ -194,7 +196,7 @@ Pour le **périmètre audit / sécurité / robustesse**, suivre la section **« 
 | Découverte champs / schéma via API | Backlog | À préciser |
 | Génération template « NAKALA pur » | Backlog | |
 | Documentation API officielle | Backlog | Préalable |
-| **Overlay NAKALA à l’upload** (`generic_default` + `nakala_baseline` / `nakala_extended`) | Fait | `doUpload()` envoie `template_id` + `overlay_id` |
+| **Overlay NAKALA à l’upload** (`generic_default` + `nakala_baseline` / `nakala_extended`) | Fait | `doUpload()` envoie `template_id` + `overlay_id` — **évolution possible** : §12 (modèle déplacé vers Configurer) |
 
 Les autres lignes (libellé ↔ URI, champs dcterms, DataCite, collections, etc.) restent **Backlog** — voir `docs/nakala-validation-formats.md` et `docs/nakala.md`.
 
@@ -255,6 +257,25 @@ Les autres lignes (libellé ↔ URI, champs dcterms, DataCite, collections, etc.
 - Export depuis Correctifs sans terminer tout le workflow.
 - Passage Correctifs → Valider : soumis à la politique d’erreurs (voir maquette / spec).
 - Re-validation après éditions : `POST /revalidate` existe déjà.
+
+---
+
+## 12. Flux Téléverser — prévisualisation d’abord, modèle à l’étape Configurer
+
+**Objectif** : réduire la friction sur la première étape : **Téléverser** = **fichier + options d’import** uniquement ; **premier aperçu des données** et **choix du modèle** (builtin, overlay NAKALA, import YAML) sur **Configurer** (« je définis les règles »).
+
+**Contexte technique** : `POST /api/jobs` enregistre `template_id` / `overlay_id` (le frontend envoie le choix du sélecteur `#template-id`, présent dans le DOM dès le chargement). `GET /api/jobs/{id}/column-config` fusionne template et surcharges utilisateur (`TemplateManager.compile_config`). **`PATCH /api/jobs/{job_id}/template`** met à jour le modèle sur un job existant (changement après création — ex. sidecar régénéré avec la route). La **fusion** si la config colonne a déjà été touchée : comportement actuel = merge dans `GET /column-config` ; **FLUX-03** = clarifier côté UX (message).
+
+**État global** : 🟢 **6/6 tâches faites**.
+
+### Tâches (découpage)
+
+- [x] **FLUX-01 — UX étape Téléverser** : Bloc « Modèle de validation » retiré de l’étape 1 ; **aperçu des données** = tableau à l’étape **Configurer** (API inchangée : `GET /api/jobs/{id}/preview`).
+- [x] **FLUX-02 — API mise à jour du modèle sur job existant** : `PATCH /api/jobs/{job_id}/template` (JSON `template_id`, `overlay_id`) + persistance `job_manager`.
+- [x] **FLUX-03 — Règles de fusion / message UX** : Si l’utilisateur a **déjà enregistré** des réglages colonne (`PUT` réussi) puis **change de modèle**, **confirmation** (`confirm`) expliquant la fusion ; **toast** informatif après succès si réglages préexistants ; paragraphe d’aide sous le sélecteur dans `index.html`. Comportement serveur inchangé (`GET /column-config` = merge).
+- [x] **FLUX-04 — UX étape Configurer** : Sélecteur de modèle en tête de l’étape + « Importer un modèle » (YAML).
+- [x] **FLUX-05 — Frontend** : `doUpload()` envoie dans le **`POST`** les `template_id` / `overlay_id` lus depuis `#template-id` (préférences utilisateur), puis passage à **Configurer** — **pas** `PATCH` obligatoire après création (compatibilité sidecars anciens). Changement de modèle sur **Configurer** : `PATCH` + rechargement aperçu quand le serveur expose la route ; sinon message invitant à re-téléverser ou à mettre à jour l’app.
+- [x] **FLUX-06 — Tests** : `tests/test_web_job_template_patch.py` — PATCH overlay + 404 job inconnu.
 
 ---
 

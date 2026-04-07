@@ -403,8 +403,78 @@ body {
 /* ---- Downloads ---- */
 .download-buttons { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 0.5rem; }
 
+/* ---- Aperçu court (étape Téléverser, après POST job) ---- */
+.upload-preview-card .upload-preview-loading-msg {
+  padding: 0.5rem 0;
+}
+.upload-preview-card .upload-preview-scroll {
+  overflow-x: scroll;
+  overflow-y: auto;
+  max-height: min(65vh, 720px);
+  margin-top: 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  scrollbar-gutter: stable both-edges;
+}
+.upload-preview-table.preview-table th {
+  cursor: default;
+}
+.upload-preview-table.preview-table th:hover {
+  background: #f0f4f8;
+}
+.upload-preview-empty {
+  color: var(--color-text-muted);
+  font-style: italic;
+  padding: 0.75rem 1rem !important;
+}
+
 /* ---- Preview table (étape Configurer) ---- */
-.preview-table-wrapper { padding: 0; overflow: hidden; }
+.preview-table-wrapper { padding: 0; overflow: visible; }
+
+/* Conteneur scrollable : aperçu Configurer — tout le texte des cellules est lisible (retours à la ligne). */
+#preview-table-container {
+  overflow-x: scroll;
+  overflow-y: auto;
+  max-height: min(75vh, 920px);
+  scrollbar-gutter: stable both-edges;
+}
+
+/* Largeur naturelle du tableau → dépassement horizontal dès que les colonnes dépassent le conteneur. */
+#preview-table-container .preview-table {
+  width: max-content;
+  min-width: 100%;
+  box-sizing: border-box;
+}
+
+.upload-preview-scroll .upload-preview-table {
+  width: max-content;
+  min-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Barres de défilement plus visibles (aperçus larges). */
+#preview-table-container::-webkit-scrollbar,
+.upload-preview-card .upload-preview-scroll::-webkit-scrollbar {
+  height: 11px;
+  width: 11px;
+}
+#preview-table-container::-webkit-scrollbar-thumb,
+.upload-preview-card .upload-preview-scroll::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 6px;
+  border: 2px solid var(--color-surface);
+}
+#preview-table-container::-webkit-scrollbar-thumb:hover,
+.upload-preview-card .upload-preview-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+#preview-table-container,
+.upload-preview-card .upload-preview-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) var(--color-surface);
+}
+
 .preview-scroll-top {
   overflow-x: auto;
   overflow-y: hidden;
@@ -424,9 +494,15 @@ body {
 .preview-table th {
   background: #f0f4f8;
   border: 1px solid var(--color-border);
-  padding: 8px 14px;
+  padding: 8px 12px;
   cursor: pointer;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  min-width: 3rem;
+  max-width: min(28rem, 48vw);
+  line-height: 1.35;
+  vertical-align: bottom;
   user-select: none;
   position: relative;
   transition: background .15s, color .15s;
@@ -450,11 +526,15 @@ body {
 .preview-table th.column-configured.column-selected::after { color: #86efac; }
 .preview-table td {
   border: 1px solid var(--color-border);
-  padding: 5px 14px;
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  padding: 6px 12px;
+  min-width: 2.5rem;
+  max-width: min(28rem, 48vw);
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+  line-height: 1.45;
+  overflow: visible;
 }
 .preview-table tr:hover td { background: #f8f9fa; }
 .preview-table td.column-selected { background: #e8f4fd; }
@@ -810,7 +890,9 @@ textarea.av-locked {
   .step-nav { padding: 0.5rem 1rem; gap: 0.25rem; }
   .step-coach { width: calc(100% - 2rem); margin-top: 0.6rem; }
   .step-btn { font-size: 0.85rem; padding: 4px 8px; }
-  #preview-table-container { overflow-x: auto; }
+  #preview-table-container {
+    max-height: min(70vh, 85dvh);
+  }
   .col-config-grid { grid-template-columns: 1fr !important; }
   .col-config-field { grid-column: 1 / -1 !important; }
   .rp-row { flex-direction: column; }
@@ -1024,6 +1106,21 @@ textarea.av-locked {
 [data-theme="dark"] .preview-table td { border-color: #334155; }
 [data-theme="dark"] .preview-table tr:hover td { background: #1a2b3c; }
 [data-theme="dark"] .preview-table td.column-selected { background: #1e3050; }
+[data-theme="dark"] .upload-preview-card .upload-preview-scroll {
+  border-color: #334155;
+  background: #0f172a;
+}
+[data-theme="dark"] #preview-table-container::-webkit-scrollbar-thumb,
+[data-theme="dark"] .upload-preview-card .upload-preview-scroll::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-color: #0f172a;
+}
+[data-theme="dark"] #preview-table-container,
+[data-theme="dark"] .upload-preview-card .upload-preview-scroll {
+  scrollbar-color: #475569 #0f172a;
+}
+[data-theme="dark"] .upload-preview-table.preview-table th:hover { background: #334155; }
+[data-theme="dark"] .upload-preview-empty { color: #94a3b8; }
 [data-theme="dark"] .summary-card { background: #1e293b; border-color: #334155; }
 [data-theme="dark"] .summary-table thead th { background: #273548; }
 [data-theme="dark"] .summary-table tbody tr:nth-child(even) { background: #1a2b3c; }

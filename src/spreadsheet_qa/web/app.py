@@ -2,6 +2,7 @@
 
 Workflow:
   POST /api/jobs            → upload file, create job → job_id
+  PATCH /api/jobs/{id}/template → modèle builtin + overlay (après création)
   POST /api/jobs/{id}/fixes → apply hygiene fix pack
   POST /api/jobs/{id}/validate → run validation engine
   GET  /api/jobs/{id}       → job status / summary
@@ -33,6 +34,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 from spreadsheet_qa.core.commands import Command
 from spreadsheet_qa.core.dataset import DatasetLoader
@@ -314,6 +316,24 @@ async def update_column_config(job_id: str, request: Request):
 
     job_manager.update(job)
     return {"ok": True}
+
+
+class JobTemplateUpdate(BaseModel):
+    """Mise à jour du modèle de validation (étape Configurer — FLUX backlog §12)."""
+
+    template_id: str = "generic_default"
+    overlay_id: str | None = None
+
+
+@app.patch("/api/jobs/{job_id}/template")
+async def update_job_template(job_id: str, body: JobTemplateUpdate):
+    """Définit le modèle builtin et l’overlay NAKALA optionnel après création du job."""
+    job = _get_job(job_id)
+    job.template_id = body.template_id
+    oid = (body.overlay_id or "").strip()
+    job.overlay_id = oid or None
+    job_manager.update(job)
+    return {"ok": True, "template_id": job.template_id, "overlay_id": job.overlay_id}
 
 
 # ---------------------------------------------------------------------------

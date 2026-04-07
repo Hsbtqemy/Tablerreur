@@ -17,6 +17,10 @@ const state = {
   // Configure step
   columnConfig: {},     // { colName: { content_type, unique, ... } }
   activeColumn: null,   // name of the currently open config panel
+  /** True après au moins une sauvegarde serveur des réglages colonne (PUT column-config). Utilisé pour FLUX-03 (changement de modèle). */
+  userColumnConfigSaved: false,
+  /** True après POST /api/jobs réussi et avant « Continuer vers la configuration » — aperçu 10 lignes sur l’étape Téléverser. */
+  uploadPreviewReady: false,
   loadedVocabs: {},       // cache { vocabName: [...values] } to restore selector on panel reopen
   loadedVocabLabels: {},  // cache { vocabName: {uri: labelFR} } for datatypes display
   ruleFailures: [],       // échecs d'exécution de règles (moteur)
@@ -58,6 +62,10 @@ function _saveUxPrefs() {
 function _setUxPref(key, value) {
   _uxPrefs[key] = value;
   _saveUxPrefs();
+}
+
+function _markUserColumnConfigSaved() {
+  state.userColumnConfigSaved = true;
 }
 
 function _templateOptionKey(optionEl) {
@@ -108,9 +116,56 @@ function _initUxPrefs() {
     if (savedOpt) {
       savedOpt.selected = true;
     }
+    /** Clé du modèle avant interaction (liste déroulante) — pour annuler ou comparer au `change`. */
+    let templateKeyBeforeChange = _templateOptionKey(templateEl.selectedOptions[0]);
+    const captureTemplateKey = () => {
+      if (templateEl.selectedOptions[0]) {
+        templateKeyBeforeChange = _templateOptionKey(templateEl.selectedOptions[0]);
+      }
+    };
+    templateEl.addEventListener('focus', captureTemplateKey);
+    templateEl.addEventListener('pointerdown', captureTemplateKey);
+
     templateEl.addEventListener('change', () => {
-      const current = templateEl.selectedOptions[0];
-      _setUxPref('template_key', _templateOptionKey(current));
+      const selectedOpt = templateEl.selectedOptions[0];
+      const newKey = _templateOptionKey(selectedOpt);
+      const prevKey = templateKeyBeforeChange;
+      const hadSavedConfig = state.userColumnConfigSaved;
+
+      const runTemplateChange = async () => {
+        _setUxPref('template_key', newKey);
+        templateKeyBeforeChange = newKey;
+        if (!state.jobId) return;
+        try {
+          await syncJobTemplateFromUI();
+          closeColumnConfig();
+          await loadPreview();
+          if (hadSavedConfig) {
+            _showToast(
+              'Modèle de validation appliqué. Vos réglages enregistrés par colonne restent prioritaires là où vous les avez définis.',
+              'info',
+              6500
+            );
+          }
+        } catch (err) {
+          _showToast(err?.message || 'Impossible de mettre à jour le modèle.', 'error', 6000);
+          const revert = _findTemplateOptionByKey(templateEl, prevKey);
+          if (revert) revert.selected = true;
+          templateKeyBeforeChange = _templateOptionKey(templateEl.selectedOptions[0]);
+        }
+      };
+
+      if (state.jobId && state.userColumnConfigSaved && prevKey !== newKey) {
+        const explain =
+          'Vous avez déjà enregistré des réglages par colonne. En changeant de modèle, le nouveau modèle se combine à votre configuration : vos réglages explicites par colonne sont conservés, et les règles par défaut du nouveau modèle s’appliquent pour le reste.\n\nSouhaitez-vous continuer ?';
+        if (!window.confirm(explain)) {
+          const revert = _findTemplateOptionByKey(templateEl, prevKey);
+          if (revert) revert.selected = true;
+          return;
+        }
+      }
+
+      void runTemplateChange();
     });
   }
 
@@ -235,7 +290,7 @@ function _updateStepCoach() {
   switch (state.currentStep) {
     case 'upload':
       _setStepCoach(
-        '<strong>Étape 1/5.</strong> Choisissez votre fichier puis lancez le téléversement. Les options d’import sont mémorisées.',
+        '<strong>Étape 1/5.</strong> Choisissez un fichier, ajustez les options d’import si besoin, puis cliquez sur <strong>Téléverser et afficher l’aperçu</strong>. Ensuite, continuez vers la configuration.',
         'Choisir un fichier',
         () => fileInput?.click()
       );
@@ -303,6 +358,12 @@ function goToStep(step) {
   state.currentStep = step;
 
   // Step-specific init
+  if (step === 'upload') {
+    if (state.jobId && state.uploadPreviewReady) {
+      _showUploadPreviewChrome();
+      void _renderUploadPreview();
+    }
+  }
   if (step === 'configure') { loadPreview(); updateUndoRedoButtons(); }
   if (step === 'fixes') updateUndoRedoButtons();
   if (step === 'validate') runValidation();
@@ -360,7 +421,10 @@ _initUxPrefs();
 _updateStepCoach();
 
 fileInput?.addEventListener('change', () => {
-  if (fileInput.files.length) showFileSelected(fileInput.files[0].name);
+  if (fileInput.files.length) {
+    _resetUploadPreviewStepUI();
+    showFileSelected(fileInput.files[0].name);
+  }
 });
 
 // Drag & drop
@@ -374,31 +438,222 @@ uploadZone?.addEventListener('drop', e => {
   uploadZone.classList.remove('drag-over');
   if (e.dataTransfer.files.length) {
     fileInput.files = e.dataTransfer.files;
+    _resetUploadPreviewStepUI();
     showFileSelected(e.dataTransfer.files[0].name);
   }
 });
 
+/** Nombre de lignes affichées dans l’aperçu après téléversement (étape Téléverser). */
+const UPLOAD_PREVIEW_ROWS = 10;
+
+function _showUploadPreviewChrome() {
+  const card = document.getElementById('upload-preview-card');
+  const btnS = document.getElementById('btn-upload-submit');
+  const btnC = document.getElementById('btn-upload-continue');
+  if (card) card.hidden = false;
+  if (btnS) {
+    btnS.hidden = true;
+    btnS.disabled = false;
+    btnS.removeAttribute('aria-busy');
+  }
+  if (btnC) {
+    btnC.hidden = false;
+  }
+}
+
+/** Masque l’aperçu Téléverser et réaffiche le bouton principal (nouveau fichier ou réinitialisation). */
+function _resetUploadPreviewStepUI() {
+  state.uploadPreviewReady = false;
+  const card = document.getElementById('upload-preview-card');
+  const table = document.getElementById('upload-preview-table');
+  const loading = document.getElementById('upload-preview-loading');
+  const meta = document.getElementById('upload-preview-meta');
+  const headerRow = document.getElementById('upload-preview-header');
+  const tbody = document.getElementById('upload-preview-body');
+  const btnS = document.getElementById('btn-upload-submit');
+  const btnC = document.getElementById('btn-upload-continue');
+  if (card) card.hidden = true;
+  if (table) table.hidden = true;
+  if (headerRow) headerRow.innerHTML = '';
+  if (tbody) tbody.innerHTML = '';
+  if (loading) {
+    loading.hidden = false;
+    loading.textContent = 'Chargement de l\'aperçu…';
+    loading.className = 'msg-info upload-preview-loading-msg';
+  }
+  if (meta) {
+    meta.hidden = true;
+    meta.textContent = '';
+  }
+  if (btnS) {
+    btnS.hidden = false;
+    btnS.disabled = false;
+    btnS.removeAttribute('aria-busy');
+  }
+  if (btnC) btnC.hidden = true;
+}
+
+/**
+ * Charge et affiche l’aperçu court (GET /preview) sur l’étape Téléverser.
+ * @returns {Promise<boolean>} true si le tableau a été affiché avec succès
+ */
+async function _renderUploadPreview() {
+  const loading = document.getElementById('upload-preview-loading');
+  const table = document.getElementById('upload-preview-table');
+  /** Une ligne d’en-tête : une cellule th par colonne (comme #preview-header à l’étape Configurer). */
+  const headerRow = document.getElementById('upload-preview-header');
+  const tbody = document.getElementById('upload-preview-body');
+  const meta = document.getElementById('upload-preview-meta');
+  if (!state.jobId || !loading || !table || !headerRow || !tbody) return false;
+
+  loading.hidden = false;
+  loading.className = 'msg-info upload-preview-loading-msg';
+  loading.textContent = 'Chargement de l\'aperçu…';
+  table.hidden = true;
+  if (meta) meta.hidden = true;
+  headerRow.innerHTML = '';
+  tbody.innerHTML = '';
+
+  try {
+    const resp = await fetch(`/api/jobs/${state.jobId}/preview?rows=${UPLOAD_PREVIEW_ROWS}`);
+    if (!resp.ok) throw new Error('Impossible de charger l\'aperçu');
+    const data = await resp.json();
+    const cols = data.columns || [];
+    const rowData = data.rows || [];
+    const total = data.total_rows != null ? data.total_rows : rowData.length;
+
+    if (cols.length === 0) {
+      const th0 = document.createElement('th');
+      th0.textContent = '—';
+      headerRow.appendChild(th0);
+      loading.hidden = true;
+      table.hidden = false;
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.className = 'upload-preview-empty';
+      td.textContent = 'Aucune colonne détectée après import. Vérifiez le fichier et la ligne d’en-tête.';
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+      if (meta) {
+        meta.hidden = false;
+        meta.textContent = '0 colonne.';
+      }
+      return true;
+    }
+
+    cols.forEach(c => {
+      const th = document.createElement('th');
+      th.textContent = c;
+      headerRow.appendChild(th);
+    });
+
+    rowData.forEach(row => {
+      const tr = document.createElement('tr');
+      for (let i = 0; i < cols.length; i++) {
+        const td = document.createElement('td');
+        const raw = row[i];
+        td.textContent = raw == null || raw === '' ? '' : String(raw);
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    });
+
+    loading.hidden = true;
+    table.hidden = false;
+    if (meta) {
+      meta.hidden = false;
+      if (total > UPLOAD_PREVIEW_ROWS) {
+        meta.textContent = `Aperçu : ${UPLOAD_PREVIEW_ROWS} ligne(s) de données sur ${total} au total.`;
+      } else {
+        meta.textContent = total === 0
+          ? 'Aucune ligne de données.'
+          : total === 1
+            ? '1 ligne de données dans le fichier.'
+            : `${total} lignes de données dans le fichier.`;
+      }
+    }
+    return true;
+  } catch (err) {
+    loading.hidden = false;
+    loading.className = 'msg-error upload-preview-loading-msg';
+    loading.textContent = err?.message || 'Erreur lors du chargement de l\'aperçu.';
+    return false;
+  }
+}
+
+function uploadContinueToConfigure() {
+  enableStep('configure');
+  goToStep('configure');
+}
+
 function showFileSelected(name) {
   document.getElementById('upload-filename').textContent = '📄 ' + name;
   document.getElementById('upload-file-info').hidden = false;
-  document.querySelector('.upload-inner').hidden = true;
+  const inner = document.querySelector('#upload-zone .upload-inner');
+  if (inner) inner.hidden = true;
 }
 
 function clearFile() {
   fileInput.value = '';
   document.getElementById('upload-file-info').hidden = true;
-  document.querySelector('.upload-inner').hidden = false;
+  const inner = document.querySelector('#upload-zone .upload-inner');
+  if (inner) inner.hidden = false;
+  _resetUploadPreviewStepUI();
+}
+
+/** Lit le modèle (#template-id) : même source pour POST /api/jobs et PATCH (changement en cours de route). */
+function _templateSelectionFromUI() {
+  const sel = document.getElementById('template-id');
+  if (!sel) {
+    return { template_id: 'generic_default', overlay_id: null, overlayForm: '' };
+  }
+  const opt = sel.selectedOptions[0];
+  const template_id = opt?.value || 'generic_default';
+  const overlayRaw = String(opt?.dataset?.overlay ?? '').trim();
+  return {
+    template_id,
+    overlay_id: overlayRaw ? overlayRaw : null,
+    overlayForm: overlayRaw,
+  };
+}
+
+/** Applique sur le job le modèle sélectionné (changement après création — ex. sidecar sans route PATCH obsolète). */
+async function syncJobTemplateFromUI() {
+  if (!state.jobId) return;
+  const sel = document.getElementById('template-id');
+  if (!sel) return;
+  const { template_id, overlay_id } = _templateSelectionFromUI();
+  const resp = await fetch(`/api/jobs/${state.jobId}/template`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ template_id, overlay_id }),
+  });
+  if (!resp.ok) {
+    const detail = await _extractErrorDetail(resp, 'Mise à jour du modèle');
+    if (resp.status === 404) {
+      throw new Error(
+        'Impossible de changer le modèle : version du serveur trop ancienne. Re-téléversez le fichier avec le modèle souhaité (il est appliqué à l’étape Téléverser), ou mettez à jour l’application.'
+      );
+    }
+    throw new Error(detail);
+  }
 }
 
 async function doUpload() {
   const errEl = document.getElementById('upload-error');
   const progEl = document.getElementById('upload-progress');
+  const btnSubmit = document.getElementById('btn-upload-submit');
   errEl.hidden = true;
   errEl.textContent = '';
 
   if (!fileInput.files.length) {
     _setInlineError(errEl, 'Veuillez sélectionner un fichier.');
     return;
+  }
+
+  if (btnSubmit) {
+    btnSubmit.disabled = true;
+    btnSubmit.setAttribute('aria-busy', 'true');
   }
 
   progEl.hidden = false;
@@ -409,16 +664,13 @@ async function doUpload() {
   formData.append('header_row', document.getElementById('header-row').value);
   formData.append('delimiter', document.getElementById('delimiter').value);
   formData.append('encoding', document.getElementById('encoding').value);
-  // Le modèle importé manuellement a priorité sur le sélecteur builtin.
-  // Pour les templates NAKALA, on envoie template_id=generic_default + overlay_id=nakala_*.
-  const _tplSelect = document.getElementById('template-id');
-  const _tplOpt = _tplSelect.selectedOptions[0];
+  // Modèle : lu depuis #template-id (préférences / étape Configurer) — envoyé au POST pour compat. sidecars sans PATCH.
   _setUxPref('header_row', parseInt(document.getElementById('header-row').value, 10) || 1);
   _setUxPref('delimiter', document.getElementById('delimiter').value || '');
   _setUxPref('encoding', document.getElementById('encoding').value || '');
-  _setUxPref('template_key', _templateOptionKey(_tplOpt));
-  formData.append('template_id', _pendingTemplateFile ? 'generic_default' : (_tplOpt?.value || 'generic_default'));
-  formData.append('overlay_id', _pendingTemplateFile ? '' : (_tplOpt?.dataset.overlay || ''));
+  const tmpl = _templateSelectionFromUI();
+  formData.append('template_id', tmpl.template_id);
+  formData.append('overlay_id', tmpl.overlayForm);
 
   try {
     const resp = await fetch('/api/jobs', { method: 'POST', body: formData });
@@ -429,15 +681,12 @@ async function doUpload() {
     const data = await resp.json();
     state.jobId = data.job_id;
 
-    // Appliquer le modèle personnalisé s'il y en a un
-    if (_pendingTemplateFile) {
-      await _applyPendingTemplate(state.jobId);
-    }
     state.filename = data.filename;
     state.rows = data.rows;
     state.cols = data.cols;
     state.columns = data.columns || [];
     state.columnConfig = {};
+    state.userColumnConfigSaved = false;
     state.activeColumn = null;
     state.validationDone = false;
     state.ruleFailures = [];
@@ -452,29 +701,41 @@ async function doUpload() {
 
     // Populate column filter in fixes step
     const fixColSelect = document.getElementById('fix-columns');
-    fixColSelect.innerHTML = '<option value="">Toutes les colonnes</option>';
-    state.columns.forEach(col => {
-      const opt = document.createElement('option');
-      opt.value = col;
-      opt.textContent = col;
-      fixColSelect.appendChild(opt);
-    });
+    if (fixColSelect) {
+      fixColSelect.innerHTML = '<option value="">Toutes les colonnes</option>';
+      state.columns.forEach(col => {
+        const opt = document.createElement('option');
+        opt.value = col;
+        opt.textContent = col;
+        fixColSelect.appendChild(opt);
+      });
+    }
 
     // Populate column filter in results step
     const filterCol = document.getElementById('filter-column');
-    filterCol.innerHTML = '<option value="">Toutes les colonnes</option>';
-    state.columns.forEach(col => {
-      const opt = document.createElement('option');
-      opt.value = col;
-      opt.textContent = col;
-      filterCol.appendChild(opt);
-    });
+    if (filterCol) {
+      filterCol.innerHTML = '<option value="">Toutes les colonnes</option>';
+      state.columns.forEach(col => {
+        const opt = document.createElement('option');
+        opt.value = col;
+        opt.textContent = col;
+        filterCol.appendChild(opt);
+      });
+    }
 
+    state.uploadPreviewReady = true;
     enableStep('configure');
-    goToStep('configure');
+    _showUploadPreviewChrome();
+    await _renderUploadPreview();
+    document.getElementById('upload-action-row')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    document.getElementById('btn-upload-continue')?.focus();
   } catch (err) {
     progEl.hidden = true;
     _setInlineError(errEl, err?.message || 'Erreur lors du téléversement.');
+    if (btnSubmit) {
+      btnSubmit.disabled = false;
+      btnSubmit.removeAttribute('aria-busy');
+    }
   }
 }
 
@@ -959,6 +1220,8 @@ async function applyColumnConfig() {
     });
     if (!resp.ok) throw new Error('Échec de l\'enregistrement');
 
+    _markUserColumnConfigSaved();
+
     // Visual feedback
     const savedEl = document.getElementById('col-config-saved');
     savedEl.hidden = false;
@@ -1049,11 +1312,12 @@ async function showConfigSummary() {
     _saveCurrentPanelToState();
     const cfg = state.columnConfig[state.activeColumn];
     try {
-      await fetch(`/api/jobs/${state.jobId}/column-config`, {
+      const resp = await fetch(`/api/jobs/${state.jobId}/column-config`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ columns: { [state.activeColumn]: cfg } }),
       });
+      if (resp.ok) _markUserColumnConfigSaved();
     } catch (_) {}
     closeColumnConfig();
   }
@@ -1093,11 +1357,12 @@ async function configureDone() {
     _saveCurrentPanelToState();
     const cfg = state.columnConfig[state.activeColumn];
     try {
-      await fetch(`/api/jobs/${state.jobId}/column-config`, {
+      const resp = await fetch(`/api/jobs/${state.jobId}/column-config`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ columns: { [state.activeColumn]: cfg } }),
       });
+      if (resp.ok) _markUserColumnConfigSaved();
     } catch (_) { /* non-blocking */ }
   }
   closeColumnConfig();
@@ -2020,7 +2285,12 @@ function _syncVocabToState() {
           },
         },
       }),
-    }).then(() => _updateColumnBadges()).catch(() => {});
+    })
+      .then(resp => {
+        if (resp.ok) _markUserColumnConfigSaved();
+        return _updateColumnBadges();
+      })
+      .catch(() => {});
   }
 }
 
@@ -2035,6 +2305,8 @@ function resetApp() {
   state.columns = [];
   state.currentPage = 1;
   state.columnConfig = {};
+  state.userColumnConfigSaved = false;
+  state.uploadPreviewReady = false;
   state.activeColumn = null;
   state.validationDone = false;
   _currentProblemsTotal = 0;
@@ -2047,13 +2319,6 @@ function resetApp() {
   // Reset file input
   fileInput.value = '';
   clearFile();
-
-  // Reset modèle personnalisé Upload
-  _pendingTemplateFile = null;
-  const uploadTplInput = document.getElementById('upload-template-input');
-  if (uploadTplInput) uploadTplInput.value = '';
-  const uploadTplName = document.getElementById('upload-template-name');
-  if (uploadTplName) uploadTplName.hidden = true;
 
   // Reset fix checkboxes
   ['fix-trim','fix-collapse','fix-nbsp','fix-invisible','fix-unicode','fix-newlines'].forEach(id => {
@@ -2341,6 +2606,8 @@ document.getElementById('import-template-input')?.addEventListener('change', asy
     const prefix = level === 'warning' ? '⚠' : '✓';
     _showToast(prefix + ' ' + data.message, level);
 
+    _markUserColumnConfigSaved();
+
     // Recharger la config et rafraîchir l'aperçu
     await _reloadColumnConfigFromServer();
     _updateColumnBadges();
@@ -2474,39 +2741,6 @@ document.getElementById('import-vocabulary-input')?.addEventListener('change', a
     _showToast('✗ Erreur lors de l\'import : ' + err.message, 'error');
   }
 });
-
-// ---------------------------------------------------------------------------
-// Import de modèle — étape Upload (avant création du job)
-// ---------------------------------------------------------------------------
-
-/** Fichier de modèle personnalisé sélectionné à l'étape Upload (null si aucun). */
-let _pendingTemplateFile = null;
-
-/** Ouvre le sélecteur de fichier modèle à l'étape Upload. */
-function triggerUploadTemplateInput() {
-  document.getElementById('upload-template-input')?.click();
-}
-
-// Écoute du changement de fichier pour le modèle à l'étape Upload
-document.getElementById('upload-template-input')?.addEventListener('change', function () {
-  if (!this.files.length) return;
-  _pendingTemplateFile = this.files[0];
-  const nameEl = document.getElementById('upload-template-name');
-  if (nameEl) {
-    nameEl.textContent = '📄 ' + _pendingTemplateFile.name;
-    nameEl.hidden = false;
-  }
-});
-
-/** Applique le modèle en attente sur un job fraîchement créé. */
-async function _applyPendingTemplate(jobId) {
-  if (!_pendingTemplateFile) return;
-  const fd = new FormData();
-  fd.append('file', _pendingTemplateFile);
-  try {
-    await fetch(`/api/jobs/${jobId}/import-template`, { method: 'POST', body: fd });
-  } catch (_) { /* non-bloquant — l'import est best-effort au démarrage */ }
-}
 
 // ---------------------------------------------------------------------------
 // Thème sombre / clair
@@ -2725,7 +2959,11 @@ function _goToStepFromShortcut(stepNumber) {
 function _runPrimaryActionShortcut() {
   switch (state.currentStep) {
     case 'upload':
-      doUpload();
+      if (state.uploadPreviewReady) {
+        uploadContinueToConfigure();
+      } else {
+        doUpload();
+      }
       break;
     case 'configure': {
       const summary = document.getElementById('config-summary');

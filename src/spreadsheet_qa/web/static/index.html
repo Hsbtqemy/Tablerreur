@@ -104,29 +104,41 @@
         </div>
       </div>
 
-      <div class="card mt-2">
-        <h3>Modèle de validation</h3>
-        <div class="form-grid">
-          <label for="template-id">Choisir un modèle :</label>
-          <select id="template-id" class="input-sm">
-            <option value="generic_default">Générique — Défaut</option>
-            <option value="generic_strict">Générique — Strict</option>
-            <option value="generic_default" data-overlay="nakala_baseline">NAKALA — Référence</option>
-            <option value="generic_default" data-overlay="nakala_extended">NAKALA — Étendu</option>
-          </select>
+      <div id="upload-preview-card" class="card mt-2 upload-preview-card" hidden>
+        <h3>Aperçu des données</h3>
+        <p class="format-hint">
+          Les <strong>10 premières lignes de données</strong> après lecture du fichier (ligne d’en-tête et délimiteur selon les options ci-dessus). Les noms de colonnes viennent de la ligne d’en-tête choisie.
+        </p>
+        <div id="upload-preview-scroll" class="upload-preview-scroll">
+          <div id="upload-preview-loading" class="msg-info upload-preview-loading-msg" role="status" aria-live="polite">Chargement de l’aperçu…</div>
+          <table id="upload-preview-table" class="preview-table upload-preview-table" hidden>
+            <thead><tr id="upload-preview-header"></tr></thead>
+            <tbody id="upload-preview-body"></tbody>
+          </table>
         </div>
-        <div class="upload-template-row mt-1">
-          <span class="format-hint">ou </span>
-          <button class="btn-link" onclick="triggerUploadTemplateInput()">importer un modèle personnalisé (.yml)</button>
-          <input type="file" id="upload-template-input" accept=".yml,.yaml" hidden />
-          <span id="upload-template-name" class="upload-template-name" hidden></span>
-        </div>
+        <p id="upload-preview-meta" class="format-hint" hidden></p>
       </div>
 
-      <div class="action-row mt-2">
+      <div id="upload-action-row" class="action-row mt-2 upload-action-row">
         <div id="upload-error" class="msg-error" hidden></div>
         <div id="upload-progress" class="msg-info" hidden>Téléversement en cours…</div>
-        <button class="btn btn-primary" onclick="doUpload()">Étape suivante →</button>
+        <button
+          type="button"
+          id="btn-upload-submit"
+          class="btn btn-primary"
+          onclick="doUpload()"
+        >
+          Téléverser et afficher l’aperçu
+        </button>
+        <button
+          type="button"
+          id="btn-upload-continue"
+          class="btn btn-primary"
+          hidden
+          onclick="uploadContinueToConfigure()"
+        >
+          Continuer vers la configuration →
+        </button>
       </div>
     </section>
 
@@ -136,9 +148,26 @@
     <section id="step-configure" class="step-section" hidden>
       <h2>Configuration des colonnes</h2>
       <p class="step-desc">
-        Cliquez sur un en-tête de colonne pour configurer ses règles de validation.
-        Cette étape est facultative — vous pouvez passer directement aux correctifs.
+        Choisissez d’abord un <strong>modèle de validation</strong> (point de départ pour les règles),
+        puis cliquez sur un en-tête de colonne pour affiner. Cette étape est facultative — vous pouvez passer directement aux correctifs.
       </p>
+
+      <div class="card mt-2">
+        <h3>Modèle de validation</h3>
+        <p class="format-hint" style="margin-bottom: 0.75rem;">
+          Les réglages par colonne restent modifiables ; un fichier <strong>.yml</strong> personnalisé se charge via « Importer un modèle » ci-dessous.
+          Si vous changez de modèle après avoir enregistré des colonnes, une confirmation vous rappelle que <strong>vos réglages enregistrés sont conservés</strong> et que le nouveau modèle complète le reste.
+        </p>
+        <div class="form-grid">
+          <label for="template-id">Choisir un modèle :</label>
+          <select id="template-id" class="input-sm">
+            <option value="generic_default">Générique — Défaut</option>
+            <option value="generic_strict">Générique — Strict</option>
+            <option value="generic_default" data-overlay="nakala_baseline">NAKALA — Référence</option>
+            <option value="generic_default" data-overlay="nakala_extended">NAKALA — Étendu</option>
+          </select>
+        </div>
+      </div>
 
       <!-- Barre d'actions modèle -->
       <div class="template-actions">
@@ -170,7 +199,7 @@
         <div id="preview-scroll-top" class="preview-scroll-top" hidden aria-hidden="true">
           <div id="preview-scroll-top-inner" class="preview-scroll-top-inner"></div>
         </div>
-        <div id="preview-table-container" style="overflow-x: auto;">
+        <div id="preview-table-container">
           <div id="preview-loading" class="msg-info" style="padding: 1rem 0;">Chargement de l'aperçu…</div>
           <table id="preview-table" class="preview-table" hidden>
             <thead><tr id="preview-header"></tr></thead>
