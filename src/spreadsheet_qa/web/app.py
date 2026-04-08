@@ -40,6 +40,7 @@ from spreadsheet_qa.core.commands import Command
 from spreadsheet_qa.core.dataset import DatasetLoader, list_workbook_sheet_names_from_bytes
 from spreadsheet_qa.core.engine import RuleFailure, ValidationEngine
 from spreadsheet_qa.core.exporters import CSVExporter, IssuesCSVExporter, TXTReporter, XLSXExporter
+from spreadsheet_qa.core.format_detection import detect_column_format
 from spreadsheet_qa.core.models import IssueStatus, Severity
 from spreadsheet_qa.core.nakala_api import NakalaClient
 from spreadsheet_qa.core.template_manager import TemplateManager
@@ -269,9 +270,11 @@ async def get_column_config(job_id: str):
         tpl_columns = {}
 
     result: dict = {}
+    user_overrides: dict[str, bool] = {}
     for col in job.columns:
         tpl = tpl_columns.get(col, {})
         user = job.column_config.get(col, {})
+        user_overrides[col] = bool(user)
 
         def _pick(key: str, default):
             # User override wins if set, else template, else default
@@ -290,10 +293,19 @@ async def get_column_config(job_id: str):
             "allowed_values": _pick("allowed_values", None),
             "allowed_values_locked": _pick("allowed_values_locked", False),
             "regex": _pick("regex", None),
+            "format_preset": _pick("format_preset", None),
             "min_length": _pick("min_length", None),
             "max_length": _pick("max_length", None),
+            "forbidden_chars": _pick("forbidden_chars", None),
+            "expected_case": _pick("expected_case", None),
             "yes_no_true_values": _pick("yes_no_true_values", None),
             "yes_no_false_values": _pick("yes_no_false_values", None),
+            "list_separator": _pick("list_separator", None),
+            "list_unique": _pick("list_unique", False),
+            "list_no_empty": _pick("list_no_empty", True),
+            "list_min_items": _pick("list_min_items", None),
+            "list_max_items": _pick("list_max_items", None),
+            "nakala_vocabulary": _pick("nakala_vocabulary", None),
             "detect_rare_values": _pick("detect_rare_values", False),
             "rare_threshold": _pick("rare_threshold", 1),
             "rare_min_total": _pick("rare_min_total", 10),
@@ -301,7 +313,7 @@ async def get_column_config(job_id: str):
             "similar_threshold": _pick("similar_threshold", 85),
         }
 
-    return {"columns": result}
+    return {"columns": result, "user_overrides": user_overrides}
 
 
 @app.put("/api/jobs/{job_id}/column-config")
@@ -361,6 +373,8 @@ async def preview_rule(job_id: str, request: Request):
         raise HTTPException(status_code=400, detail="Colonne introuvable")
 
     # Import individual rules (lazy, avoids circular imports at module level)
+    from spreadsheet_qa.core.rules.content_type import ContentTypeRule
+    from spreadsheet_qa.core.rules.duplicates import UniqueColumnRule
     from spreadsheet_qa.core.rules.required import RequiredRule
     from spreadsheet_qa.core.rules.soft_typing import SoftTypingRule
     from spreadsheet_qa.core.rules.regex_rule import RegexRule
@@ -368,6 +382,8 @@ async def preview_rule(job_id: str, request: Request):
     from spreadsheet_qa.core.rules.length import LengthRule
     from spreadsheet_qa.core.rules.forbidden_chars import ForbiddenCharsRule
     from spreadsheet_qa.core.rules.case_rule import CaseRule
+    from spreadsheet_qa.core.rules.list_items import ListItemsRule
+    from spreadsheet_qa.core.rules.multiline import UnexpectedMultilineRule
     from spreadsheet_qa.core.rules.rare_values import RareValuesRule
     from spreadsheet_qa.core.rules.similar_values import SimilarValuesRule
 
@@ -375,9 +391,19 @@ async def preview_rule(job_id: str, request: Request):
     preview_config = {"min_count": 5, **config}
 
     rules = [
-        RequiredRule(), SoftTypingRule(), RegexRule(),
-        AllowedValuesRule(), LengthRule(), ForbiddenCharsRule(),
-        CaseRule(), RareValuesRule(), SimilarValuesRule(),
+        RequiredRule(),
+        UniqueColumnRule(),
+        ContentTypeRule(),
+        RegexRule(),
+        AllowedValuesRule(),
+        LengthRule(),
+        ForbiddenCharsRule(),
+        CaseRule(),
+        UnexpectedMultilineRule(),
+        ListItemsRule(),
+        RareValuesRule(),
+        SimilarValuesRule(),
+        SoftTypingRule(),
     ]
 
     all_issues = []
@@ -434,6 +460,20 @@ async def preview_rule(job_id: str, request: Request):
         "total_ok": total_ok,
         "total_fail": total_fail,
     }
+
+
+@app.post("/api/jobs/{job_id}/detect-format")
+async def detect_format(job_id: str, request: Request):
+    """Suggest a content type / format preset for one column."""
+    job = _get_job(job_id)
+    df = _load_df(job)
+    body = await request.json()
+    column: str = body.get("column", "")
+
+    if not column or column not in df.columns:
+        raise HTTPException(status_code=400, detail="Colonne introuvable")
+
+    return detect_column_format(df[column], column_name=column)
 
 
 # ---------------------------------------------------------------------------

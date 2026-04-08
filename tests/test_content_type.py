@@ -184,6 +184,18 @@ class TestContentTypeRuleDecimal:
         assert rule.check(df, "N", {"content_type": "decimal"}) == []
 
 
+class TestContentTypeRuleNumber:
+    def test_integer_and_decimal_valid(self):
+        df = pd.DataFrame({"N": ["42", "3.14", "2,50"]})
+        assert rule.check(df, "N", {"content_type": "number"}) == []
+
+    def test_invalid_flagged(self):
+        df = pd.DataFrame({"N": ["abc"]})
+        issues = rule.check(df, "N", {"content_type": "number"})
+        assert len(issues) == 1
+        assert "nombre" in issues[0].message.lower()
+
+
 class TestContentTypeRuleDate:
     def test_iso_valid(self):
         df = pd.DataFrame({"D": ["2024-01-15"]})
@@ -224,6 +236,27 @@ class TestContentTypeRuleEmail:
         assert rule.check(df, "E", {"content_type": "email"}) == []
 
 
+class TestContentTypeRuleBoolean:
+    def test_default_yes_no_values(self):
+        df = pd.DataFrame({"B": ["oui", "false", "1", "0"]})
+        assert rule.check(df, "B", {"content_type": "boolean"}) == []
+
+    def test_custom_mapping(self):
+        df = pd.DataFrame({"B": ["actif", "inactif"]})
+        cfg = {
+            "content_type": "boolean",
+            "yes_no_true_values": "actif",
+            "yes_no_false_values": "inactif",
+        }
+        assert rule.check(df, "B", cfg) == []
+
+    def test_invalid_flagged(self):
+        df = pd.DataFrame({"B": ["peut-être"]})
+        issues = rule.check(df, "B", {"content_type": "boolean"})
+        assert len(issues) == 1
+        assert "bool" in issues[0].message.lower()
+
+
 class TestContentTypeRuleText:
     def test_any_non_empty_accepted(self):
         df = pd.DataFrame({"T": ["hello", "à b c", "123"]})
@@ -252,6 +285,56 @@ class TestContentTypeRuleUrl:
     def test_empty_ignored(self):
         df = pd.DataFrame({"U": [None, ""]})
         assert rule.check(df, "U", {"content_type": "url"}) == []
+
+
+class TestContentTypeRuleIdentifier:
+    def test_recognized_identifiers_valid(self):
+        df = pd.DataFrame(
+            {"I": ["10.1000/xyz123", "0000-0002-1825-0097", "978-1-23-456789-0"]}
+        )
+        assert rule.check(df, "I", {"content_type": "identifier"}) == []
+
+    def test_invalid_flagged(self):
+        df = pd.DataFrame({"I": ["identifiant libre"]})
+        issues = rule.check(df, "I", {"content_type": "identifier"})
+        assert len(issues) == 1
+        assert "identifiant" in issues[0].message.lower()
+
+
+class TestContentTypeRuleLanguage:
+    def test_iso_and_bcp47_valid(self):
+        df = pd.DataFrame({"L": ["fr", "fr-FR", "eng"]})
+        assert rule.check(df, "L", {"content_type": "language"}) == []
+
+    def test_invalid_flagged(self):
+        df = pd.DataFrame({"L": ["français"]})
+        issues = rule.check(df, "L", {"content_type": "language"})
+        assert len(issues) == 1
+        assert "langue" in issues[0].message.lower()
+
+
+class TestContentTypeRuleCountry:
+    def test_alpha2_valid(self):
+        df = pd.DataFrame({"C": ["FR", "de"]})
+        assert rule.check(df, "C", {"content_type": "country"}) == []
+
+    def test_invalid_flagged(self):
+        df = pd.DataFrame({"C": ["France"]})
+        issues = rule.check(df, "C", {"content_type": "country"})
+        assert len(issues) == 1
+        assert "pays" in issues[0].message.lower()
+
+
+class TestContentTypeRuleAddress:
+    def test_email_and_url_valid(self):
+        df = pd.DataFrame({"A": ["user@example.com", "https://example.org"]})
+        assert rule.check(df, "A", {"content_type": "address"}) == []
+
+    def test_invalid_flagged(self):
+        df = pd.DataFrame({"A": ["pas une adresse"]})
+        issues = rule.check(df, "A", {"content_type": "address"})
+        assert len(issues) == 1
+        assert "adresse" in issues[0].message.lower()
 
 
 # ---------------------------------------------------------------------------

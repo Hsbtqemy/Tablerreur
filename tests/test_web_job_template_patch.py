@@ -57,3 +57,27 @@ def test_patch_template_unknown_job():
         json={"template_id": "generic_default", "overlay_id": None},
     )
     assert r.status_code == 404
+
+
+def test_column_config_user_overrides_reflects_saved_columns():
+    """GET column-config expose user_overrides : True si job.column_config[col] non vide."""
+    csv_bytes = _make_csv(["a", "b"], [["1", "2"]])
+    resp = client.post(
+        "/api/jobs",
+        files={"file": ("data.csv", io.BytesIO(csv_bytes), "text/csv")},
+        data={"header_row": "1", "template_id": "generic_default", "overlay_id": ""},
+    )
+    assert resp.status_code == 200
+    job_id = resp.json()["job_id"]
+    d = client.get(f"/api/jobs/{job_id}/column-config").json()
+    assert "user_overrides" in d
+    assert d["user_overrides"]["a"] is False
+    assert d["user_overrides"]["b"] is False
+    r = client.put(
+        f"/api/jobs/{job_id}/column-config",
+        json={"columns": {"a": {"required": True}}},
+    )
+    assert r.status_code == 200
+    d2 = client.get(f"/api/jobs/{job_id}/column-config").json()
+    assert d2["user_overrides"]["a"] is True
+    assert d2["user_overrides"]["b"] is False

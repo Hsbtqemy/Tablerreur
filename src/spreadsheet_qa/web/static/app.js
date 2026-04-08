@@ -15,7 +15,9 @@ const state = {
   validationDone: false,  // true once validation has been run for this job
   showSpecialChars: false, // toggle for visible special-char rendering
   // Configure step
-  columnConfig: {},     // { colName: { content_type, unique, ... } }
+  columnConfig: {},     // { colName: { content_type, unique, ... } } — fusion modèle + serveur (GET)
+  /** Par colonne : l’utilisateur a enregistré des surcharges (job.column_config non vide) — aligné sur GET user_overrides. */
+  columnUserSaved: {},
   activeColumn: null,   // name of the currently open config panel
   /** True après au moins une sauvegarde serveur des réglages colonne (PUT column-config). Utilisé pour FLUX-03 (changement de modèle). */
   userColumnConfigSaved: false,
@@ -306,10 +308,7 @@ function _initUxPrefs() {
   }
   _updateSampleLinePickerVisibility();
 
-  if (_uxPrefs.hide_column_config_onboarding) {
-    const ob = document.getElementById('col-config-onboarding');
-    if (ob) ob.hidden = true;
-  }
+  _syncColConfigOnboardingVisibility();
 }
 
 /** Compte les « blocs » de réglages actifs pour l’indicateur liste colonnes (aligné sur _isColumnConfigured). */
@@ -332,18 +331,241 @@ function _countColumnSettings(cfg) {
   return n;
 }
 
-function _columnNavStatLabel(cfg) {
-  const n = _countColumnSettings(cfg);
-  if (n === 0) {
-    try {
-      const t = _templateSelectionFromUI();
-      if (t.template_id === 'manual') {
-        return 'Aucune surcharge (manuel)';
-      }
-    } catch (_) { /* ignore */ }
-    return 'Défaut du modèle';
+const CONTENT_TYPE_LABELS = {
+  text: 'Texte libre',
+  number: 'Nombre',
+  integer: 'Nombre entier',
+  decimal: 'Nombre décimal',
+  date: 'Date',
+  boolean: 'Booléen',
+  identifier: 'Identifiant',
+  language: 'Code langue',
+  country: 'Code pays',
+  address: 'Adresse ou lien',
+  email: 'Adresse e-mail',
+  url: 'URL',
+};
+
+const FORMAT_PRESET_LABELS = {
+  year: 'Année (YYYY)',
+  yes_no: 'Oui / Non',
+  alphanum: 'Alphanumérique',
+  letters_only: 'Lettres uniquement',
+  integer: 'Nombre entier',
+  decimal: 'Nombre décimal',
+  positive_int: 'Nombre entier positif',
+  doi: 'DOI',
+  orcid: 'ORCID',
+  ark: 'ARK',
+  issn: 'ISSN',
+  isbn13: 'ISBN-13',
+  isbn10: 'ISBN-10',
+  email_preset: 'Adresse e-mail',
+  url: 'URL (http, https ou www)',
+  w3cdtf: 'Date W3C-DTF',
+  iso_date: 'Date ISO stricte',
+  date_fr: 'Date française (JJ/MM/AAAA)',
+  lang_iso639: 'Langue ISO 639',
+  bcp47: 'Langue BCP 47',
+  country_iso: 'Pays ISO 3166',
+  latitude: 'Latitude',
+  longitude: 'Longitude',
+  custom: 'Regex personnalisée',
+};
+
+/** Libellés courts des préréglages de format (liste colonnes). */
+const _FORMAT_PRESET_SHORT = {
+  year: 'Année',
+  yes_no: 'Oui/Non',
+  alphanum: 'Alphanum.',
+  letters_only: 'Lettres',
+  integer: 'Entier',
+  decimal: 'Décimal',
+  positive_int: 'Entier +',
+  doi: 'DOI',
+  orcid: 'ORCID',
+  ark: 'ARK',
+  issn: 'ISSN',
+  isbn13: 'ISBN-13',
+  isbn10: 'ISBN-10',
+  email_preset: 'E-mail',
+  url: 'URL',
+  w3cdtf: 'W3C-DTF',
+  iso_date: 'ISO',
+  date_fr: 'JJ/MM/AAAA',
+  lang_iso639: 'ISO 639',
+  bcp47: 'BCP 47',
+  country_iso: 'Pays',
+  latitude: 'Latitude',
+  longitude: 'Longitude',
+  custom: 'Regex',
+};
+
+const CONTENT_TYPE_FORMAT_COMPAT = {
+  text: ['alphanum', 'letters_only', 'custom'],
+  number: ['integer', 'decimal', 'year', 'positive_int', 'latitude', 'longitude', 'custom'],
+  integer: ['integer', 'year', 'positive_int', 'custom'],
+  decimal: ['decimal', 'latitude', 'longitude', 'custom'],
+  date: ['year', 'w3cdtf', 'iso_date', 'date_fr', 'custom'],
+  boolean: ['yes_no', 'custom'],
+  identifier: ['doi', 'orcid', 'ark', 'issn', 'isbn13', 'isbn10', 'custom'],
+  language: ['lang_iso639', 'bcp47', 'custom'],
+  country: ['country_iso', 'custom'],
+  address: ['email_preset', 'url', 'custom'],
+  email: ['email_preset', 'custom'],
+  url: ['url', 'custom'],
+};
+
+const CONTENT_TYPE_FORMAT_HINTS = {
+  text: 'Formats compatibles : alphanumérique, lettres uniquement ou regex personnalisée.',
+  number: 'Formats compatibles : entier, décimal, année, entier positif, latitude, longitude ou regex personnalisée.',
+  integer: 'Formats compatibles : entier, année, entier positif ou regex personnalisée.',
+  decimal: 'Formats compatibles : décimal, latitude, longitude ou regex personnalisée.',
+  date: 'Formats compatibles : année, W3C-DTF, ISO stricte, date française ou regex personnalisée.',
+  boolean: 'Formats compatibles : Oui / Non ou regex personnalisée.',
+  identifier: 'Formats compatibles : DOI, ORCID, ARK, ISSN, ISBN-10, ISBN-13 ou regex personnalisée.',
+  language: 'Formats compatibles : ISO 639, BCP 47 ou regex personnalisée.',
+  country: 'Formats compatibles : ISO 3166 ou regex personnalisée.',
+  address: 'Formats compatibles : adresse e-mail, URL ou regex personnalisée.',
+  email: 'Formats compatibles : adresse e-mail ou regex personnalisée.',
+  url: 'Formats compatibles : URL ou regex personnalisée.',
+};
+
+function _normalizeTypeAndPreset(cfg) {
+  const contentType = cfg?.content_type || '';
+  let preset = cfg?.format_preset || '';
+  if (!preset && cfg?.regex) preset = 'custom';
+
+  switch (contentType) {
+    case 'integer':
+      return { contentType: 'number', preset: preset || 'integer' };
+    case 'decimal':
+      return { contentType: 'number', preset: preset || 'decimal' };
+    case 'email':
+      return { contentType: 'address', preset: preset || 'email_preset' };
+    case 'url':
+      return { contentType: 'address', preset: preset || 'url' };
+    default:
+      return { contentType, preset };
   }
-  return n === 1 ? '1 réglage actif' : `${n} réglages actifs`;
+}
+
+function _captureFormatPresetOptions() {
+  const select = document.getElementById('cfg-format-preset');
+  if (!select) return { placeholder: null, groups: [] };
+  const children = Array.from(select.children);
+  const placeholderEl = children.find((el) => el.tagName === 'OPTION');
+  const placeholder = placeholderEl
+    ? { value: placeholderEl.value, label: placeholderEl.textContent || '' }
+    : null;
+  const groups = children
+    .filter((el) => el.tagName === 'OPTGROUP')
+    .map((groupEl) => ({
+      label: groupEl.label,
+      options: Array.from(groupEl.querySelectorAll('option')).map((opt) => ({
+        value: opt.value,
+        label: opt.textContent || '',
+      })),
+    }));
+  return { placeholder, groups };
+}
+
+const _FORMAT_PRESET_OPTION_SOURCE = _captureFormatPresetOptions();
+
+function _rebuildFormatPresetOptions(contentType, preferredValue = '') {
+  const select = document.getElementById('cfg-format-preset');
+  if (!select) return '';
+
+  const allowedValues = CONTENT_TYPE_FORMAT_COMPAT[contentType] || null;
+  const allowed = allowedValues ? new Set(allowedValues) : null;
+  select.innerHTML = '';
+
+  if (_FORMAT_PRESET_OPTION_SOURCE.placeholder) {
+    const opt = document.createElement('option');
+    opt.value = _FORMAT_PRESET_OPTION_SOURCE.placeholder.value;
+    opt.textContent = _FORMAT_PRESET_OPTION_SOURCE.placeholder.label;
+    select.appendChild(opt);
+  }
+
+  _FORMAT_PRESET_OPTION_SOURCE.groups.forEach((group) => {
+    const options = group.options.filter((opt) => !allowed || allowed.has(opt.value));
+    if (!options.length) return;
+    const optgroup = document.createElement('optgroup');
+    optgroup.label = group.label;
+    options.forEach((item) => {
+      const opt = document.createElement('option');
+      opt.value = item.value;
+      opt.textContent = item.label;
+      optgroup.appendChild(opt);
+    });
+    select.appendChild(optgroup);
+  });
+
+  const effectiveValue = preferredValue && (!allowed || allowed.has(preferredValue))
+    ? preferredValue
+    : '';
+  select.value = effectiveValue;
+  return effectiveValue;
+}
+
+function _syncFormatPresetOptions(preferredValue = null) {
+  const contentType = document.getElementById('cfg-content-type')?.value || '';
+  const select = document.getElementById('cfg-format-preset');
+  const fallbackValue = select?.value || '';
+  const effectiveValue = _rebuildFormatPresetOptions(
+    contentType,
+    preferredValue == null ? fallbackValue : preferredValue,
+  );
+  _updateFormatPresetUI(effectiveValue, contentType);
+  return effectiveValue;
+}
+
+/** Résumé d’une ligne : nature / préréglage / liste pour la liste des colonnes. */
+function _columnKindShort(cfg) {
+  if (!cfg) return '—';
+  const { contentType, preset: fp } = _normalizeTypeAndPreset(cfg);
+  if (fp && String(fp).trim() !== '') {
+    return _FORMAT_PRESET_SHORT[fp] || fp;
+  }
+  if (cfg.nakala_vocabulary) return 'NAKALA';
+  if (cfg.list_separator) return 'Liste multi';
+  if (Array.isArray(cfg.allowed_values) && cfg.allowed_values.length) {
+    return cfg.allowed_values_locked ? 'Liste (verrouillée)' : 'Liste';
+  }
+  if (cfg.regex) return 'Regex';
+  const ct = contentType;
+  if (ct) {
+    return CONTENT_TYPE_LABELS[ct] || ct;
+  }
+  if (cfg.required) return 'Obligatoire';
+  if (cfg.unique) return 'Unique';
+  if (cfg.detect_rare_values || cfg.detect_similar_values) return 'Détection';
+  return '—';
+}
+
+/**
+ * Statut court sous le nom de colonne : état (personnalisé / modèle / manuel / en cours) + type effectif.
+ * @param {string} colName
+ */
+function _columnNavStatLabel(colName) {
+  const cfg = state.columnConfig[colName] || {};
+  const kind = _columnKindShort(cfg);
+  const userSaved = !!(state.columnUserSaved && state.columnUserSaved[colName]);
+  const panel = document.getElementById('column-config-panel');
+  const inProgress = state.activeColumn === colName && panel && !panel.hidden;
+
+  if (inProgress) {
+    return `En cours · ${kind}`;
+  }
+  if (userSaved) {
+    return `Personnalisé · ${kind}`;
+  }
+  let sourceLabel = 'Modèle';
+  try {
+    const t = _templateSelectionFromUI();
+    if (t.template_id === 'manual') sourceLabel = 'Manuel';
+  } catch (_) { /* ignore */ }
+  return `${sourceLabel} · ${kind}`;
 }
 
 function expandAllColConfigSections() {
@@ -358,10 +580,16 @@ function collapseAllColConfigSections() {
   });
 }
 
-function dismissColConfigOnboarding() {
+/** Affiche ou masque l’encadré d’aide selon la préférence persistée (localStorage). */
+function _syncColConfigOnboardingVisibility() {
   const el = document.getElementById('col-config-onboarding');
-  if (el) el.hidden = true;
+  if (!el) return;
+  el.hidden = !!_uxPrefs.hide_column_config_onboarding;
+}
+
+function dismissColConfigOnboarding() {
   _setUxPref('hide_column_config_onboarding', true);
+  _syncColConfigOnboardingVisibility();
 }
 
 async function _extractErrorDetail(resp, fallback = 'Erreur') {
@@ -453,10 +681,15 @@ function _setStepCoach(text, actionLabel = '', actionFn = null) {
 
   if (!text) {
     box.hidden = true;
+    actionBtn.hidden = true;
+    actionBtn.onclick = null;
     return;
   }
 
   textEl.innerHTML = text;
+  /* Toujours masquer d’abord : évite de garder « Choisir un fichier » (étape 1) sur les étapes sans action. */
+  actionBtn.hidden = true;
+  actionBtn.onclick = null;
   if (actionLabel && typeof actionFn === 'function') {
     actionBtn.textContent = actionLabel;
     actionBtn.hidden = false;
@@ -464,9 +697,6 @@ function _setStepCoach(text, actionLabel = '', actionFn = null) {
       e.preventDefault();
       actionFn();
     };
-  } else {
-    actionBtn.hidden = true;
-    actionBtn.onclick = null;
   }
   box.hidden = false;
 }
@@ -488,7 +718,7 @@ function _updateStepCoach() {
       break;
     case 'configure':
       _setStepCoach(
-        '<strong>Étape 2/5.</strong> En haut à droite : <strong>modèle de validation</strong>, puis une colonne dans la liste pour les contraintes. Double-cliquez une cellule pour corriger manuellement.'
+        '<strong>Étape 2/5.</strong> Choisissez le <strong>modèle de validation</strong>, puis une colonne dans la liste pour les contraintes. Ouvrez l’<strong>aperçu tableau</strong> en bas de page pour inspecter les données.'
       );
       break;
     case 'fixes':
@@ -1020,12 +1250,14 @@ async function doUpload(options = {}) {
     state.columns = data.columns || [];
     _persistJobSession();
     state.columnConfig = {};
+    state.columnUserSaved = {};
     state.userColumnConfigSaved = false;
     state.activeColumn = null;
     state.validationDone = false;
     state.ruleFailures = [];
     state.exportWarnings = [];
     _currentProblemsTotal = 0;
+    _hideCellsEditedBanner();
     const vrf = document.getElementById('validate-rule-failures');
     if (vrf) { vrf.hidden = true; vrf.innerHTML = ''; }
     const rew = document.getElementById('results-export-warnings');
@@ -1115,6 +1347,7 @@ const FORMAT_PRESETS = {
   isbn13:       { regex: '^97[89][\\d\\- ]{10,14}$',            hint: 'Accepte : 9781234567890, 978-1-23-456789-0. Rejette : 123456789, trop court.' },
   isbn10:       { regex: '^[\\dX\\- ]{10,13}$',                hint: 'Accepte : 0123456789, 012345678X, 0-12-345678-9. Rejette : trop court, lettres.' },
   email_preset: { regex: '^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$',     hint: 'Accepte : user@example.com, a.b@c.fr. Rejette : user@, @domain, texte libre.' },
+  url:          { regex: '^(https?://\\S+|www\\.[^\\s/]+\\.\\S+)$', hint: 'Accepte : https://example.org, http://site.fr, www.example.com. Rejette : exemple, ftp://site.' },
   // Dates
   w3cdtf:       { regex: '^\\d{4}(-\\d{2}(-\\d{2})?)?$',       hint: 'Accepte : 2024, 2024-01, 2024-01-15. Rejette : 15/01/2024, 24.' },
   iso_date:     { regex: '^\\d{4}-\\d{2}-\\d{2}$',             hint: 'Accepte : 2024-01-15. Rejette : 2024, 15/01/2024, 2024-1-5.' },
@@ -1124,6 +1357,8 @@ const FORMAT_PRESETS = {
   bcp47:        { regex: '^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8})*$', hint: 'Accepte : fr, fr-FR, en-GB, oc, pt-BR. Rejette : français, FRA (trop long sans subtag).' },
   country_iso:  { regex: '^[A-Z]{2}$',                         hint: 'Accepte : FR, DE, US, IT. Rejette : fra (3 lettres), France (nom complet), fr (minuscules).' },
   // Nombres & mesures
+  integer:      { regex: '^-?\\d+$',                           hint: 'Accepte : 42, -7, 0. Rejette : 3.14, 2,5, texte.' },
+  decimal:      { regex: '^-?\\d+(?:[\\.,]\\d+)?$',            hint: 'Accepte : 42, 3.14, 2,5, -0.75. Rejette : 12.3.4, texte.' },
   latitude:     { regex: '^-?([0-8]?\\d(\\.\\d+)?|90(\\.0+)?)$',                        hint: 'Accepte : 48.8566, -33.8688, 0, 90, -90. Rejette : 91, -91, texte.' },
   longitude:    { regex: '^-?(1[0-7]\\d(\\.\\d+)?|180(\\.0+)?|[0-9]{1,2}(\\.\\d+)?)$',  hint: 'Accepte : 2.3522, -122.4194, 0, 180, -180. Rejette : 181, -181, texte.' },
 };
@@ -1144,10 +1379,11 @@ function _buildYesNoRegex() {
 }
 
 // Show/hide hint, custom regex field, and Oui/Non fields based on selected preset
-function _updateFormatPresetUI(presetValue) {
+function _updateFormatPresetUI(presetValue, contentType = null) {
   const hintEl      = document.getElementById('cfg-format-hint');
   const customWrap  = document.getElementById('cfg-custom-regex-wrap');
   const yesnoWrap   = document.getElementById('cfg-yesno-wrap');
+  const currentType = contentType ?? (document.getElementById('cfg-content-type')?.value || '');
 
   hintEl.hidden     = true;
   customWrap.hidden = true;
@@ -1162,12 +1398,21 @@ function _updateFormatPresetUI(presetValue) {
   } else if (presetValue && FORMAT_PRESETS[presetValue]) {
     hintEl.textContent = FORMAT_PRESETS[presetValue].hint;
     hintEl.hidden = false;
+  } else if (currentType && CONTENT_TYPE_FORMAT_HINTS[currentType]) {
+    hintEl.textContent = CONTENT_TYPE_FORMAT_HINTS[currentType];
+    hintEl.hidden = false;
   }
 }
 
 // Wire up the preset dropdown change event (runs once at page load)
 document.getElementById('cfg-format-preset')?.addEventListener('change', function () {
   _updateFormatPresetUI(this.value);
+});
+
+document.getElementById('cfg-content-type')?.addEventListener('change', function () {
+  const previousPreset = document.getElementById('cfg-format-preset')?.value || '';
+  const effectivePreset = _rebuildFormatPresetOptions(this.value, previousPreset);
+  _updateFormatPresetUI(effectivePreset, this.value);
 });
 
 // Enable/disable list option fields based on separator input
@@ -1179,6 +1424,16 @@ document.getElementById('cfg-list-separator')?.addEventListener('input', functio
 let _previewRuleTimer = null;
 document.getElementById('column-config-panel')?.addEventListener('input',  () => _schedulePreviewRule());
 document.getElementById('column-config-panel')?.addEventListener('change', () => _schedulePreviewRule());
+
+document.getElementById('btn-close-column-config')?.addEventListener(
+  'click',
+  (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    closeColumnConfig();
+  },
+  true
+);
 
 // Show/hide rare-value sub-options based on checkbox state
 document.getElementById('cfg-detect-rare')?.addEventListener('change', function () {
@@ -1309,16 +1564,14 @@ function _buildColumnNavList(columns) {
     nameSpan.textContent = col;
     const statSpan = document.createElement('span');
     statSpan.className = 'column-nav-stat';
-    statSpan.textContent = _columnNavStatLabel(cfg);
+    statSpan.textContent = _columnNavStatLabel(col);
     btn.appendChild(nameSpan);
     btn.appendChild(statSpan);
     btn.addEventListener('click', () => openColumnConfig(col));
     if (_isColumnConfigured(col)) {
       btn.classList.add('column-nav-configured');
-      btn.title = _buildConfigSummary(cfg);
-    } else {
-      btn.title = 'Configurer cette colonne';
     }
+    btn.title = _columnNavStatTitle(col);
 
     if (showValues && row) {
       const wrap = document.createElement('div');
@@ -1422,6 +1675,7 @@ async function loadPreview() {
     if (configResp.ok) {
       const configData = await configResp.json();
       state.columnConfig = configData.columns || {};
+      state.columnUserSaved = configData.user_overrides || {};
     }
 
     let rawCols = Array.isArray(preview.columns) ? preview.columns : [];
@@ -1441,9 +1695,9 @@ async function loadPreview() {
       th.addEventListener('click', () => openColumnConfig(col));
       if (_isColumnConfigured(col)) {
         th.classList.add('column-configured');
-        th.title = _buildConfigSummary(state.columnConfig[col]);
+        th.title = _columnNavStatTitle(col);
       } else {
-        th.title = 'Cliquer pour configurer cette colonne';
+        th.title = _columnNavStatTitle(col);
       }
       headerRow.appendChild(th);
     });
@@ -1547,6 +1801,7 @@ async function _applyCellIssueHighlights() {
 }
 
 function openColumnConfig(colName) {
+  const prevOpen = state.activeColumn;
   // Auto-save previous column silently (local state only)
   if (state.activeColumn && state.activeColumn !== colName) {
     _saveCurrentPanelToState();
@@ -1569,9 +1824,11 @@ function openColumnConfig(colName) {
 
   // Populate panel
   const cfg = state.columnConfig[colName] || {};
+  const normalized = _normalizeTypeAndPreset(cfg);
   document.getElementById('col-config-name').textContent = colName;
   document.getElementById('cfg-required').checked = cfg.required || false;
-  document.getElementById('cfg-content-type').value = cfg.content_type || '';
+  const contentType = normalized.contentType;
+  document.getElementById('cfg-content-type').value = contentType;
   document.getElementById('cfg-unique').checked = cfg.unique || false;
   document.getElementById('cfg-multiline').checked = cfg.multiline_ok || false;
   document.getElementById('cfg-min-length').value = cfg.min_length != null ? cfg.min_length : '';
@@ -1587,14 +1844,13 @@ function openColumnConfig(colName) {
   document.getElementById('cfg-list-max-items').value = cfg.list_max_items != null ? cfg.list_max_items : '';
   _updateListOptionsState(listSep);
   // Format preset: restore dropdown + conditional fields
-  let preset = cfg.format_preset || '';
-  if (!preset && cfg.regex) preset = 'custom';  // legacy: regex set but no preset stored
-  document.getElementById('cfg-format-preset').value = preset;
+  let preset = normalized.preset;
+  preset = _rebuildFormatPresetOptions(contentType, preset);
   document.getElementById('cfg-regex').value = preset === 'custom' ? (cfg.regex || '') : '';
   // Oui/Non custom values
   document.getElementById('cfg-yesno-true').value  = cfg.yes_no_true_values  || '';
   document.getElementById('cfg-yesno-false').value = cfg.yes_no_false_values || '';
-  _updateFormatPresetUI(preset);
+  _updateFormatPresetUI(preset, contentType);
 
   // Rare-value detection fields
   const detectRare = cfg.detect_rare_values || false;
@@ -1659,17 +1915,21 @@ function openColumnConfig(colName) {
   const savedEl = document.getElementById('col-config-saved');
   savedEl.hidden = true;
 
+  _syncColConfigOnboardingVisibility();
+
   // Show panel
-  const ph = document.getElementById('configure-config-placeholder');
-  if (ph) ph.hidden = true;
   document.getElementById('column-config-panel').hidden = false;
   document.querySelector('.configure-config-column')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
   // Trigger initial preview
   _schedulePreviewRule();
+
+  if (prevOpen && prevOpen !== colName) _updateConfiguredMarker(prevOpen);
+  _updateConfiguredMarker(colName);
 }
 
 function closeColumnConfig() {
+  const closing = state.activeColumn;
   if (state.activeColumn) _saveCurrentPanelToState();
   state.activeColumn = null;
 
@@ -1677,8 +1937,7 @@ function closeColumnConfig() {
   document.querySelectorAll('#preview-body td').forEach(td => td.classList.remove('column-selected'));
   _syncColumnNavSelection(null);
   document.getElementById('column-config-panel').hidden = true;
-  const ph = document.getElementById('configure-config-placeholder');
-  if (ph) ph.hidden = false;
+  if (closing) _updateConfiguredMarker(closing);
 }
 
 function _saveCurrentPanelToState() {
@@ -1723,10 +1982,18 @@ function _readPanelValues() {
   }
 
   const detectRare = document.getElementById('cfg-detect-rare').checked;
+  let contentType = document.getElementById('cfg-content-type').value || null;
+  if (contentType === 'number' && preset === 'integer') {
+    contentType = 'number';
+  } else if (contentType === 'number' && preset === 'decimal') {
+    contentType = 'number';
+  } else if (contentType === 'address' && (preset === 'email_preset' || preset === 'url')) {
+    contentType = 'address';
+  }
 
   return {
     required: document.getElementById('cfg-required').checked || false,
-    content_type: document.getElementById('cfg-content-type').value || null,
+    content_type: contentType,
     unique: document.getElementById('cfg-unique').checked,
     multiline_ok: document.getElementById('cfg-multiline').checked,
     format_preset,
@@ -1779,6 +2046,7 @@ async function applyColumnConfig() {
     if (!resp.ok) throw new Error('Échec de l\'enregistrement');
 
     _markUserColumnConfigSaved();
+    state.columnUserSaved[state.activeColumn] = true;
 
     // Visual feedback
     const savedEl = document.getElementById('col-config-saved');
@@ -1794,27 +2062,16 @@ async function applyColumnConfig() {
 
 function _buildConfigSummary(cfg) {
   if (!cfg) return '';
+  const normalized = _normalizeTypeAndPreset(cfg);
   const parts = [];
   if (cfg.required) parts.push('Obligatoire');
-  if (cfg.content_type) {
-    const types = {
-      text: 'Texte libre',
-      integer: 'Nombre entier',
-      decimal: 'Nombre décimal',
-      date: 'Date',
-      email: 'E-mail',
-      url: 'URL',
-    };
-    parts.push('Nature : ' + (types[cfg.content_type] || cfg.content_type));
+  if (normalized.contentType) {
+    parts.push('Nature : ' + (CONTENT_TYPE_LABELS[normalized.contentType] || normalized.contentType));
   }
   if (cfg.unique) parts.push('Valeurs uniques');
-  if (cfg.format_preset && cfg.format_preset !== 'custom') {
-    const labels = { year: 'Année', yes_no: 'Oui/Non', alphanum: 'Alphanumérique',
-      letters_only: 'Lettres', positive_int: 'Entier positif', doi: 'DOI',
-      orcid: 'ORCID', ark: 'ARK', issn: 'ISSN', w3cdtf: 'Date W3C-DTF',
-      iso_date: 'Date ISO', lang_iso639: 'Langue ISO 639' };
-    parts.push('Format : ' + (labels[cfg.format_preset] || cfg.format_preset));
-  } else if (cfg.format_preset === 'custom' && cfg.regex) {
+  if (normalized.preset && normalized.preset !== 'custom') {
+    parts.push('Format : ' + (FORMAT_PRESET_LABELS[normalized.preset] || normalized.preset));
+  } else if (normalized.preset === 'custom' && cfg.regex) {
     parts.push('Regex personnalisée');
   }
   if (Array.isArray(cfg.allowed_values) && cfg.allowed_values.length) {
@@ -1837,6 +2094,17 @@ function _buildConfigSummary(cfg) {
   return parts.join(' · ') || 'Configurée';
 }
 
+/** Tooltip liste colonnes : état + résumé détaillé (fusion modèle). */
+function _columnNavStatTitle(colName) {
+  const cfg = state.columnConfig[colName] || {};
+  const userSaved = !!(state.columnUserSaved && state.columnUserSaved[colName]);
+  const summary = _buildConfigSummary(cfg);
+  const head = userSaved
+    ? 'Colonne personnalisée (réglages enregistrés sur le serveur).'
+    : 'Pas encore de surcharges enregistrées — affichage selon le modèle ou le mode manuel.';
+  return summary ? `${head}\n${summary}` : head;
+}
+
 function _updateColumnBadges() {
   state.columns.forEach(col => _updateConfiguredMarker(col));
 }
@@ -1846,10 +2114,10 @@ function _updateConfiguredMarker(colName) {
   if (th) {
     if (_isColumnConfigured(colName)) {
       th.classList.add('column-configured');
-      th.title = _buildConfigSummary(state.columnConfig[colName]);
+      th.title = _columnNavStatTitle(colName);
     } else {
       th.classList.remove('column-configured');
-      th.title = 'Cliquer pour configurer cette colonne';
+      th.title = _columnNavStatTitle(colName);
     }
   }
   const navBtn = document.querySelector(
@@ -1858,11 +2126,9 @@ function _updateConfiguredMarker(colName) {
   if (navBtn) {
     const cfg = state.columnConfig[colName];
     navBtn.classList.toggle('column-nav-configured', _isColumnConfigured(colName));
-    navBtn.title = _isColumnConfigured(colName)
-      ? _buildConfigSummary(cfg)
-      : 'Configurer cette colonne';
+    navBtn.title = _columnNavStatTitle(colName);
     const stat = navBtn.querySelector('.column-nav-stat');
-    if (stat) stat.textContent = _columnNavStatLabel(cfg);
+    if (stat) stat.textContent = _columnNavStatLabel(colName);
   }
 }
 
@@ -1893,13 +2159,17 @@ async function showConfigSummary() {
   if (state.activeColumn) {
     _saveCurrentPanelToState();
     const cfg = state.columnConfig[state.activeColumn];
+    const colSaved = state.activeColumn;
     try {
       const resp = await fetch(`/api/jobs/${state.jobId}/column-config`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ columns: { [state.activeColumn]: cfg } }),
       });
-      if (resp.ok) _markUserColumnConfigSaved();
+      if (resp.ok) {
+        _markUserColumnConfigSaved();
+        state.columnUserSaved[colSaved] = true;
+      }
     } catch (_) {}
     closeColumnConfig();
   }
@@ -1938,13 +2208,17 @@ async function configureDone() {
   if (state.activeColumn) {
     _saveCurrentPanelToState();
     const cfg = state.columnConfig[state.activeColumn];
+    const colSaved = state.activeColumn;
     try {
       const resp = await fetch(`/api/jobs/${state.jobId}/column-config`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ columns: { [state.activeColumn]: cfg } }),
       });
-      if (resp.ok) _markUserColumnConfigSaved();
+      if (resp.ok) {
+        _markUserColumnConfigSaved();
+        state.columnUserSaved[colSaved] = true;
+      }
     } catch (_) { /* non-blocking */ }
   }
   closeColumnConfig();
@@ -2594,11 +2868,11 @@ function _hasActiveConstraints() {
   if (!state.activeColumn) return false;
   const cfg = _readPanelValues();
   return !!(
-    cfg.required || cfg.content_type || cfg.unique || cfg.format_preset ||
+    cfg.required || cfg.content_type || cfg.unique || cfg.multiline_ok || cfg.format_preset ||
     cfg.regex || cfg.min_length != null || cfg.max_length != null ||
     cfg.forbidden_chars || cfg.expected_case ||
     (Array.isArray(cfg.allowed_values) && cfg.allowed_values.length) ||
-    cfg.detect_rare_values
+    cfg.list_separator || cfg.detect_rare_values || cfg.detect_similar_values
   );
 }
 
@@ -2869,7 +3143,10 @@ function _syncVocabToState() {
       }),
     })
       .then(resp => {
-        if (resp.ok) _markUserColumnConfigSaved();
+        if (resp.ok) {
+          _markUserColumnConfigSaved();
+          state.columnUserSaved[state.activeColumn] = true;
+        }
         return _updateColumnBadges();
       })
       .catch(() => {});
@@ -2880,6 +3157,7 @@ function _syncVocabToState() {
 // Réinitialisation
 // ---------------------------------------------------------------------------
 function resetApp() {
+  _hideCellsEditedBanner();
   state.jobId = null;
   _clearJobSessionStorage();
   state.filename = null;
@@ -2888,6 +3166,7 @@ function resetApp() {
   state.columns = [];
   state.currentPage = 1;
   state.columnConfig = {};
+  state.columnUserSaved = {};
   state.userColumnConfigSaved = false;
   state.uploadPreviewReady = false;
   state.activeColumn = null;
@@ -2933,15 +3212,12 @@ function resetApp() {
   state.previewDataRows = null;
   state.sampleRowIndex = 0;
   _updateSampleLinePickerVisibility();
-  const cfgPh = document.getElementById('configure-config-placeholder');
-  if (cfgPh) cfgPh.hidden = false;
   document.getElementById('column-config-panel').hidden = true;
   document.getElementById('config-summary').hidden = true;
   document.getElementById('cfg-required').checked = false;
-  document.getElementById('cfg-format-preset').value = '';
+  document.getElementById('cfg-content-type').value = '';
+  _syncFormatPresetOptions('');
   document.getElementById('cfg-regex').value = '';
-  document.getElementById('cfg-format-hint').hidden = true;
-  document.getElementById('cfg-custom-regex-wrap').hidden = true;
   document.getElementById('cfg-forbidden-chars').value = '';
   document.getElementById('cfg-expected-case').value = '';
   document.getElementById('cfg-list-separator').value = '';
@@ -3242,6 +3518,9 @@ async function _reloadColumnConfigFromServer() {
       Object.entries(serverCols).forEach(([col, cfg]) => {
         state.columnConfig[col] = Object.assign(state.columnConfig[col] || {}, cfg);
       });
+      if (data.user_overrides) {
+        state.columnUserSaved = { ...state.columnUserSaved, ...data.user_overrides };
+      }
     }
   } catch (_) { /* non-bloquant */ }
 }

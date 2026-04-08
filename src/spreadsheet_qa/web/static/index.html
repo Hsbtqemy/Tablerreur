@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Tablerreur · Mapala — Contrôle qualité et mapping</title>
-  <link rel="stylesheet" href="/static/style.css?v=20260416" />
+  <link rel="stylesheet" href="/static/style.css?v=20260420" />
 </head>
 <body>
   <header class="app-header app-header--tablerreur" id="app-header">
@@ -152,11 +152,6 @@
          ================================================================ -->
     <section id="step-configure" class="step-section" hidden>
       <h2>Configuration des colonnes</h2>
-      <p class="step-desc">
-        Choisissez une colonne dans la liste à gauche : les <strong>contraintes</strong> se règlent dans le panneau de droite (modèle en tête).
-        Un <strong>exemple de ligne</strong> permet de vérifier le contenu du fichier ; l’aperçu tableau complet reste disponible plus bas.
-        Cette étape est facultative — vous pouvez passer directement aux correctifs.
-      </p>
 
       <div id="cells-edited-banner" class="cells-edited-banner" hidden>
         Des cellules ont été modifiées manuellement.
@@ -166,13 +161,6 @@
       <div class="card preview-table-wrapper">
         <div class="configure-preview-layout">
           <div class="configure-context-column">
-            <div class="preview-table-toolbar">
-              <button class="btn btn-secondary btn-sm btn-toggle-special-chars" onclick="toggleSpecialChars()" title="Rendre visibles les espaces et caractères invisibles">¶ Caractères spéciaux</button>
-              <div class="undo-redo-bar">
-                <button id="btn-undo-configure" class="btn btn-secondary btn-sm" onclick="undoFix()" disabled title="Annuler la dernière modification (Ctrl+Z)">↩ Annuler</button>
-                <button id="btn-redo-configure" class="btn btn-secondary btn-sm" onclick="redoFix()" disabled title="Rétablir (Ctrl+Shift+Z)">↪ Rétablir</button>
-              </div>
-            </div>
             <div class="configure-list-sample-row">
               <aside class="column-nav-wrap" aria-labelledby="column-nav-heading">
                 <h3 id="column-nav-heading" class="column-nav-heading">Colonnes</h3>
@@ -216,21 +204,11 @@
               </div>
               <input type="file" id="import-template-input" accept=".yml,.yaml" hidden />
             </div>
-            <div id="configure-config-placeholder" class="configure-config-placeholder mt-2">
-              <p class="configure-config-placeholder-kicker">Contraintes par colonne</p>
-              <p class="configure-config-placeholder-text">Sélectionnez une colonne dans la liste de gauche pour afficher les contraintes ici.</p>
-              <ol class="configure-config-placeholder-steps">
-                <li>Choisir le modèle ci-dessus (ou laisser « Manuel »)</li>
-                <li>Choisir une colonne dans la liste</li>
-                <li>Régler les blocs (base, format, listes…)</li>
-                <li>Vérifier l’aperçu puis enregistrer avec <strong>Appliquer</strong></li>
-              </ol>
-            </div>
             <!-- Column config panel — static HTML, populated dynamically -->
             <div id="column-config-panel" class="column-config-panel" hidden>
         <div class="col-config-header">
           <h3 class="col-config-title">Configuration — <span id="col-config-name"></span></h3>
-          <button class="btn-icon" onclick="closeColumnConfig()" title="Fermer">✕</button>
+          <button type="button" id="btn-close-column-config" class="btn-icon btn-close-column-config" title="Fermer la configuration de la colonne" aria-label="Fermer la configuration de la colonne">✕</button>
         </div>
         <div class="col-config-scroll">
         <div class="col-config-intro">
@@ -250,22 +228,25 @@
             <div class="col-config-section-body col-config-grid">
           <div class="col-config-field">
             <label for="cfg-content-type">Nature des données</label>
-            <p class="format-hint col-config-field-lead">Indiquez d’abord <strong>ce que contient</strong> la colonne (texte, nombre, date…). Les contraintes de <strong>forme précise</strong> (ISBN, date ISO stricte, regex) se règlent dans le bloc <strong>« Format »</strong> plus bas.</p>
             <select id="cfg-content-type" class="input-sm">
               <option value="">— Aucune contrainte de nature —</option>
               <optgroup label="Texte">
                 <option value="text">Texte libre</option>
               </optgroup>
               <optgroup label="Nombres">
-                <option value="integer">Nombre entier</option>
-                <option value="decimal">Nombre décimal</option>
+                <option value="number">Nombre</option>
               </optgroup>
               <optgroup label="Temps">
                 <option value="date">Date (tolérant : ISO, JJ/MM/AAAA, année seule…)</option>
               </optgroup>
-              <optgroup label="Liens et identifiants">
-                <option value="email">Adresse e-mail</option>
-                <option value="url">URL (http, https ou www)</option>
+              <optgroup label="Valeurs codées">
+                <option value="boolean">Booléen (oui/non)</option>
+                <option value="language">Code langue</option>
+                <option value="country">Code pays</option>
+              </optgroup>
+              <optgroup label="Identifiants et liens">
+                <option value="identifier">Identifiant (DOI, ORCID, ISBN…)</option>
+                <option value="address">Adresse ou lien</option>
               </optgroup>
             </select>
           </div>
@@ -300,6 +281,8 @@
                 <option value="yes_no">Oui / Non</option>
                 <option value="alphanum">Alphanumérique</option>
                 <option value="letters_only">Lettres uniquement</option>
+                <option value="integer">Nombre entier</option>
+                <option value="decimal">Nombre décimal</option>
                 <option value="positive_int">Nombre entier positif</option>
               </optgroup>
               <optgroup label="Identifiants et liens">
@@ -310,6 +293,7 @@
                 <option value="isbn13">ISBN-13</option>
                 <option value="isbn10">ISBN-10</option>
                 <option value="email_preset">Adresse e-mail</option>
+                <option value="url">URL (http, https ou www)</option>
               </optgroup>
               <optgroup label="Dates (masque)">
                 <option value="w3cdtf">Date W3C-DTF (YYYY, YYYY-MM ou YYYY-MM-DD)</option>
@@ -511,6 +495,19 @@
       <details id="configure-full-preview-details" class="configure-full-preview-strip mt-2">
         <summary>Aperçu tableau complet (30 lignes)</summary>
         <div class="configure-preview-table-inner">
+          <div class="preview-table-toolbar configure-preview-table-toolbar" role="toolbar" aria-label="Aperçu des données et modifications des valeurs">
+            <div class="configure-preview-table-hint-block">
+              <p class="configure-preview-table-hint format-hint">Double-cliquez une cellule pour corriger manuellement.</p>
+              <p class="configure-preview-undo-scope format-hint">↩ Annuler / rétablir : dernière modification des <strong>valeurs</strong> (cellules ou correctifs d’hygiène). Ne s’applique pas au bouton <strong>Appliquer</strong> de la configuration des colonnes.</p>
+            </div>
+            <div class="configure-preview-table-toolbar-actions">
+              <div class="undo-redo-bar">
+                <button id="btn-undo-configure" class="btn btn-secondary btn-sm" onclick="undoFix()" disabled title="Annuler la dernière modification des valeurs — pas la configuration colonnes (Ctrl+Z)">↩ Annuler</button>
+                <button id="btn-redo-configure" class="btn btn-secondary btn-sm" onclick="redoFix()" disabled title="Rétablir la dernière modification des valeurs (Ctrl+Shift+Z)">↪ Rétablir</button>
+              </div>
+              <button class="btn btn-secondary btn-sm btn-toggle-special-chars" onclick="toggleSpecialChars()" title="Rendre visibles les espaces et caractères invisibles">¶ Caractères spéciaux</button>
+            </div>
+          </div>
           <div id="preview-scroll-top" class="preview-scroll-top" hidden aria-hidden="true">
             <div id="preview-scroll-top-inner" class="preview-scroll-top-inner"></div>
           </div>
@@ -938,7 +935,7 @@
     <p>Tablerreur — Contrôle qualité tableurs · <a href="https://github.com/anthropics/claude-code" target="_blank">Open source</a></p>
   </footer>
 
-  <script src="/static/app.js?v=20260408b"></script>
+  <script src="/static/app.js?v=20260408d"></script>
   <script src="/static/mapala.js?v=20260408b"></script>
 </body>
 </html>

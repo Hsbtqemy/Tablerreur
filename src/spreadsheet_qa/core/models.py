@@ -80,7 +80,7 @@ class ColumnMeta:
     regex: str | None = None
     min_length: int | None = None
     max_length: int | None = None
-    content_type: str | None = None  # "integer" | "decimal" | "date" | "email" | "url"
+    content_type: str | None = None  # e.g. "text" | "number" | "date" | "identifier"
     forbidden_chars: str | None = None  # string of individually forbidden characters
     expected_case: str | None = None  # "upper" | "lower" | "title"
     list_separator: str | None = None  # separator char for multi-value cells; None = single value

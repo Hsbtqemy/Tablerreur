@@ -1,10 +1,14 @@
 """Content-type validation rule.
 
 The user declares the expected data type for a column (e.g. "date", "integer")
-and this rule verifies every cell individually.  Complementary to SoftTypingRule
+and this rule verifies every cell individually. Complementary to SoftTypingRule
 which infers the dominant type statistically.
 
-Supported types: "text", "integer", "decimal", "date", "email", "url".
+Supported types:
+  - scalar/text: "text", "integer", "decimal", "number", "date"
+  - coded values: "boolean", "language", "country"
+  - identifiers/links: "identifier", "address", "email", "url"
+
 The rule is dormant when content_type is not configured.
 The "text" type accepts any non-empty value (documentation / explicit choice in the UI).
 """
@@ -13,7 +17,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any
+from typing import Any, Callable
 
 import pandas as pd
 
@@ -28,9 +32,20 @@ _log = logging.getLogger(__name__)
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _URL_RE = re.compile(r"^(https?://\S+|www\.[^\s/]+\.\S+)$", re.IGNORECASE)
+_DOI_RE = re.compile(r"^10\.\d{4,9}/[^\s]+$", re.IGNORECASE)
+_ORCID_RE = re.compile(r"^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$", re.IGNORECASE)
+_ARK_RE = re.compile(r"^ark:/\d{5}/.+$", re.IGNORECASE)
+_ISSN_RE = re.compile(r"^\d{4}-\d{3}[\dX]$", re.IGNORECASE)
+_ISBN13_RE = re.compile(r"^97[89][\d\- ]{10,14}$")
+_ISBN10_RE = re.compile(r"^[\dX\- ]{10,13}$", re.IGNORECASE)
+_BCP47_RE = re.compile(r"^[a-z]{2,3}(-[a-z0-9]{2,8})*$", re.IGNORECASE)
+_COUNTRY_RE = re.compile(r"^[a-z]{2}$", re.IGNORECASE)
+
+_BOOLEAN_TRUE_DEFAULT = "oui, o, vrai, true, yes, y, 1"
+_BOOLEAN_FALSE_DEFAULT = "non, n, faux, false, no, 0"
 
 
-def _is_integer(value: str) -> bool:
+def _is_integer(value: str, config: dict[str, Any] | None = None) -> bool:
     """Accept bare integers, optionally surrounded by whitespace."""
     try:
         int(value.strip())
@@ -39,7 +54,7 @@ def _is_integer(value: str) -> bool:
         return False
 
 
-def _is_decimal(value: str) -> bool:
+def _is_decimal(value: str, config: dict[str, Any] | None = None) -> bool:
     """Accept integers and decimals; treat French comma as decimal separator."""
     try:
         float(value.strip().replace(",", "."))
@@ -48,7 +63,12 @@ def _is_decimal(value: str) -> bool:
         return False
 
 
-def _is_date(value: str) -> bool:
+def _is_number(value: str, config: dict[str, Any] | None = None) -> bool:
+    """Accept either an integer or a decimal number."""
+    return _is_integer(value) or _is_decimal(value)
+
+
+def _is_date(value: str, config: dict[str, Any] | None = None) -> bool:
     """Accept common FR and ISO date formats.
 
     Accepted patterns (tolerant approach for non-technical users):
@@ -86,21 +106,59 @@ def _is_date(value: str) -> bool:
     return False
 
 
-def _is_email(value: str) -> bool:
+def _is_email(value: str, config: dict[str, Any] | None = None) -> bool:
     return bool(_EMAIL_RE.match(value.strip()))
 
 
-def _is_url(value: str) -> bool:
+def _is_url(value: str, config: dict[str, Any] | None = None) -> bool:
     return bool(_URL_RE.match(value.strip()))
 
 
-def _is_text(value: str) -> bool:
+def _is_text(value: str, config: dict[str, Any] | None = None) -> bool:
     """Free text: any non-empty string after strip (no structural check)."""
     return bool(value.strip())
 
 
+def _split_boolean_values(raw: Any, fallback: str) -> set[str]:
+    text = str(raw or "").strip()
+    source = text or fallback
+    return {item.strip().lower() for item in source.split(",") if item.strip()}
+
+
+def _is_boolean(value: str, config: dict[str, Any] | None = None) -> bool:
+    cfg = config or {}
+    normalized = value.strip().lower()
+    true_values = _split_boolean_values(cfg.get("yes_no_true_values"), _BOOLEAN_TRUE_DEFAULT)
+    false_values = _split_boolean_values(cfg.get("yes_no_false_values"), _BOOLEAN_FALSE_DEFAULT)
+    return normalized in true_values or normalized in false_values
+
+
+def _is_identifier(value: str, config: dict[str, Any] | None = None) -> bool:
+    v = value.strip()
+    return any(
+        regex.match(v)
+        for regex in (_DOI_RE, _ORCID_RE, _ARK_RE, _ISSN_RE, _ISBN13_RE, _ISBN10_RE)
+    )
+
+
+def _is_language(value: str, config: dict[str, Any] | None = None) -> bool:
+    return bool(_BCP47_RE.match(value.strip()))
+
+
+def _is_country(value: str, config: dict[str, Any] | None = None) -> bool:
+    return bool(_COUNTRY_RE.match(value.strip()))
+
+
+def _is_address(value: str, config: dict[str, Any] | None = None) -> bool:
+    return _is_email(value) or _is_url(value)
+
+
 # Maps content_type key → (validator function, FR error message template)
-_VALIDATORS: dict[str, tuple] = {
+_VALIDATORS: dict[str, tuple[Callable[[str, dict[str, Any] | None], bool], str]] = {
+    "number": (
+        _is_number,
+        "Nombre attendu, « {value} » n'est pas un nombre reconnu.",
+    ),
     "integer": (
         _is_integer,
         "Nombre entier attendu, « {value} » n'est pas un nombre entier.",
@@ -112,6 +170,26 @@ _VALIDATORS: dict[str, tuple] = {
     "date": (
         _is_date,
         "Date attendue, « {value} » n'est pas une date reconnue.",
+    ),
+    "boolean": (
+        _is_boolean,
+        "Booléen attendu, « {value} » n'est pas une valeur vrai/faux reconnue.",
+    ),
+    "identifier": (
+        _is_identifier,
+        "Identifiant attendu, « {value} » ne correspond pas à un identifiant reconnu.",
+    ),
+    "language": (
+        _is_language,
+        "Code langue attendu, « {value} » n'est pas un code langue reconnu.",
+    ),
+    "country": (
+        _is_country,
+        "Code pays attendu, « {value} » n'est pas un code ISO 3166-1 alpha-2 reconnu.",
+    ),
+    "address": (
+        _is_address,
+        "Adresse ou lien attendu, « {value} » n'est ni une adresse e-mail ni un lien valide.",
     ),
     "email": (
         _is_email,
@@ -173,7 +251,7 @@ class ContentTypeRule(Rule):
                 continue
             if special_lower and cell.strip().lower() in special_lower:
                 continue  # valeur spéciale acceptée inconditionnellement
-            if not validator(cell):
+            if not validator(cell, config):
                 issues.append(
                     Issue.create(
                         rule_id=self.rule_id,
