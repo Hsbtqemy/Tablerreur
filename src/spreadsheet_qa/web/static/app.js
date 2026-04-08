@@ -18,6 +18,10 @@ const state = {
   columnConfig: {},     // { colName: { content_type, unique, ... } } — fusion modèle + serveur (GET)
   /** Par colonne : l’utilisateur a enregistré des surcharges (job.column_config non vide) — aligné sur GET user_overrides. */
   columnUserSaved: {},
+  /** Par colonne : le type / format a déjà été enregistré manuellement côté serveur. */
+  columnUserFormatSaved: {},
+  /** Cache de suggestion de format par colonne. */
+  columnFormatSuggestions: {},
   activeColumn: null,   // name of the currently open config panel
   /** True après au moins une sauvegarde serveur des réglages colonne (PUT column-config). Utilisé pour FLUX-03 (changement de modèle). */
   userColumnConfigSaved: false,
@@ -33,6 +37,7 @@ const state = {
   sampleRowIndex: 0,
   /** Afficher nom + valeur par colonne dans la liste (préférence UX) */
   showSampleValues: false,
+  formatSuggestionSeq: 0,
 };
 let _currentProblemsTotal = 0;
 
@@ -518,6 +523,193 @@ function _syncFormatPresetOptions(preferredValue = null) {
   );
   _updateFormatPresetUI(effectiveValue, contentType);
   return effectiveValue;
+}
+
+function _hideFormatSuggestion() {
+  const card = document.getElementById('col-format-suggestion');
+  const btn = document.getElementById('btn-apply-format-suggestion');
+  const messageEl = document.getElementById('col-format-suggestion-message');
+  const metaEl = document.getElementById('col-format-suggestion-meta');
+  const noteEl = document.getElementById('col-format-suggestion-note');
+  if (!card || !btn || !messageEl || !metaEl || !noteEl) return;
+  card.hidden = true;
+  card.className = 'col-format-suggestion';
+  messageEl.textContent = '';
+  metaEl.hidden = true;
+  metaEl.textContent = '';
+  noteEl.hidden = true;
+  noteEl.textContent = '';
+  btn.hidden = true;
+}
+
+function _setFormatSuggestionCard({
+  tone = 'info',
+  message = '',
+  meta = '',
+  note = '',
+  showButton = false,
+} = {}) {
+  const card = document.getElementById('col-format-suggestion');
+  const btn = document.getElementById('btn-apply-format-suggestion');
+  const messageEl = document.getElementById('col-format-suggestion-message');
+  const metaEl = document.getElementById('col-format-suggestion-meta');
+  const noteEl = document.getElementById('col-format-suggestion-note');
+  if (!card || !btn || !messageEl || !metaEl || !noteEl) return;
+
+  card.className = 'col-format-suggestion';
+  if (tone && tone !== 'info') card.classList.add(`is-${tone}`);
+  messageEl.textContent = message;
+  metaEl.textContent = meta || '';
+  metaEl.hidden = !meta;
+  noteEl.textContent = note || '';
+  noteEl.hidden = !note;
+  btn.hidden = !showButton;
+  card.hidden = false;
+}
+
+function _formatSuggestionLabel(data) {
+  if (!data) return '';
+  const typeLabel = CONTENT_TYPE_LABELS[data.content_type] || data.content_type || '';
+  const presetLabel = data.format_preset
+    ? (FORMAT_PRESET_LABELS[data.format_preset] || data.format_preset)
+    : '';
+  return presetLabel ? `${typeLabel} → ${presetLabel}` : typeLabel;
+}
+
+function _currentPanelMatchesSuggestion(colName, data) {
+  if (!colName || !data || state.activeColumn !== colName) return false;
+  try {
+    const cfg = _readPanelValues();
+    return (cfg.content_type || '') === (data.content_type || '')
+      && (cfg.format_preset || '') === (data.format_preset || '');
+  } catch (_) {
+    return false;
+  }
+}
+
+function _renderFormatSuggestion(colName) {
+  if (!colName || state.activeColumn !== colName) return;
+  const cached = state.columnFormatSuggestions[colName];
+  if (!cached) {
+    _hideFormatSuggestion();
+    return;
+  }
+
+  if (cached.status === 'loading') {
+    _setFormatSuggestionCard({
+      tone: 'loading',
+      message: 'Analyse automatique en cours pour cette colonne…',
+    });
+    return;
+  }
+
+  if (cached.status === 'error') {
+    _setFormatSuggestionCard({
+      tone: 'warning',
+      message: 'Suggestion automatique indisponible pour cette colonne.',
+      note: cached.error || '',
+    });
+    return;
+  }
+
+  const data = cached.data;
+  if (!data) {
+    _hideFormatSuggestion();
+    return;
+  }
+
+  if (!data.detected) {
+    _setFormatSuggestionCard({
+      tone: 'muted',
+      message: data.message || 'Aucune suggestion fiable.',
+      meta: data.examples?.length ? `Exemples lus : ${data.examples.join(', ')}` : '',
+    });
+    return;
+  }
+
+  const manualFormatSaved = !!state.columnUserFormatSaved?.[colName];
+  const alreadyInForm = _currentPanelMatchesSuggestion(colName, data);
+  const note = manualFormatSaved
+    ? 'Une nature ou un format a déjà été enregistré manuellement pour cette colonne. La suggestion reste informative.'
+    : alreadyInForm
+      ? 'Le formulaire correspond déjà à cette suggestion. Utilisez « Appliquer » en bas du panneau pour l’enregistrer si besoin.'
+      : '';
+
+  const metaParts = [`Compatibilité : ${data.matched}/${data.total}`];
+  if (data.examples?.length) metaParts.push(`Exemples : ${data.examples.join(', ')}`);
+  _setFormatSuggestionCard({
+    message: `Suggestion automatique : ${_formatSuggestionLabel(data)}`,
+    meta: metaParts.join(' · '),
+    note,
+    showButton: !manualFormatSaved && !alreadyInForm,
+  });
+}
+
+function _refreshFormatSuggestionUI() {
+  if (!state.activeColumn) {
+    _hideFormatSuggestion();
+    return;
+  }
+  _renderFormatSuggestion(state.activeColumn);
+}
+
+async function _loadFormatSuggestion(colName, force = false) {
+  if (!state.jobId || !colName) return;
+  const cached = state.columnFormatSuggestions[colName];
+  if (!force && cached && (cached.status === 'loading' || cached.status === 'ready')) {
+    _renderFormatSuggestion(colName);
+    return;
+  }
+
+  const seq = ++state.formatSuggestionSeq;
+  state.columnFormatSuggestions[colName] = { status: 'loading' };
+  _renderFormatSuggestion(colName);
+
+  try {
+    const resp = await fetch(`/api/jobs/${state.jobId}/detect-format`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ column: colName }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      throw new Error(data.detail || 'Analyse indisponible');
+    }
+    state.columnFormatSuggestions[colName] = { status: 'ready', data };
+  } catch (err) {
+    state.columnFormatSuggestions[colName] = {
+      status: 'error',
+      error: err?.message || 'Analyse indisponible',
+    };
+  }
+
+  if (seq !== state.formatSuggestionSeq || state.activeColumn !== colName) return;
+  _renderFormatSuggestion(colName);
+}
+
+function applyFormatSuggestion() {
+  const colName = state.activeColumn;
+  if (!colName) return;
+  if (state.columnUserFormatSaved?.[colName]) return;
+  const suggestion = state.columnFormatSuggestions[colName]?.data;
+  if (!suggestion?.detected) return;
+
+  const contentType = suggestion.content_type || '';
+  document.getElementById('cfg-content-type').value = contentType;
+  const preset = _rebuildFormatPresetOptions(contentType, suggestion.format_preset || '');
+  document.getElementById('cfg-regex').value = '';
+  document.getElementById('cfg-yesno-true').value = '';
+  document.getElementById('cfg-yesno-false').value = '';
+  _updateFormatPresetUI(preset, contentType);
+  _saveCurrentPanelToState();
+  _updateConfiguredMarker(colName);
+  _schedulePreviewRule();
+  _renderFormatSuggestion(colName);
+  _showToast(
+    'Suggestion copiée dans le formulaire. Utilisez « Appliquer » en bas du panneau pour l’enregistrer.',
+    'success',
+    5000
+  );
 }
 
 /** Résumé d’une ligne : nature / préréglage / liste pour la liste des colonnes. */
@@ -1251,6 +1443,9 @@ async function doUpload(options = {}) {
     _persistJobSession();
     state.columnConfig = {};
     state.columnUserSaved = {};
+    state.columnUserFormatSaved = {};
+    state.columnFormatSuggestions = {};
+    state.formatSuggestionSeq = 0;
     state.userColumnConfigSaved = false;
     state.activeColumn = null;
     state.validationDone = false;
@@ -1258,6 +1453,7 @@ async function doUpload(options = {}) {
     state.exportWarnings = [];
     _currentProblemsTotal = 0;
     _hideCellsEditedBanner();
+    _hideFormatSuggestion();
     const vrf = document.getElementById('validate-rule-failures');
     if (vrf) { vrf.hidden = true; vrf.innerHTML = ''; }
     const rew = document.getElementById('results-export-warnings');
@@ -1422,8 +1618,14 @@ document.getElementById('cfg-list-separator')?.addEventListener('input', functio
 
 // Real-time preview debounce — listen on the whole panel (event delegation)
 let _previewRuleTimer = null;
-document.getElementById('column-config-panel')?.addEventListener('input',  () => _schedulePreviewRule());
-document.getElementById('column-config-panel')?.addEventListener('change', () => _schedulePreviewRule());
+document.getElementById('column-config-panel')?.addEventListener('input',  () => {
+  _schedulePreviewRule();
+  _refreshFormatSuggestionUI();
+});
+document.getElementById('column-config-panel')?.addEventListener('change', () => {
+  _schedulePreviewRule();
+  _refreshFormatSuggestionUI();
+});
 
 document.getElementById('btn-close-column-config')?.addEventListener(
   'click',
@@ -1676,6 +1878,7 @@ async function loadPreview() {
       const configData = await configResp.json();
       state.columnConfig = configData.columns || {};
       state.columnUserSaved = configData.user_overrides || {};
+      state.columnUserFormatSaved = configData.user_format_overrides || {};
     }
 
     let rawCols = Array.isArray(preview.columns) ? preview.columns : [];
@@ -1916,6 +2119,7 @@ function openColumnConfig(colName) {
   savedEl.hidden = true;
 
   _syncColConfigOnboardingVisibility();
+  _renderFormatSuggestion(colName);
 
   // Show panel
   document.getElementById('column-config-panel').hidden = false;
@@ -1923,6 +2127,7 @@ function openColumnConfig(colName) {
 
   // Trigger initial preview
   _schedulePreviewRule();
+  void _loadFormatSuggestion(colName);
 
   if (prevOpen && prevOpen !== colName) _updateConfiguredMarker(prevOpen);
   _updateConfiguredMarker(colName);
@@ -1937,6 +2142,7 @@ function closeColumnConfig() {
   document.querySelectorAll('#preview-body td').forEach(td => td.classList.remove('column-selected'));
   _syncColumnNavSelection(null);
   document.getElementById('column-config-panel').hidden = true;
+  _hideFormatSuggestion();
   if (closing) _updateConfiguredMarker(closing);
 }
 
@@ -2053,8 +2259,10 @@ async function applyColumnConfig() {
     savedEl.hidden = false;
     setTimeout(() => { savedEl.hidden = true; }, 2000);
 
+    await _reloadColumnConfigFromServer();
     // Mark configured indicators on all header columns
     _updateColumnBadges();
+    _refreshFormatSuggestionUI();
   } catch (err) {
     alert('Erreur lors de l\'enregistrement : ' + err.message);
   }
@@ -2169,6 +2377,7 @@ async function showConfigSummary() {
       if (resp.ok) {
         _markUserColumnConfigSaved();
         state.columnUserSaved[colSaved] = true;
+        await _reloadColumnConfigFromServer();
       }
     } catch (_) {}
     closeColumnConfig();
@@ -2218,6 +2427,7 @@ async function configureDone() {
       if (resp.ok) {
         _markUserColumnConfigSaved();
         state.columnUserSaved[colSaved] = true;
+        await _reloadColumnConfigFromServer();
       }
     } catch (_) { /* non-blocking */ }
   }
@@ -3167,6 +3377,9 @@ function resetApp() {
   state.currentPage = 1;
   state.columnConfig = {};
   state.columnUserSaved = {};
+  state.columnUserFormatSaved = {};
+  state.columnFormatSuggestions = {};
+  state.formatSuggestionSeq = 0;
   state.userColumnConfigSaved = false;
   state.uploadPreviewReady = false;
   state.activeColumn = null;
@@ -3213,6 +3426,7 @@ function resetApp() {
   state.sampleRowIndex = 0;
   _updateSampleLinePickerVisibility();
   document.getElementById('column-config-panel').hidden = true;
+  _hideFormatSuggestion();
   document.getElementById('config-summary').hidden = true;
   document.getElementById('cfg-required').checked = false;
   document.getElementById('cfg-content-type').value = '';
@@ -3520,6 +3734,12 @@ async function _reloadColumnConfigFromServer() {
       });
       if (data.user_overrides) {
         state.columnUserSaved = { ...state.columnUserSaved, ...data.user_overrides };
+      }
+      if (data.user_format_overrides) {
+        state.columnUserFormatSaved = {
+          ...state.columnUserFormatSaved,
+          ...data.user_format_overrides,
+        };
       }
     }
   } catch (_) { /* non-bloquant */ }

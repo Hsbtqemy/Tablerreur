@@ -60,7 +60,7 @@ def test_patch_template_unknown_job():
 
 
 def test_column_config_user_overrides_reflects_saved_columns():
-    """GET column-config expose user_overrides : True si job.column_config[col] non vide."""
+    """GET column-config expose user_overrides et user_format_overrides."""
     csv_bytes = _make_csv(["a", "b"], [["1", "2"]])
     resp = client.post(
         "/api/jobs",
@@ -71,8 +71,11 @@ def test_column_config_user_overrides_reflects_saved_columns():
     job_id = resp.json()["job_id"]
     d = client.get(f"/api/jobs/{job_id}/column-config").json()
     assert "user_overrides" in d
+    assert "user_format_overrides" in d
     assert d["user_overrides"]["a"] is False
     assert d["user_overrides"]["b"] is False
+    assert d["user_format_overrides"]["a"] is False
+    assert d["user_format_overrides"]["b"] is False
     r = client.put(
         f"/api/jobs/{job_id}/column-config",
         json={"columns": {"a": {"required": True}}},
@@ -81,3 +84,13 @@ def test_column_config_user_overrides_reflects_saved_columns():
     d2 = client.get(f"/api/jobs/{job_id}/column-config").json()
     assert d2["user_overrides"]["a"] is True
     assert d2["user_overrides"]["b"] is False
+    assert d2["user_format_overrides"]["a"] is False
+    assert d2["user_format_overrides"]["b"] is False
+
+    r2 = client.put(
+        f"/api/jobs/{job_id}/column-config",
+        json={"columns": {"a": {"content_type": "number", "format_preset": "integer"}}},
+    )
+    assert r2.status_code == 200
+    d3 = client.get(f"/api/jobs/{job_id}/column-config").json()
+    assert d3["user_format_overrides"]["a"] is True

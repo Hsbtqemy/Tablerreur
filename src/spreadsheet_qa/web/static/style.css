@@ -1036,6 +1036,60 @@ body.tablerreur-step-configure .step-coach {
   white-space: nowrap;
   font-size: 0.84rem;
 }
+.col-format-suggestion {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  padding: 0.75rem 0.85rem;
+  margin-bottom: 0.65rem;
+  border: 1px solid rgba(37, 99, 235, 0.24);
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, #eff6ff 0%, #f8fbff 100%);
+}
+#col-format-suggestion[hidden] {
+  display: none !important;
+}
+.col-format-suggestion.is-loading {
+  border-color: rgba(148, 163, 184, 0.4);
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+}
+.col-format-suggestion.is-warning {
+  border-color: rgba(245, 158, 11, 0.35);
+  background: linear-gradient(135deg, #fffbeb 0%, #fff7ed 100%);
+}
+.col-format-suggestion.is-muted {
+  border-color: rgba(148, 163, 184, 0.35);
+  background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+}
+.col-format-suggestion-copy {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+.col-format-suggestion-kicker {
+  margin: 0 0 0.2rem 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-primary);
+}
+.col-format-suggestion-message {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  color: var(--color-text);
+}
+.col-format-suggestion-meta,
+.col-format-suggestion-note {
+  margin: 0.35rem 0 0 0;
+}
+.col-format-suggestion-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+}
 .col-config-expert-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -1858,6 +1912,22 @@ textarea.av-locked {
 }
 [data-theme="dark"] .column-nav-item.column-nav-configured:not(.column-nav-selected)::after {
   color: #4ade80;
+}
+[data-theme="dark"] .col-format-suggestion {
+  border-color: rgba(96, 165, 250, 0.35);
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.96) 0%, rgba(15, 23, 42, 0.96) 100%);
+}
+[data-theme="dark"] .col-format-suggestion.is-loading,
+[data-theme="dark"] .col-format-suggestion.is-muted {
+  border-color: rgba(71, 85, 105, 0.75);
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.96) 0%, rgba(17, 24, 39, 0.96) 100%);
+}
+[data-theme="dark"] .col-format-suggestion.is-warning {
+  border-color: rgba(251, 191, 36, 0.4);
+  background: linear-gradient(135deg, rgba(66, 32, 6, 0.92) 0%, rgba(30, 41, 59, 0.96) 100%);
+}
+[data-theme="dark"] .col-format-suggestion-kicker {
+  color: #93c5fd;
 }
 [data-theme="dark"] .configure-template-strip {
   background: #1e293b;

@@ -251,6 +251,74 @@ async def preview_job(job_id: str, rows: int = 30):
 # ---------------------------------------------------------------------------
 
 
+_FORMAT_OVERRIDE_KEYS = (
+    "content_type",
+    "format_preset",
+    "regex",
+    "yes_no_true_values",
+    "yes_no_false_values",
+)
+
+
+def _normalize_override_value(value: Any) -> Any:
+    if value in (None, ""):
+        return None
+    if isinstance(value, list) and not value:
+        return None
+    return value
+
+
+def _canonicalize_format_config(config: dict[str, Any] | None) -> tuple[Any, Any, Any, Any, Any]:
+    cfg = config or {}
+    content_type = _normalize_override_value(cfg.get("content_type"))
+    format_preset = _normalize_override_value(cfg.get("format_preset"))
+    regex = _normalize_override_value(cfg.get("regex"))
+    yes_no_true_values = _normalize_override_value(cfg.get("yes_no_true_values"))
+    yes_no_false_values = _normalize_override_value(cfg.get("yes_no_false_values"))
+
+    if content_type == "integer" and not format_preset:
+        content_type = "number"
+        format_preset = "integer"
+    elif content_type == "decimal" and not format_preset:
+        content_type = "number"
+        format_preset = "decimal"
+    elif content_type == "email" and not format_preset:
+        content_type = "address"
+        format_preset = "email_preset"
+    elif content_type == "url" and not format_preset:
+        content_type = "address"
+        format_preset = "url"
+
+    if format_preset and format_preset != "custom":
+        regex = None
+        if format_preset != "yes_no":
+            yes_no_true_values = None
+            yes_no_false_values = None
+    else:
+        yes_no_true_values = None
+        yes_no_false_values = None
+
+    return (
+        content_type,
+        format_preset,
+        regex,
+        yes_no_true_values,
+        yes_no_false_values,
+    )
+
+
+def _has_manual_format_override(user_cfg: dict[str, Any], template_cfg: dict[str, Any]) -> bool:
+    if not user_cfg:
+        return False
+
+    user_subset = {key: user_cfg.get(key) for key in _FORMAT_OVERRIDE_KEYS if key in user_cfg}
+    if not user_subset:
+        return False
+
+    template_subset = {key: template_cfg.get(key) for key in _FORMAT_OVERRIDE_KEYS}
+    return _canonicalize_format_config(user_subset) != _canonicalize_format_config(template_subset)
+
+
 @app.get("/api/jobs/{job_id}/column-config")
 async def get_column_config(job_id: str):
     """Return per-column config merging template defaults with user overrides."""
@@ -271,10 +339,12 @@ async def get_column_config(job_id: str):
 
     result: dict = {}
     user_overrides: dict[str, bool] = {}
+    user_format_overrides: dict[str, bool] = {}
     for col in job.columns:
         tpl = tpl_columns.get(col, {})
         user = job.column_config.get(col, {})
         user_overrides[col] = bool(user)
+        user_format_overrides[col] = _has_manual_format_override(user, tpl)
 
         def _pick(key: str, default):
             # User override wins if set, else template, else default
@@ -313,7 +383,11 @@ async def get_column_config(job_id: str):
             "similar_threshold": _pick("similar_threshold", 85),
         }
 
-    return {"columns": result, "user_overrides": user_overrides}
+    return {
+        "columns": result,
+        "user_overrides": user_overrides,
+        "user_format_overrides": user_format_overrides,
+    }
 
 
 @app.put("/api/jobs/{job_id}/column-config")

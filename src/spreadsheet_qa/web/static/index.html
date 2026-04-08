@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Tablerreur · Mapala — Contrôle qualité et mapping</title>
-  <link rel="stylesheet" href="/static/style.css?v=20260420" />
+  <link rel="stylesheet" href="/static/style.css?v=20260421" />
 </head>
 <body>
   <header class="app-header app-header--tablerreur" id="app-header">
@@ -220,6 +220,25 @@
         <div class="col-config-expert-toolbar" aria-label="Affichage des sections de contraintes">
           <button type="button" class="btn btn-secondary btn-sm" onclick="expandAllColConfigSections()">Tout afficher</button>
           <button type="button" class="btn btn-secondary btn-sm" onclick="collapseAllColConfigSections()">Tout réduire</button>
+        </div>
+        <div id="col-format-suggestion" class="col-format-suggestion" hidden>
+          <div class="col-format-suggestion-copy">
+            <p class="col-format-suggestion-kicker">Suggestion automatique</p>
+            <p id="col-format-suggestion-message" class="col-format-suggestion-message">Analyse en cours…</p>
+            <p id="col-format-suggestion-meta" class="format-hint col-format-suggestion-meta" hidden></p>
+            <p id="col-format-suggestion-note" class="format-hint col-format-suggestion-note" hidden></p>
+          </div>
+          <div class="col-format-suggestion-actions">
+            <button
+              type="button"
+              id="btn-apply-format-suggestion"
+              class="btn btn-secondary btn-sm"
+              onclick="applyFormatSuggestion()"
+              hidden
+            >
+              Appliquer la suggestion
+            </button>
+          </div>
         </div>
         </div>
         <div class="col-config-sections">
@@ -935,7 +954,7 @@
     <p>Tablerreur — Contrôle qualité tableurs · <a href="https://github.com/anthropics/claude-code" target="_blank">Open source</a></p>
   </footer>
 
-  <script src="/static/app.js?v=20260408d"></script>
+  <script src="/static/app.js?v=20260408e"></script>
   <script src="/static/mapala.js?v=20260408b"></script>
 </body>
 </html>
