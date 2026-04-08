@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Tablerreur · Mapala — Contrôle qualité et mapping</title>
-  <link rel="stylesheet" href="/static/style.css?v=20260414" />
+  <link rel="stylesheet" href="/static/style.css?v=20260416" />
 </head>
 <body>
   <header class="app-header app-header--tablerreur" id="app-header">
@@ -20,6 +20,9 @@
     </div>
     <p class="app-subtitle">Contrôle qualité et mapping de tableurs CSV/XLSX</p>
   </header>
+
+  <!-- Toast global : doit rester hors des sections d’étape (sinon ancêtre hidden → invisible). -->
+  <div id="template-toast" class="template-toast" hidden role="status" aria-live="polite"></div>
 
   <!-- Navigation principale : onglets Tablerreur / Mapala -->
   <nav class="app-tabs">
@@ -138,7 +141,6 @@
           id="btn-upload-continue"
           class="btn btn-primary"
           hidden
-          onclick="uploadContinueToConfigure()"
         >
           Continuer vers la configuration →
         </button>
@@ -213,7 +215,6 @@
                 </button>
               </div>
               <input type="file" id="import-template-input" accept=".yml,.yaml" hidden />
-              <div id="template-toast" class="template-toast" hidden role="status" aria-live="polite"></div>
             </div>
             <div id="configure-config-placeholder" class="configure-config-placeholder mt-2">
               <p class="configure-config-placeholder-kicker">Contraintes par colonne</p>
@@ -937,7 +938,7 @@
     <p>Tablerreur — Contrôle qualité tableurs · <a href="https://github.com/anthropics/claude-code" target="_blank">Open source</a></p>
   </footer>
 
-  <script src="/static/app.js"></script>
-  <script src="/static/mapala.js"></script>
+  <script src="/static/app.js?v=20260408b"></script>
+  <script src="/static/mapala.js?v=20260408b"></script>
 </body>
 </html>

@@ -119,6 +119,24 @@ body {
 .app-header .btn-shortcuts-help:hover {
   background: rgba(255, 255, 255, 0.28);
 }
+/* Même gabarit pour « ? » et thème (icônes alignées dans la barre) */
+.app-header-actions .btn-theme-toggle,
+.app-header-actions .btn-shortcuts-help {
+  width: 2.5rem;
+  height: 2.5rem;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+  line-height: 1;
+  box-sizing: border-box;
+}
+.app-header-actions .btn-shortcuts-help {
+  font-weight: 700;
+}
 @media (max-width: 520px) {
   .app-header {
     padding: 0.75rem 1rem;

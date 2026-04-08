@@ -447,6 +447,10 @@ async function mapalaValidate() {
       state.cols = jobData.cols || 0;
       state.columns = jobData.columns || [];
 
+      if (typeof _persistJobSession === 'function') {
+        _persistJobSession();
+      }
+
       // Active les étapes Tablerreur
       ['configure', 'fixes', 'validate', 'results'].forEach(s => enableStep(s));
       goToStep('configure');

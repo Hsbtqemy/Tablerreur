@@ -84,11 +84,16 @@ function _restoreJobSession() {
   try {
     const jid = sessionStorage.getItem(SESSION_JOB_ID_KEY);
     if (!jid) return;
-    state.jobId = jid;
+    state.jobId = String(jid).trim();
+    if (!state.jobId) return;
     const raw = sessionStorage.getItem(SESSION_COLUMNS_KEY);
     if (raw) {
-      const arr = JSON.parse(raw);
-      if (Array.isArray(arr)) state.columns = arr.map((c) => String(c));
+      try {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) state.columns = arr.map((c) => String(c));
+      } catch (_) {
+        /* Colonnes legacy corrompues — ne pas invalider tout le job ni effacer localStorage. */
+      }
     }
     _persistJobSession();
   } catch (_) {
@@ -535,7 +540,19 @@ function goToStep(step) {
 
   // Show target section
   const section = document.getElementById('step-' + step);
-  if (section) section.hidden = false;
+  if (section) {
+    section.hidden = false;
+    // Après un long scroll sur Téléverser, l’étape suivante peut rester hors vue (WebView : smooth parfois sans effet).
+    if (step !== 'upload') {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const nav = document.getElementById('step-nav');
+          if (nav) nav.scrollIntoView({ behavior: 'auto', block: 'start' });
+          section.scrollIntoView({ behavior: 'auto', block: 'start' });
+        });
+      });
+    }
+  }
 
   // Activate nav button (scope: Tablerreur step nav only)
   const btn = document.querySelector(`#step-nav [data-step="${step}"]`);
@@ -551,7 +568,10 @@ function goToStep(step) {
       void _renderUploadPreview();
     }
   }
-  if (step === 'configure') { loadPreview(); updateUndoRedoButtons(); }
+  if (step === 'configure') {
+    void loadPreview().catch((err) => console.error('loadPreview', err));
+    updateUndoRedoButtons();
+  }
   if (step === 'fixes') updateUndoRedoButtons();
   if (step === 'validate') runValidation();
   if (step === 'results') {
@@ -612,6 +632,12 @@ function switchApp(appName) {
 // ---------------------------------------------------------------------------
 const fileInput = document.getElementById('file-input');
 const uploadZone = document.getElementById('upload-zone');
+const btnUploadContinue = document.getElementById('btn-upload-continue');
+btnUploadContinue?.addEventListener('click', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  uploadContinueToConfigure();
+});
 _initUxPrefs();
 _restoreJobSession();
 _syncConfigureStepButton();
@@ -838,6 +864,20 @@ async function _renderUploadPreview() {
 }
 
 function uploadContinueToConfigure() {
+  switchApp('tablerreur');
+  if (!state.jobId) {
+    _restoreJobSession();
+  }
+  if (state.jobId) {
+    _persistJobSession();
+  }
+  if (!state.jobId) {
+    _showToast(
+      'Session introuvable. Utilisez « Téléverser et afficher l’aperçu » puis réessayez.',
+      'error'
+    );
+    return;
+  }
   _syncConfigureStepButton();
   goToStep('configure');
 }
@@ -944,7 +984,11 @@ async function doUpload() {
       throw new Error(_formatUploadError(resp.status, detail));
     }
     const data = await resp.json();
-    state.jobId = data.job_id;
+    const jid = data.job_id != null ? String(data.job_id).trim() : '';
+    if (!jid) {
+      throw new Error('Réponse serveur invalide : identifiant de session manquant.');
+    }
+    state.jobId = jid;
 
     state.filename = data.filename;
     state.rows = data.rows;
@@ -990,6 +1034,10 @@ async function doUpload() {
     }
 
     state.uploadPreviewReady = true;
+    if (btnSubmit) {
+      btnSubmit.disabled = false;
+      btnSubmit.removeAttribute('aria-busy');
+    }
     _syncConfigureStepButton();
     _showUploadPreviewChrome();
     await _renderUploadPreview();
@@ -3158,20 +3206,54 @@ async function _reloadColumnConfigFromServer() {
 
 /** Affiche un toast temporaire (4 s). type: 'success' | 'warning' | 'error' */
 let _toastTimer = null;
+/** Handler document pour fermer le toast au clic extérieur (référence pour removeEventListener). */
+let _toastOutsideHandler = null;
+
+function _dismissToast() {
+  if (_toastTimer != null) {
+    clearTimeout(_toastTimer);
+    _toastTimer = null;
+  }
+  if (_toastOutsideHandler) {
+    document.removeEventListener('pointerdown', _toastOutsideHandler, true);
+    _toastOutsideHandler = null;
+  }
+  const el = document.getElementById('template-toast');
+  if (el) {
+    el.style.animation = 'none';
+    el.hidden = true;
+    el.style.animation = '';
+  }
+}
+
+/** Après affichage du toast : le prochain clic en dehors le ferme (le clic d’ouverture est ignoré via setTimeout 0). */
+function _bindToastOutsideClose() {
+  if (_toastOutsideHandler) {
+    document.removeEventListener('pointerdown', _toastOutsideHandler, true);
+    _toastOutsideHandler = null;
+  }
+  setTimeout(() => {
+    const el = document.getElementById('template-toast');
+    if (!el || el.hidden) return;
+    _toastOutsideHandler = (e) => {
+      if (el.contains(e.target)) return;
+      _dismissToast();
+    };
+    document.addEventListener('pointerdown', _toastOutsideHandler, true);
+  }, 0);
+}
+
 function _showToast(message, type, durationMs = 4000) {
   const el = document.getElementById('template-toast');
   if (!el) return;
 
-  clearTimeout(_toastTimer);
+  _dismissToast();
   el.textContent = message;
   el.className = `template-toast toast-${type}`;
   el.hidden = false;
 
-  _toastTimer = setTimeout(() => {
-    el.style.animation = 'none';
-    el.hidden = true;
-    el.style.animation = '';
-  }, durationMs);
+  _toastTimer = setTimeout(_dismissToast, durationMs);
+  _bindToastOutsideClose();
 }
 
 /**
@@ -3180,15 +3262,12 @@ function _showToast(message, type, durationMs = 4000) {
 function _showToastWithRevalidateLink(message) {
   const el = document.getElementById('template-toast');
   if (!el) return;
-  clearTimeout(_toastTimer);
+  _dismissToast();
   el.innerHTML = `${esc(message)} <button onclick="revalidate()" style="background:none;border:none;color:inherit;font-weight:700;text-decoration:underline;cursor:pointer;font-size:inherit;">Re-valider →</button>`;
   el.className = 'template-toast toast-success';
   el.hidden = false;
-  _toastTimer = setTimeout(() => {
-    el.style.animation = 'none';
-    el.hidden = true;
-    el.style.animation = '';
-  }, 6000);
+  _toastTimer = setTimeout(_dismissToast, 6000);
+  _bindToastOutsideClose();
 }
 
 /** Affiche l'aide des principaux raccourcis clavier (bouton ? ou touche ? hors champ de saisie). */
