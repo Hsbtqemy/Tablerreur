@@ -636,7 +636,7 @@ const btnUploadContinue = document.getElementById('btn-upload-continue');
 btnUploadContinue?.addEventListener('click', (e) => {
   e.preventDefault();
   e.stopPropagation();
-  uploadContinueToConfigure();
+  void uploadContinueToConfigure();
 });
 _initUxPrefs();
 _restoreJobSession();
@@ -863,17 +863,29 @@ async function _renderUploadPreview() {
   }
 }
 
-function uploadContinueToConfigure() {
+/**
+ * Passe à l’étape Configurer. Si le fichier n’a pas encore été téléversé (POST /api/jobs),
+ * déclenche le téléversement puis la navigation.
+ */
+async function uploadContinueToConfigure() {
   switchApp('tablerreur');
   if (!state.jobId) {
     _restoreJobSession();
   }
+  const hasFile = !!(fileInput && fileInput.files && fileInput.files.length);
+  const needUpload = hasFile && !state.uploadPreviewReady;
+
+  if (needUpload) {
+    const ok = await doUpload({ skipUploadStepPreview: true });
+    if (!ok) return;
+  }
+
   if (state.jobId) {
     _persistJobSession();
   }
   if (!state.jobId) {
     _showToast(
-      'Session introuvable. Utilisez « Téléverser et afficher l’aperçu » puis réessayez.',
+      'Session introuvable. Sélectionnez un fichier, ou utilisez « Téléverser et afficher l’aperçu ».',
       'error'
     );
     return;
@@ -887,6 +899,8 @@ function showFileSelected(name) {
   document.getElementById('upload-file-info').hidden = false;
   const inner = document.querySelector('#upload-zone .upload-inner');
   if (inner) inner.hidden = true;
+  const btnC = document.getElementById('btn-upload-continue');
+  if (btnC) btnC.hidden = false;
 }
 
 function clearFile() {
@@ -939,21 +953,31 @@ async function syncJobTemplateFromUI() {
   }
 }
 
-async function doUpload() {
+/**
+ * @param {{ skipUploadStepPreview?: boolean }} [options] — si vrai, pas d’aperçu tableau sur l’étape Téléverser (ex. enchaînement via « Continuer »).
+ * @returns {Promise<boolean>} true si le POST /api/jobs a réussi
+ */
+async function doUpload(options = {}) {
+  const skipUploadStepPreview = !!options.skipUploadStepPreview;
   const errEl = document.getElementById('upload-error');
   const progEl = document.getElementById('upload-progress');
   const btnSubmit = document.getElementById('btn-upload-submit');
+  const btnContinue = document.getElementById('btn-upload-continue');
   errEl.hidden = true;
   errEl.textContent = '';
 
   if (!fileInput.files.length) {
     _setInlineError(errEl, 'Veuillez sélectionner un fichier.');
-    return;
+    return false;
   }
 
   if (btnSubmit) {
     btnSubmit.disabled = true;
     btnSubmit.setAttribute('aria-busy', 'true');
+  }
+  if (btnContinue) {
+    btnContinue.disabled = true;
+    btnContinue.setAttribute('aria-busy', 'true');
   }
 
   progEl.hidden = false;
@@ -1007,7 +1031,11 @@ async function doUpload() {
     const rew = document.getElementById('results-export-warnings');
     if (rew) { rew.hidden = true; rew.innerHTML = ''; }
 
-    progEl.textContent = `Chargé : ${data.filename} (${data.rows} lignes × ${data.cols} colonnes)`;
+    if (!skipUploadStepPreview) {
+      progEl.textContent = `Chargé : ${data.filename} (${data.rows} lignes × ${data.cols} colonnes)`;
+    } else {
+      progEl.hidden = true;
+    }
 
     // Populate column filter in fixes step
     const fixColSelect = document.getElementById('fix-columns');
@@ -1038,11 +1066,20 @@ async function doUpload() {
       btnSubmit.disabled = false;
       btnSubmit.removeAttribute('aria-busy');
     }
+    if (btnContinue) {
+      btnContinue.disabled = false;
+      btnContinue.removeAttribute('aria-busy');
+    }
     _syncConfigureStepButton();
-    _showUploadPreviewChrome();
-    await _renderUploadPreview();
-    document.getElementById('upload-action-row')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    document.getElementById('btn-upload-continue')?.focus();
+    if (!skipUploadStepPreview) {
+      _showUploadPreviewChrome();
+      await _renderUploadPreview();
+      document.getElementById('upload-action-row')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      document.getElementById('btn-upload-continue')?.focus();
+    } else {
+      _showUploadPreviewChrome();
+    }
+    return true;
   } catch (err) {
     progEl.hidden = true;
     _setInlineError(errEl, err?.message || 'Erreur lors du téléversement.');
@@ -1050,6 +1087,11 @@ async function doUpload() {
       btnSubmit.disabled = false;
       btnSubmit.removeAttribute('aria-busy');
     }
+    if (btnContinue) {
+      btnContinue.disabled = false;
+      btnContinue.removeAttribute('aria-busy');
+    }
+    return false;
   }
 }
 
@@ -3570,11 +3612,7 @@ function _goToStepFromShortcut(stepNumber) {
 function _runPrimaryActionShortcut() {
   switch (state.currentStep) {
     case 'upload':
-      if (state.uploadPreviewReady) {
-        uploadContinueToConfigure();
-      } else {
-        doUpload();
-      }
+      void uploadContinueToConfigure();
       break;
     case 'configure': {
       const summary = document.getElementById('config-summary');
