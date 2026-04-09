@@ -1,11 +1,11 @@
-"""Exporters: XLSX, CSV (always ;), TXT report, issues.csv."""
+"""Exporters: XLSX, CSV (always ;), TXT report, issues.csv, annotated exports."""
 
 from __future__ import annotations
 
 import csv
 import io
 import textwrap
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -29,6 +29,71 @@ def _t(key: str, **kwargs: object) -> str:
 
 def _now_stamp() -> str:
     return datetime.now().strftime("%Y%m%d_%H%M")
+
+
+_ANNOTATED_ROW_COL = "__tablerreur_ligne"
+_ANNOTATED_STATUS_COL = "__tablerreur_statut"
+_ANNOTATED_ISSUES_COL = "__tablerreur_anomalies"
+
+_SEVERITY_RANK = {
+    Severity.ERROR: 0,
+    Severity.WARNING: 1,
+    Severity.SUSPICION: 2,
+}
+
+
+def _issue_sort_key(issue: Issue) -> tuple[int, str, str]:
+    return (
+        _SEVERITY_RANK.get(issue.severity, 99),
+        issue.col or "",
+        issue.message or "",
+    )
+
+
+def _row_status_label(row_issues: list[Issue]) -> str:
+    if not row_issues:
+        return ""
+    top_issue = min(row_issues, key=_issue_sort_key)
+    return top_issue.severity.value
+
+
+def _format_issue_line(issue: Issue) -> str:
+    parts = [issue.severity.value]
+    if issue.status != IssueStatus.OPEN:
+        parts.append(issue.status.value)
+    head = " / ".join(parts)
+    return f"{head} — {issue.col}: {issue.message}"
+
+
+def build_annotated_dataframe(
+    df: pd.DataFrame,
+    issues: list[Issue],
+    row_positions: list[int] | None = None,
+    include_status_column: bool = True,
+) -> pd.DataFrame:
+    """Return a DataFrame enriched with row-level Tablerreur annotations."""
+    positions = list(row_positions) if row_positions is not None else list(range(len(df)))
+    export_df = df.iloc[positions].copy()
+    if not include_status_column:
+        return export_df
+
+    issues_by_row: dict[int, list[Issue]] = defaultdict(list)
+    for issue in issues:
+        issues_by_row[issue.row].append(issue)
+
+    export_df.insert(0, _ANNOTATED_ROW_COL, [row_idx + 1 for row_idx in positions])
+    export_df[_ANNOTATED_STATUS_COL] = [
+        _row_status_label(sorted(issues_by_row.get(row_idx, []), key=_issue_sort_key))
+        for row_idx in positions
+    ]
+    export_df[_ANNOTATED_ISSUES_COL] = [
+        " | ".join(
+            _format_issue_line(issue)
+            for issue in sorted(issues_by_row.get(row_idx, []), key=_issue_sort_key)
+        )
+        for row_idx in positions
+    ]
+    return export_df
 
 
 # ---------------------------------------------------------------------------
@@ -59,6 +124,101 @@ class XLSXExporter:
             for col_idx, val in enumerate(row, start=1):
                 cell_val = "" if pd.isna(val) else str(val)
                 ws.cell(row=row_idx, column=col_idx, value=cell_val)
+
+        wb.save(path)
+
+
+class AnnotatedXLSXExporter:
+    """Export a worksheet with row annotations and optional visual marks."""
+
+    def export(
+        self,
+        df: pd.DataFrame,
+        path: Path,
+        issues: list[Issue],
+        row_positions: list[int] | None = None,
+        touched_cells: set[tuple[int, str]] | None = None,
+        include_visual_marks: bool = True,
+        include_status_column: bool = True,
+    ) -> None:
+        import openpyxl
+        from openpyxl.comments import Comment
+        from openpyxl.styles import Font, PatternFill
+
+        positions = list(row_positions) if row_positions is not None else list(range(len(df)))
+        touched = set(touched_cells or set())
+        export_df = build_annotated_dataframe(
+            df,
+            issues,
+            row_positions=positions,
+            include_status_column=include_status_column,
+        )
+
+        path.parent.mkdir(parents=True, exist_ok=True)
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = _t("xlsx.sheet.data")
+
+        header_font = Font(bold=True)
+        for col_idx, col_name in enumerate(export_df.columns, start=1):
+            cell = ws.cell(row=1, column=col_idx, value=col_name)
+            cell.font = header_font
+
+        for row_idx, row in enumerate(export_df.itertuples(index=False), start=2):
+            for col_idx, val in enumerate(row, start=1):
+                cell_val = "" if pd.isna(val) else str(val)
+                ws.cell(row=row_idx, column=col_idx, value=cell_val)
+
+        if include_visual_marks:
+            fills = {
+                Severity.ERROR: PatternFill(fill_type="solid", fgColor="FDE2E1"),
+                Severity.WARNING: PatternFill(fill_type="solid", fgColor="FDF0D5"),
+                Severity.SUSPICION: PatternFill(fill_type="solid", fgColor="E3E8FF"),
+            }
+            touched_fill = PatternFill(fill_type="solid", fgColor="DCEFFE")
+
+            row_to_sheet_row = {row_idx: export_idx + 2 for export_idx, row_idx in enumerate(positions)}
+            prefix_cols = 1 if include_status_column else 0
+            source_col_to_sheet_col = {
+                col_name: prefix_cols + offset
+                for offset, col_name in enumerate(df.columns, start=1)
+            }
+
+            cell_issues: dict[tuple[int, str], list[Issue]] = defaultdict(list)
+            row_issues: dict[int, list[Issue]] = defaultdict(list)
+            for issue in issues:
+                if issue.row not in row_to_sheet_row or issue.col not in source_col_to_sheet_col:
+                    continue
+                cell_issues[(issue.row, issue.col)].append(issue)
+                row_issues[issue.row].append(issue)
+
+            for (row_idx, col_name), grouped in cell_issues.items():
+                cell = ws.cell(
+                    row=row_to_sheet_row[row_idx],
+                    column=source_col_to_sheet_col[col_name],
+                )
+                top_issue = min(grouped, key=_issue_sort_key)
+                cell.fill = fills.get(top_issue.severity, cell.fill)
+                cell.comment = Comment(
+                    "\n".join(_format_issue_line(issue) for issue in sorted(grouped, key=_issue_sort_key)),
+                    "Tablerreur",
+                )
+
+            if include_status_column:
+                status_col_idx = export_df.columns.get_loc(_ANNOTATED_STATUS_COL) + 1
+                for row_idx, grouped in row_issues.items():
+                    top_issue = min(grouped, key=_issue_sort_key)
+                    status_cell = ws.cell(row=row_to_sheet_row[row_idx], column=status_col_idx)
+                    status_cell.fill = fills.get(top_issue.severity, status_cell.fill)
+
+            for row_idx, col_name in touched:
+                if (row_idx, col_name) in cell_issues:
+                    continue
+                sheet_row = row_to_sheet_row.get(row_idx)
+                sheet_col = source_col_to_sheet_col.get(col_name)
+                if sheet_row is None or sheet_col is None:
+                    continue
+                ws.cell(row=sheet_row, column=sheet_col).fill = touched_fill
 
         wb.save(path)
 

@@ -46,9 +46,10 @@ sans attendre la fin complete du workflow.
 ### Position implementation
 
 - **Faisable** avec la stack actuelle (job + issues deja disponibles)
-- **Non implemente** a ce stade (maquette OK, branchement backend a faire)
+- **Implemente** pour le web : endpoints backend + branchement UI dans `Correctifs`
+- **A etendre si besoin** : autres formats (`ods`, `json`, `pdf`) et integration Tauri specifique
 
-### Contrat backend minimal propose
+### Contrat backend actuellement disponible
 
 - `POST /api/jobs/{job_id}/exports/annotated`
 - `POST /api/jobs/{job_id}/exports/issues-report`
@@ -59,3 +60,6 @@ Options a supporter :
 - `include_visual_marks`: bool
 - `include_status_column`: bool
 - `only_open`: bool
+- Formats exposes :
+  - annote : `xlsx` (UI) ou `csv` (API)
+  - rapport : `csv` (UI) ou `txt` (API)

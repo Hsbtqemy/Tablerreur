@@ -39,7 +39,14 @@ from pydantic import BaseModel
 from spreadsheet_qa.core.commands import Command
 from spreadsheet_qa.core.dataset import DatasetLoader, list_workbook_sheet_names_from_bytes
 from spreadsheet_qa.core.engine import RuleFailure, ValidationEngine
-from spreadsheet_qa.core.exporters import CSVExporter, IssuesCSVExporter, TXTReporter, XLSXExporter
+from spreadsheet_qa.core.exporters import (
+    AnnotatedXLSXExporter,
+    CSVExporter,
+    IssuesCSVExporter,
+    TXTReporter,
+    XLSXExporter,
+    build_annotated_dataframe,
+)
 from spreadsheet_qa.core.format_detection import detect_column_format
 from spreadsheet_qa.core.models import IssueStatus, Severity
 from spreadsheet_qa.core.nakala_api import NakalaClient
@@ -141,6 +148,14 @@ class WebBulkFixCommand(Command):
     @property
     def cells_count(self) -> int:
         return len(self._changes)
+
+    @property
+    def touched_rows(self) -> set[int]:
+        return {int(row_idx) for row_idx, _, _, _ in self._changes}
+
+    @property
+    def touched_cells(self) -> set[tuple[int, str]]:
+        return {(int(row_idx), str(col)) for row_idx, col, _, _ in self._changes}
 
 # ---------------------------------------------------------------------------
 # Client NAKALA — singleton avec cache disque
@@ -412,6 +427,20 @@ class JobTemplateUpdate(BaseModel):
 
     template_id: str = "generic_default"
     overlay_id: str | None = None
+
+
+class AnnotatedExportRequest(BaseModel):
+    scope: str = "all"
+    include_visual_marks: bool = True
+    include_status_column: bool = True
+    only_open: bool = True
+    format: str = "xlsx"
+
+
+class IssuesReportExportRequest(BaseModel):
+    scope: str = "all"
+    only_open: bool = True
+    format: str = "csv"
 
 
 @app.patch("/api/jobs/{job_id}/template")
@@ -944,6 +973,193 @@ async def preview_fixes(
     return {"total": total, "aperçu": preview}
 
 
+_VALID_EXPORT_SCOPES = {"all", "issues", "blocking", "touched"}
+_VALID_ANNOTATED_EXPORT_FORMATS = {"xlsx", "csv"}
+_VALID_ISSUES_REPORT_FORMATS = {"csv", "txt"}
+
+
+def _compile_validation_config(job: Job, df: pd.DataFrame) -> dict[str, Any]:
+    mgr = TemplateManager()
+    config = mgr.compile_config(
+        generic_id=job.template_id,
+        overlay_id=job.overlay_id,
+        column_names=list(df.columns),
+        nakala_client=_nakala_client,
+    )
+    if job.column_config:
+        config_cols = config.setdefault("columns", {})
+        for col, user_overrides in job.column_config.items():
+            if col not in config_cols:
+                config_cols[col] = {}
+            for key, val in user_overrides.items():
+                if val is not None:
+                    config_cols[col][key] = val
+    return config
+
+
+def _run_validation_for_job(job: Job, df: pd.DataFrame) -> tuple[list, list[RuleFailure]]:
+    engine = ValidationEngine()
+    config = _compile_validation_config(job, df)
+    result = engine.validate(df, config=config)
+    return result.issues, result.rule_failures
+
+
+def _build_summary_from_issues(issues: list) -> ValidationSummary:
+    counts = {
+        Severity.ERROR: 0,
+        Severity.WARNING: 0,
+        Severity.SUSPICION: 0,
+    }
+    for issue in issues:
+        counts[issue.severity] = counts.get(issue.severity, 0) + 1
+    return ValidationSummary(
+        errors=counts[Severity.ERROR],
+        warnings=counts[Severity.WARNING],
+        suspicions=counts[Severity.SUSPICION],
+        total=len(issues),
+    )
+
+
+def _cell_str(df: pd.DataFrame, row_idx: int | None, col_name: str | None) -> str:
+    if row_idx is None or not col_name:
+        return ""
+    try:
+        if 0 <= row_idx < len(df) and col_name in df.columns:
+            value = df.at[row_idx, col_name]
+            if value is None:
+                return ""
+            rendered = str(value)
+            return "" if rendered in ("<NA>", "nan") else rendered
+    except Exception:
+        pass
+    return ""
+
+
+def _build_problem_rows(df: pd.DataFrame, issues: list) -> list[ProblemRow]:
+    return [
+        ProblemRow(
+            severity=issue.severity.value,
+            status=issue.status.value,
+            column=issue.col,
+            row=issue.row + 1,
+            message=issue.message,
+            suggestion=str(issue.suggestion) if issue.suggestion is not None else "",
+            issue_id=issue.id,
+            valeur=_cell_str(df, issue.row, issue.col),
+        )
+        for issue in issues
+    ]
+
+
+def _save_issues_snapshot(job: Job, issues: list) -> None:
+    issues_path = job.work_dir / "issues.pkl"
+    with open(str(issues_path), "wb") as fh:
+        pickle.dump(issues, fh)
+    job._issues_path = issues_path
+
+
+def _build_dataset_meta(job: Job):
+    try:
+        from spreadsheet_qa.core.models import DatasetMeta
+
+        return DatasetMeta(
+            file_path=str(job.upload_path),
+            encoding="utf-8",
+            delimiter=None,
+            sheet_name=None,
+            header_row=0,
+            skip_rows=0,
+            original_shape=(job.rows, job.cols),
+            column_order=job.columns,
+            fingerprint="",
+        )
+    except Exception as exc:
+        _logger.warning("MÃ©tadonnÃ©es export : %s", exc)
+        return None
+
+
+def _apply_issue_status_overrides(issues: list, overrides: dict[str, str]) -> list:
+    if not overrides:
+        return list(issues)
+
+    from dataclasses import replace as _dc_replace
+
+    updated: list = []
+    for issue in issues:
+        status = overrides.get(issue.id)
+        if not status:
+            updated.append(issue)
+            continue
+        try:
+            updated.append(_dc_replace(issue, status=IssueStatus(status)))
+        except Exception:
+            updated.append(issue)
+    return updated
+
+
+def _collect_touched_cells(job: Job) -> set[tuple[int, str]]:
+    touched: set[tuple[int, str]] = set()
+    history = getattr(job.command_history, "_undo_stack", [])
+    for cmd in history:
+        cells = getattr(cmd, "touched_cells", None)
+        if cells:
+            touched.update(cells)
+            continue
+        changes = getattr(cmd, "_changes", [])
+        for row_idx, col, _, _ in changes:
+            touched.add((int(row_idx), str(col)))
+    return touched
+
+
+def _normalize_export_scope(scope: str) -> str:
+    normalized = (scope or "all").strip().lower()
+    if normalized not in _VALID_EXPORT_SCOPES:
+        raise HTTPException(
+            status_code=422,
+            detail="Scope invalide. Valeurs acceptÃ©es : all, issues, blocking, touched.",
+        )
+    return normalized
+
+
+def _select_row_positions_for_export(
+    df: pd.DataFrame,
+    issues: list,
+    scope: str,
+    touched_rows: set[int],
+) -> list[int]:
+    if scope == "all":
+        return list(range(len(df)))
+    if scope == "touched":
+        return sorted(row for row in touched_rows if 0 <= row < len(df))
+    if scope == "blocking":
+        return sorted({issue.row for issue in issues if issue.severity == Severity.ERROR})
+    return sorted({issue.row for issue in issues})
+
+
+def _filter_issues_for_export(issues: list, scope: str, touched_rows: set[int], only_open: bool) -> list:
+    filtered = list(issues)
+    if only_open:
+        filtered = [issue for issue in filtered if issue.status == IssueStatus.OPEN]
+    if scope == "blocking":
+        filtered = [issue for issue in filtered if issue.severity == Severity.ERROR]
+    elif scope == "touched":
+        filtered = [issue for issue in filtered if issue.row in touched_rows]
+    return filtered
+
+
+def _safe_export_stem(filename: str | None) -> str:
+    base = Path(filename or "tableur").stem.strip()
+    cleaned = re.sub(r"[^\w.-]+", "_", base, flags=re.UNICODE).strip("._")
+    return cleaned or "tableur"
+
+
+def _work_export_path(job: Job, prefix: str, ext: str) -> Path:
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_dir = job.work_dir / "exports_work"
+    out_dir.mkdir(exist_ok=True)
+    return out_dir / f"{prefix}_{_safe_export_stem(job.filename)}_{stamp}.{ext}"
+
+
 # ---------------------------------------------------------------------------
 # Validate
 # ---------------------------------------------------------------------------
@@ -958,87 +1174,19 @@ async def validate_job(job_id: str):
     job_manager.update(job)
 
     try:
-        mgr = TemplateManager()
-        config = mgr.compile_config(
-            generic_id=job.template_id,
-            overlay_id=job.overlay_id,
-            column_names=list(df.columns),
-            nakala_client=_nakala_client,
-        )
-        # Merge user column overrides from the configure step
-        if job.column_config:
-            config_cols = config.setdefault("columns", {})
-            for col, user_overrides in job.column_config.items():
-                if col not in config_cols:
-                    config_cols[col] = {}
-                for key, val in user_overrides.items():
-                    if val is not None:
-                        config_cols[col][key] = val
-        engine = ValidationEngine()
-        result = engine.validate(df, config=config)
-        issues = result.issues
-        rule_failures = result.rule_failures
+        issues, rule_failures = _run_validation_for_job(job, df)
     except Exception as exc:
         job.state = JobState.ERROR
         job.error_msg = str(exc)
         job_manager.update(job)
         raise HTTPException(status_code=500, detail=str(exc))
 
-    # Build summary
-    counts = {
-        Severity.ERROR: 0,
-        Severity.WARNING: 0,
-        Severity.SUSPICION: 0,
-    }
-    for issue in issues:
-        counts[issue.severity] = counts.get(issue.severity, 0) + 1
-
-    job.summary = ValidationSummary(
-        errors=counts[Severity.ERROR],
-        warnings=counts[Severity.WARNING],
-        suspicions=counts[Severity.SUSPICION],
-        total=len(issues),
-    )
-
-    # Helper to extract a cell value as a plain string (empty if missing/NA)
-    def _cell_str(row_idx, col_name):
-        if row_idx is None or not col_name:
-            return ""
-        try:
-            if 0 <= row_idx < len(df) and col_name in df.columns:
-                v = df.at[row_idx, col_name]
-                if v is None:
-                    return ""
-                s = str(v)
-                return "" if s in ("<NA>", "nan") else s
-        except Exception:
-            pass
-        return ""
-
-    # Store problems
-    job.problems = [
-        ProblemRow(
-            severity=issue.severity.value,
-            status=issue.status.value,
-            column=issue.col,
-            row=issue.row + 1,
-            message=issue.message,
-            suggestion=str(issue.suggestion) if issue.suggestion is not None else "",
-            issue_id=issue.id,
-            valeur=_cell_str(issue.row, issue.col),
-        )
-        for issue in issues
-    ]
-
-    # Save issues as pickle for export regeneration when statuses change
-    issues_path = job.work_dir / "issues.pkl"
-    with open(str(issues_path), "wb") as _fh:
-        pickle.dump(issues, _fh)
-    job._issues_path = issues_path
+    job.summary = _build_summary_from_issues(issues)
+    job.problems = _build_problem_rows(df, issues)
+    _save_issues_snapshot(job, issues)
     job.issue_statuses = {}
     job.exports_dirty = False
 
-    # Generate downloadable outputs
     _generate_outputs(job, df, issues)
 
     job.error_msg = ""
@@ -1065,71 +1213,13 @@ async def revalidate_job(job_id: str):
     df = _load_df(job)
 
     try:
-        mgr = TemplateManager()
-        config = mgr.compile_config(
-            generic_id=job.template_id,
-            overlay_id=job.overlay_id,
-            column_names=list(df.columns),
-            nakala_client=_nakala_client,
-        )
-        if job.column_config:
-            config_cols = config.setdefault("columns", {})
-            for col, user_overrides in job.column_config.items():
-                if col not in config_cols:
-                    config_cols[col] = {}
-                for key, val in user_overrides.items():
-                    if val is not None:
-                        config_cols[col][key] = val
-        engine = ValidationEngine()
-        result = engine.validate(df, config=config)
-        issues = result.issues
-        rule_failures = result.rule_failures
+        issues, rule_failures = _run_validation_for_job(job, df)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
-    counts = {Severity.ERROR: 0, Severity.WARNING: 0, Severity.SUSPICION: 0}
-    for issue in issues:
-        counts[issue.severity] = counts.get(issue.severity, 0) + 1
-
-    job.summary = ValidationSummary(
-        errors=counts[Severity.ERROR],
-        warnings=counts[Severity.WARNING],
-        suspicions=counts[Severity.SUSPICION],
-        total=len(issues),
-    )
-
-    def _cell_str(row_idx, col_name):
-        if row_idx is None or not col_name:
-            return ""
-        try:
-            if 0 <= row_idx < len(df) and col_name in df.columns:
-                v = df.at[row_idx, col_name]
-                if v is None:
-                    return ""
-                s = str(v)
-                return "" if s in ("<NA>", "nan") else s
-        except Exception:
-            pass
-        return ""
-
-    job.problems = [
-        ProblemRow(
-            severity=issue.severity.value,
-            status=issue.status.value,
-            column=issue.col,
-            row=issue.row + 1,
-            message=issue.message,
-            suggestion=str(issue.suggestion) if issue.suggestion is not None else "",
-            issue_id=issue.id,
-            valeur=_cell_str(issue.row, issue.col),
-        )
-        for issue in issues
-    ]
-
-    issues_path = job.work_dir / "issues.pkl"
-    with open(str(issues_path), "wb") as _fh:
-        pickle.dump(issues, _fh)
-    job._issues_path = issues_path
+    job.summary = _build_summary_from_issues(issues)
+    job.problems = _build_problem_rows(df, issues)
+    _save_issues_snapshot(job, issues)
     job.issue_statuses = {}
     job.exports_dirty = False
 
@@ -1159,23 +1249,7 @@ def _generate_outputs(job: Job, df: pd.DataFrame, issues: list) -> None:
 
     export_errors: list[str] = []
 
-    # Find a DatasetMeta-like object if available
-    try:
-        from spreadsheet_qa.core.models import DatasetMeta
-        meta = DatasetMeta(
-            file_path=str(job.upload_path),
-            encoding="utf-8",
-            delimiter=None,
-            sheet_name=None,
-            header_row=0,
-            skip_rows=0,
-            original_shape=(job.rows, job.cols),
-            column_order=job.columns,
-            fingerprint="",
-        )
-    except Exception as exc:
-        _logger.warning("Métadonnées export : %s", exc)
-        meta = None
+    meta = _build_dataset_meta(job)
 
     try:
         XLSXExporter().export(df, out / "nettoyé.xlsx")
@@ -1377,32 +1451,10 @@ def _regenerate_status_exports(job: "Job") -> None:
         _logger.warning("Régénération exports : lecture issues.pkl : %s", exc)
         return
 
-    # Apply overrides via dataclasses.replace (keeps original pickle intact)
-    from dataclasses import replace as _dc_replace
-    modified: list = []
-    for iss in issues:
-        if iss.id in job.issue_statuses:
-            modified.append(_dc_replace(iss, status=IssueStatus(job.issue_statuses[iss.id])))
-        else:
-            modified.append(iss)
+    modified = _apply_issue_status_overrides(issues, job.issue_statuses)
 
     out = job.work_dir / "exports"
-    try:
-        from spreadsheet_qa.core.models import DatasetMeta
-        meta = DatasetMeta(
-            file_path=str(job.upload_path),
-            encoding="utf-8",
-            delimiter=None,
-            sheet_name=None,
-            header_row=0,
-            skip_rows=0,
-            original_shape=(job.rows, job.cols),
-            column_order=job.columns,
-            fingerprint="",
-        )
-    except Exception as exc:
-        _logger.warning("Régénération exports : métadonnées : %s", exc)
-        meta = None
+    meta = _build_dataset_meta(job)
 
     try:
         TXTReporter().export(modified, out / "rapport.txt", meta=meta)
@@ -1459,6 +1511,107 @@ async def download_file(job_id: str, filename: str):
     }
     media_type = media_types.get(file_path.suffix, "application/octet-stream")
     return FileResponse(str(file_path), media_type=media_type, filename=resolved)
+
+
+@app.post("/api/jobs/{job_id}/exports/annotated")
+async def export_annotated_workbook(job_id: str, body: AnnotatedExportRequest):
+    """Generate an annotated work export from the current dataset state."""
+    job = _get_job(job_id)
+    df = _load_df(job)
+    scope = _normalize_export_scope(body.scope)
+    export_format = (body.format or "xlsx").strip().lower()
+    if export_format not in _VALID_ANNOTATED_EXPORT_FORMATS:
+        raise HTTPException(
+            status_code=422,
+            detail="Format invalide. Valeurs acceptées : xlsx, csv.",
+        )
+
+    try:
+        issues, _ = _run_validation_for_job(job, df)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    effective_issues = _apply_issue_status_overrides(issues, job.issue_statuses)
+    touched_cells = _collect_touched_cells(job)
+    touched_rows = {row_idx for row_idx, _ in touched_cells}
+    filtered_issues = _filter_issues_for_export(
+        effective_issues,
+        scope=scope,
+        touched_rows=touched_rows,
+        only_open=body.only_open,
+    )
+    row_positions = _select_row_positions_for_export(
+        df,
+        issues=filtered_issues,
+        scope=scope,
+        touched_rows=touched_rows,
+    )
+
+    if export_format == "xlsx":
+        export_path = _work_export_path(job, f"tableur_annote_{scope}", "xlsx")
+        AnnotatedXLSXExporter().export(
+            df,
+            export_path,
+            filtered_issues,
+            row_positions=row_positions,
+            touched_cells=touched_cells,
+            include_visual_marks=body.include_visual_marks,
+            include_status_column=body.include_status_column,
+        )
+        media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    else:
+        export_path = _work_export_path(job, f"tableur_annote_{scope}", "csv")
+        annotated_df = build_annotated_dataframe(
+            df,
+            filtered_issues,
+            row_positions=row_positions,
+            include_status_column=body.include_status_column,
+        )
+        CSVExporter().export(annotated_df, export_path)
+        media_type = "text/csv; charset=utf-8"
+
+    return FileResponse(str(export_path), media_type=media_type, filename=export_path.name)
+
+
+@app.post("/api/jobs/{job_id}/exports/issues-report")
+async def export_issues_report(job_id: str, body: IssuesReportExportRequest):
+    """Generate an issues report from the current dataset state."""
+    job = _get_job(job_id)
+    df = _load_df(job)
+    scope = _normalize_export_scope(body.scope)
+    export_format = (body.format or "csv").strip().lower()
+    if export_format not in _VALID_ISSUES_REPORT_FORMATS:
+        raise HTTPException(
+            status_code=422,
+            detail="Format invalide. Valeurs acceptées : csv, txt.",
+        )
+
+    try:
+        issues, _ = _run_validation_for_job(job, df)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    effective_issues = _apply_issue_status_overrides(issues, job.issue_statuses)
+    touched_cells = _collect_touched_cells(job)
+    touched_rows = {row_idx for row_idx, _ in touched_cells}
+    filtered_issues = _filter_issues_for_export(
+        effective_issues,
+        scope=scope,
+        touched_rows=touched_rows,
+        only_open=body.only_open,
+    )
+    meta = _build_dataset_meta(job)
+
+    if export_format == "txt":
+        export_path = _work_export_path(job, f"rapport_anomalies_{scope}", "txt")
+        TXTReporter().export(filtered_issues, export_path, meta=meta, open_only=False)
+        media_type = "text/plain; charset=utf-8"
+    else:
+        export_path = _work_export_path(job, f"rapport_anomalies_{scope}", "csv")
+        IssuesCSVExporter().export(filtered_issues, export_path, meta=meta)
+        media_type = "text/csv; charset=utf-8"
+
+    return FileResponse(str(export_path), media_type=media_type, filename=export_path.name)
 
 
 # ---------------------------------------------------------------------------

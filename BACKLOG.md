@@ -24,7 +24,7 @@ Après évaluation de la **faisabilité** (technique, dépendances, effort) et *
 
 | Priorité | Thème | Idées | Faisabilité | État code (avril 2026) |
 |----------|--------|--------|-------------|-------------------------|
-| **P0 — Haute** | Distribution | Menu Aide → URL releases | 🟢 | **Fait** — `src-tauri/src/main.rs` ouvre une URL releases au clic sur « Vérifier les mises à jour » ; **remplacer** le placeholder `https://github.com/VOTRE_ORGANISATION/tablerreur/releases` par le dépôt réel. |
+| **P0 — Haute** | Distribution | Menu Aide → URL releases | 🟢 | **Fait** — `src-tauri/src/main.rs` ouvre la page releases du dépôt au clic sur « Vérifier les mises à jour ». |
 | **P1 — Moyenne** | Flux UX | **Prévisualisation des données** (aperçu `GET /preview` à l’étape **Configurer**), **choix du modèle** (builtin / overlay NAKALA / YAML) sur **Configurer** — pas sur Téléverser | 🟡 | **Fait (§12)** — `POST /api/jobs` + `PATCH …/template` ; **FLUX-03** : dialogue de confirmation et rappel de fusion si l’utilisateur a déjà enregistré des réglages colonne. |
 | **P1 — Moyenne** | Curation & édition | Étape Curation dédiée, persistance, export après curation, curation ciblée | 🟢 | **Partiel** — édition in-place (double-clic), `POST /api/jobs/{id}/edit-cell`, `POST /revalidate`, bandeau « cellules modifiées » ; pas d’étape workflow séparée « Curation ». |
 | **P1** | NAKALA — sélection | Sous-ensemble du vocabulaire chargé | 🟢 | **Fait** — `app.js` : sélecteur à cases à cocher après chargement (`#vocab-selector-list`), persistance dans `allowed_values` + `nakala_vocabulary`. |
@@ -159,7 +159,7 @@ Implémentation : `FORMAT_PRESETS` dans `web/static/app.js` et liste déroulante
 |---|---|---|
 | Launcher `python -m spreadsheet_qa.web`, `/health`, Docker, CORS, limites upload, `TABLERREUR_ENV` | Fait | |
 | Tauri : sidecar, onedir, splash, menu, health check, icônes | Fait | |
-| Tauri : menu Aide → ouvrir URL (releases) | Fait | Remplacer l’URL placeholder dans `main.rs` |
+| Tauri : menu Aide → ouvrir URL (releases) | Fait | URL du dépôt configurée dans `main.rs` |
 | Tauri : signing macOS | Hors périmètre | |
 | Tauri : auto-update | Long terme | Plugin updater |
 
@@ -169,12 +169,10 @@ Implémentation : `FORMAT_PRESETS` dans `web/static/app.js` et liste déroulante
 
 Pour le **périmètre audit / sécurité / robustesse**, suivre la section **« Backlog audit technique & sécurité (exécutable) »** en fin de document (items `AUD-Px-xx`), en priorité **P0** puis **P1**.
 
-1. **Distribution** — Remplacer l’URL GitHub placeholder dans `src-tauri/src/main.rs` par celle du projet.
-2. **Export de travail (§11)** — Brancher les endpoints d’export annoté / rapport depuis l’étape Correctifs (toujours non implémenté).
-3. **Flux import / modèle (§12)** — **Complet** (y compris FLUX-03). Re-téléversement + `POST` couvrent les sidecars sans `PATCH`.
-4. **Curation** — Optionnel : étape dédiée, undo local des éditions cellule, parité avec critères §11 (passage Correctifs → Valider si ERROR ouverts).
-5. **NAKALA** — Template depuis API (§7B), raffinages (personnaliser après chargement, etc.).
-6. **UX config** — Filtre formats par type, fusion type Nombre, presets restants (URL catalogue, code postal, …).
+1. **Curation** — Optionnel : étape dédiée, undo local des éditions cellule, parité avec critères §11 (passage Correctifs → Valider si ERROR ouverts).
+2. **NAKALA** — Template depuis API (§7B), raffinages (personnaliser après chargement, etc.).
+3. **UX config** — Filtre formats par type, fusion type Nombre, presets restants (URL catalogue, code postal, …).
+4. **Flux import / modèle (§12)** — **Complet** (y compris FLUX-03). Re-téléversement + `POST` couvrent les sidecars sans `PATCH`.
 
 ---
 
@@ -217,7 +215,7 @@ Les autres lignes (libellé ↔ URI, champs dcterms, DataCite, collections, etc.
 | Curation ciblée (issue → cellule) | Partiel | Navigation / flash cellule côté résultats ; pas d’ouverture automatique en mode édition |
 | Persistance + revalidation | Fait | `POST .../revalidate` |
 | Historique / undo éditions manuelles | Backlog | |
-| Export reflétant les edits | Fait | Données du job à jour ; exports existants utilisent le DataFrame courant |
+| Export reflétant les edits | Fait | Données du job à jour ; export de travail disponible dès Correctifs + résultats finaux |
 
 ---
 
@@ -244,17 +242,18 @@ Les autres lignes (libellé ↔ URI, champs dcterms, DataCite, collections, etc.
 
 **Décision** : ajouter un **export de travail** depuis l’étape **Correctifs** (étape **3** du flux : Téléverser → Configurer → **Correctifs** → Valider → Résultats), pour sortir un tableur annoté avant la validation finale.
 
-**État technique** : le branchement reste **à faire** — pas d’endpoint `POST /api/jobs/{id}/exports/annotated` ni `.../exports/issues-report` dans `app.py` à ce jour.
+**État technique** : ✅ **implémenté** — endpoints `POST /api/jobs/{id}/exports/annotated` et `.../exports/issues-report` branchés côté `app.py`, avec UI dédiée dans l’étape Correctifs.
 
-**Périmètre backend envisagé** (inchangé) :
+**Périmètre backend livré** :
 
 - `POST /api/jobs/{job_id}/exports/annotated`
 - `POST /api/jobs/{job_id}/exports/issues-report`
 - Options : périmètre (`all|issues|blocking|touched`), marquage visuel, colonne statut, only_open.
+- Formats actuellement exposés : tableur annoté `xlsx` (UI) ou `csv` (API), rapport d'anomalies `csv` (UI) ou `txt` (API).
 
 **Critères d'acceptation** (référence produit) :
 
-- Export depuis Correctifs sans terminer tout le workflow.
+- Export depuis Correctifs sans terminer tout le workflow. ✅
 - Passage Correctifs → Valider : soumis à la politique d’erreurs (voir maquette / spec).
 - Re-validation après éditions : `POST /revalidate` existe déjà.
 
@@ -319,7 +318,7 @@ Synthèse des passes d’audit code (architecture, API, Tauri, core, ops). **Coc
 - [ ] **AUD-P2-08** — **`pytest.ini`** : ne pas imposer `-x` en CI (override dans la commande CI).
 - [ ] **AUD-P2-09** — **Tauri** : optionnellement poll **`GET /health`** au lieu du seul TCP pour « prêt ».
 - [ ] **AUD-P2-10** — **Tauri** : durcir **CSP** webview si le périmètre contenu évolue.
-- [ ] **AUD-P2-11** — Remplacer l’**URL GitHub placeholder** des releases dans `main.rs` par le dépôt réel.
+- [x] **AUD-P2-11** — Remplacer l’**URL GitHub placeholder** des releases dans `main.rs` par le dépôt réel.
 - [ ] **AUD-P2-12** — **`tablerreur-backend.spec`** : éviter chemins absolus ; s’appuyer sur `scripts/build_sidecar.py`.
 - [ ] **AUD-P2-13** — **`commands.py` / patch** : ordre persistance vs mutation DataFrame ; documenter ou transactionnaliser le bulk.
 - [ ] **AUD-P2-14** — **`issue_store.replace_for_columns`** : optimiser si perf sur gros volumes (éviter `list.remove` répété sur grosses listes).

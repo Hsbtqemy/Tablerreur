@@ -6,10 +6,18 @@ import csv
 import io
 from pathlib import Path
 
+import openpyxl
 import pandas as pd
 import pytest
 
-from spreadsheet_qa.core.exporters import CSVExporter, IssuesCSVExporter, TXTReporter, XLSXExporter
+from spreadsheet_qa.core.exporters import (
+    AnnotatedXLSXExporter,
+    CSVExporter,
+    IssuesCSVExporter,
+    TXTReporter,
+    XLSXExporter,
+    build_annotated_dataframe,
+)
 from spreadsheet_qa.core.models import Issue, IssueStatus, Severity
 
 
@@ -88,6 +96,44 @@ class TestXLSXExporter:
         df2 = pd.read_excel(path, dtype=str, engine="openpyxl")
         assert list(df2.columns) == list(sample_df.columns)
         assert len(df2) == len(sample_df)
+
+
+class TestAnnotatedExports:
+    def test_build_annotated_dataframe_adds_annotation_columns(self, sample_df, sample_issues):
+        annotated = build_annotated_dataframe(sample_df, sample_issues, row_positions=[0, 2])
+        assert annotated.columns[0] == "__tablerreur_ligne"
+        assert "__tablerreur_statut" in annotated.columns
+        assert "__tablerreur_anomalies" in annotated.columns
+        assert annotated.iloc[0]["__tablerreur_ligne"] == 1
+        assert annotated.iloc[0]["__tablerreur_statut"] == "WARNING"
+        assert "Titre: Trailing space" in annotated.iloc[0]["__tablerreur_anomalies"]
+        assert annotated.iloc[1]["__tablerreur_statut"] == ""
+
+    def test_annotated_xlsx_marks_issue_and_touched_cells(self, sample_df, sample_issues, tmp_path):
+        path = tmp_path / "annotated.xlsx"
+        AnnotatedXLSXExporter().export(
+            sample_df,
+            path,
+            sample_issues,
+            touched_cells={(1, "Auteur")},
+            include_visual_marks=True,
+            include_status_column=True,
+        )
+
+        wb = openpyxl.load_workbook(path)
+        ws = wb.active
+
+        issue_cell = ws["B2"]  # __tablerreur_ligne is inserted in column A
+        touched_cell = ws["C3"]
+        status_cell = ws["E2"]
+
+        assert issue_cell.comment is not None
+        assert "Trailing space" in issue_cell.comment.text
+        assert issue_cell.fill.fill_type == "solid"
+        assert issue_cell.fill.fgColor.rgb.endswith("FDF0D5")
+        assert touched_cell.fill.fill_type == "solid"
+        assert touched_cell.fill.fgColor.rgb.endswith("DCEFFE")
+        assert status_cell.fill.fill_type == "solid"
 
 
 class TestIssuesCSVExporter:

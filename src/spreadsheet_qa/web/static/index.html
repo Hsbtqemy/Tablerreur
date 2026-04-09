@@ -642,6 +642,38 @@
         <div id="fixes-preview" class="mt-1"></div>
       </div>
 
+      <div class="card mt-2">
+        <h3>Export de travail</h3>
+        <p class="step-desc">Générez un tableur annoté ou un rapport d'anomalies sans lancer l'étape Valider.</p>
+
+        <div class="work-export-grid">
+          <label for="work-export-scope">Périmètre de l'export</label>
+          <select id="work-export-scope" class="input-sm">
+            <option value="all">Toutes les lignes</option>
+            <option value="issues">Lignes avec anomalies</option>
+            <option value="blocking">Lignes avec erreurs bloquantes</option>
+            <option value="touched">Lignes déjà modifiées</option>
+          </select>
+
+          <span>Options</span>
+          <div class="work-export-options">
+            <label><input type="checkbox" id="work-export-only-open" checked /> Seulement les anomalies ouvertes</label>
+            <label><input type="checkbox" id="work-export-status-col" checked /> Ajouter les colonnes Tablerreur</label>
+            <label><input type="checkbox" id="work-export-visual-marks" checked /> Marquage visuel dans le fichier annoté</label>
+          </div>
+        </div>
+
+        <div class="download-buttons">
+          <button id="btn-work-export-annotated" class="btn btn-download" type="button" onclick="exportAnnotatedWork()">
+            📊 Tableur annoté (.xlsx)
+          </button>
+          <button id="btn-work-export-report" class="btn btn-download" type="button" onclick="exportIssuesWorkReport()">
+            📋 Rapport d'anomalies (.csv)
+          </button>
+        </div>
+        <div id="work-export-status" class="format-hint mt-1" hidden></div>
+      </div>
+
       <div class="action-row mt-2">
         <div class="undo-redo-bar">
           <button id="btn-undo" class="btn btn-secondary btn-sm" onclick="undoFix()" disabled title="Annuler le dernier correctif (Ctrl+Z)">↩ Annuler</button>

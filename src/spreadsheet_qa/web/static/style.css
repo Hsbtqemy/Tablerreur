@@ -451,6 +451,29 @@ body.tablerreur-step-configure .step-coach {
 /* ---- Downloads ---- */
 .download-buttons { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 0.5rem; }
 
+.work-export-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.65rem 1rem;
+  align-items: start;
+}
+
+.work-export-options {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.work-export-options label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+#work-export-status {
+  min-height: 1.2rem;
+}
+
 /* ---- Aperçu court (étape Téléverser, après POST job) ---- */
 .upload-preview-card .upload-preview-loading-msg {
   padding: 0.5rem 0;
@@ -1551,6 +1574,7 @@ textarea.av-locked {
   .action-row { flex-direction: column; align-items: stretch; }
   .action-row .btn { justify-content: center; }
   .download-buttons { flex-direction: column; }
+  .work-export-grid { grid-template-columns: 1fr; }
 }
 
 /* ---- Config summary table ---- */

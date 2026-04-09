@@ -291,7 +291,7 @@ fn main() {
                 "check-updates" => {
                     // Open releases page in the default browser
                     let _ = app.opener().open_url(
-                        "https://github.com/VOTRE_ORGANISATION/tablerreur/releases",
+                        "https://github.com/Hsbtqemy/Tablerreur/releases",
                         None::<&str>,
                     );
                 }

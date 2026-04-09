@@ -1683,6 +1683,7 @@ async function doUpload(options = {}) {
     _currentProblemsTotal = 0;
     _hideCellsEditedBanner();
     _hideFormatSuggestion();
+    _setWorkExportStatus('');
     const vrf = document.getElementById('validate-rule-failures');
     if (vrf) { vrf.hidden = true; vrf.innerHTML = ''; }
     const rew = document.getElementById('results-export-warnings');
@@ -2713,6 +2714,108 @@ function buildFixesFormData() {
   return fd;
 }
 
+function _setWorkExportStatus(message, tone = 'info') {
+  const el = document.getElementById('work-export-status');
+  if (!el) return;
+  if (!message) {
+    el.hidden = true;
+    el.className = 'format-hint mt-1';
+    el.textContent = '';
+    return;
+  }
+  el.hidden = false;
+  el.className = `format-hint mt-1 ${tone === 'error' ? 'msg-error' : tone === 'success' ? 'msg-success' : 'msg-info'}`;
+  el.textContent = message;
+}
+
+function _buildWorkExportPayload(format) {
+  return {
+    scope: document.getElementById('work-export-scope')?.value || 'all',
+    only_open: !!document.getElementById('work-export-only-open')?.checked,
+    include_status_column: !!document.getElementById('work-export-status-col')?.checked,
+    include_visual_marks: !!document.getElementById('work-export-visual-marks')?.checked,
+    format,
+  };
+}
+
+async function _downloadPostedExport(url, payload, buttonId, pendingLabel, successLabel) {
+  if (!state.jobId) {
+    _showToast('Aucune session active pour l’export.', 'warning');
+    return false;
+  }
+
+  const btn = document.getElementById(buttonId);
+  const initialLabel = btn ? btn.textContent : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = pendingLabel;
+  }
+  _setWorkExportStatus(pendingLabel);
+
+  try {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!resp.ok) {
+      const detail = await _extractErrorDetail(resp, 'Export indisponible');
+      throw new Error(_formatActionError('Export de travail', resp.status, detail));
+    }
+
+    const blob = await resp.blob();
+    const serverFilename = _filenameFromContentDisposition(resp.headers.get('content-disposition'));
+    const fallbackName = payload.format === 'xlsx' ? 'tableur_annote.xlsx' : 'rapport_anomalies.csv';
+    const downloadName = serverFilename || fallbackName;
+
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = downloadName;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(objectUrl);
+
+    _setWorkExportStatus(successLabel, 'success');
+    return false;
+  } catch (err) {
+    _setWorkExportStatus(err.message, 'error');
+    _showToast(`Erreur : ${err.message}`, 'error', 7000);
+    return false;
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = initialLabel;
+    }
+  }
+}
+
+async function exportAnnotatedWork() {
+  const payload = _buildWorkExportPayload('xlsx');
+  return _downloadPostedExport(
+    `/api/jobs/${state.jobId}/exports/annotated`,
+    payload,
+    'btn-work-export-annotated',
+    'Préparation du tableur annoté…',
+    'Tableur annoté téléchargé.'
+  );
+}
+
+async function exportIssuesWorkReport() {
+  const payload = _buildWorkExportPayload('csv');
+  delete payload.include_visual_marks;
+  delete payload.include_status_column;
+  return _downloadPostedExport(
+    `/api/jobs/${state.jobId}/exports/issues-report`,
+    payload,
+    'btn-work-export-report',
+    'Préparation du rapport…',
+    'Rapport d’anomalies téléchargé.'
+  );
+}
+
 async function applyFixes() {
   if (!state.jobId) return;
   const formData = buildFixesFormData();
@@ -3638,6 +3741,7 @@ function resetApp() {
   });
 
   document.getElementById('fixes-preview').innerHTML = '';
+  _setWorkExportStatus('');
 
   // Reset configure step
   document.getElementById('preview-loading').textContent = 'Chargement de l\'aperçu…';
