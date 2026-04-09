@@ -10,6 +10,7 @@ import pytest
 from spreadsheet_qa.core.models import Severity
 from spreadsheet_qa.core.rules.content_type import (
     ContentTypeRule,
+    _is_boolean,
     _is_date,
     _is_decimal,
     _is_email,
@@ -73,6 +74,9 @@ class TestIsDate:
     def test_iso(self):
         assert _is_date("2024-01-15")
 
+    def test_iso_year_month(self):
+        assert _is_date("2024-01")
+
     def test_fr_slash(self):
         assert _is_date("15/01/2024")
 
@@ -99,6 +103,19 @@ class TestIsDate:
 
     def test_rejects_year_out_of_range(self):
         assert not _is_date("0099")
+
+
+class TestIsBoolean:
+    def test_default_yes_no(self):
+        assert _is_boolean("oui")
+        assert _is_boolean("0")
+
+    def test_default_active_inactive(self):
+        assert _is_boolean("actif")
+        assert _is_boolean("inactive")
+
+    def test_rejects_unknown_token(self):
+        assert not _is_boolean("peut-être")
 
 
 class TestIsEmail:
@@ -201,6 +218,10 @@ class TestContentTypeRuleDate:
         df = pd.DataFrame({"D": ["2024-01-15"]})
         assert rule.check(df, "D", {"content_type": "date"}) == []
 
+    def test_iso_year_month_valid(self):
+        df = pd.DataFrame({"D": ["2024-01"]})
+        assert rule.check(df, "D", {"content_type": "date"}) == []
+
     def test_fr_valid(self):
         df = pd.DataFrame({"D": ["15/01/2024"]})
         assert rule.check(df, "D", {"content_type": "date"}) == []
@@ -239,6 +260,10 @@ class TestContentTypeRuleEmail:
 class TestContentTypeRuleBoolean:
     def test_default_yes_no_values(self):
         df = pd.DataFrame({"B": ["oui", "false", "1", "0"]})
+        assert rule.check(df, "B", {"content_type": "boolean"}) == []
+
+    def test_default_active_inactive_values(self):
+        df = pd.DataFrame({"B": ["actif", "inactive"]})
         assert rule.check(df, "B", {"content_type": "boolean"}) == []
 
     def test_custom_mapping(self):

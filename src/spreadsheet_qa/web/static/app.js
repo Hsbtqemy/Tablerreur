@@ -22,6 +22,8 @@ const state = {
   columnUserFormatSaved: {},
   /** Cache de suggestion de format par colonne. */
   columnFormatSuggestions: {},
+  /** Par colonne : suggestion masquée localement jusqu’à nouvelle analyse ou mutation des données. */
+  columnFormatSuggestionDismissed: {},
   activeColumn: null,   // name of the currently open config panel
   /** True après au moins une sauvegarde serveur des réglages colonne (PUT column-config). Utilisé pour FLUX-03 (changement de modèle). */
   userColumnConfigSaved: false,
@@ -527,11 +529,15 @@ function _syncFormatPresetOptions(preferredValue = null) {
 
 function _hideFormatSuggestion() {
   const card = document.getElementById('col-format-suggestion');
-  const btn = document.getElementById('btn-apply-format-suggestion');
+  const actionsEl = document.getElementById('col-format-suggestion-actions');
+  const applyBtn = document.getElementById('btn-apply-format-suggestion');
+  const dismissBtn = document.getElementById('btn-dismiss-format-suggestion');
+  const refreshBtn = document.getElementById('btn-refresh-format-suggestion');
   const messageEl = document.getElementById('col-format-suggestion-message');
   const metaEl = document.getElementById('col-format-suggestion-meta');
   const noteEl = document.getElementById('col-format-suggestion-note');
-  if (!card || !btn || !messageEl || !metaEl || !noteEl) return;
+  const candidatesEl = document.getElementById('col-format-suggestion-candidates');
+  if (!card || !messageEl || !metaEl || !noteEl || !candidatesEl) return;
   card.hidden = true;
   card.className = 'col-format-suggestion';
   messageEl.textContent = '';
@@ -539,7 +545,15 @@ function _hideFormatSuggestion() {
   metaEl.textContent = '';
   noteEl.hidden = true;
   noteEl.textContent = '';
-  btn.hidden = true;
+  candidatesEl.hidden = true;
+  candidatesEl.innerHTML = '';
+  if (actionsEl) actionsEl.hidden = true;
+  if (applyBtn) applyBtn.hidden = true;
+  if (dismissBtn) dismissBtn.hidden = true;
+  if (refreshBtn) {
+    refreshBtn.hidden = true;
+    refreshBtn.textContent = 'Ré-analyser';
+  }
 }
 
 function _setFormatSuggestionCard({
@@ -547,14 +561,20 @@ function _setFormatSuggestionCard({
   message = '',
   meta = '',
   note = '',
-  showButton = false,
+  showApplyButton = false,
+  showDismissButton = false,
+  showRefreshButton = false,
+  refreshLabel = 'Ré-analyser',
 } = {}) {
   const card = document.getElementById('col-format-suggestion');
-  const btn = document.getElementById('btn-apply-format-suggestion');
+  const actionsEl = document.getElementById('col-format-suggestion-actions');
+  const applyBtn = document.getElementById('btn-apply-format-suggestion');
+  const dismissBtn = document.getElementById('btn-dismiss-format-suggestion');
+  const refreshBtn = document.getElementById('btn-refresh-format-suggestion');
   const messageEl = document.getElementById('col-format-suggestion-message');
   const metaEl = document.getElementById('col-format-suggestion-meta');
   const noteEl = document.getElementById('col-format-suggestion-note');
-  if (!card || !btn || !messageEl || !metaEl || !noteEl) return;
+  if (!card || !messageEl || !metaEl || !noteEl) return;
 
   card.className = 'col-format-suggestion';
   if (tone && tone !== 'info') card.classList.add(`is-${tone}`);
@@ -563,7 +583,15 @@ function _setFormatSuggestionCard({
   metaEl.hidden = !meta;
   noteEl.textContent = note || '';
   noteEl.hidden = !note;
-  btn.hidden = !showButton;
+  if (actionsEl) {
+    actionsEl.hidden = !(showApplyButton || showDismissButton || showRefreshButton);
+  }
+  if (applyBtn) applyBtn.hidden = !showApplyButton;
+  if (dismissBtn) dismissBtn.hidden = !showDismissButton;
+  if (refreshBtn) {
+    refreshBtn.hidden = !showRefreshButton;
+    refreshBtn.textContent = refreshLabel;
+  }
   card.hidden = false;
 }
 
@@ -572,8 +600,28 @@ function _formatSuggestionLabel(data) {
   const typeLabel = CONTENT_TYPE_LABELS[data.content_type] || data.content_type || '';
   const presetLabel = data.format_preset
     ? (FORMAT_PRESET_LABELS[data.format_preset] || data.format_preset)
-    : '';
+  : '';
   return presetLabel ? `${typeLabel} → ${presetLabel}` : typeLabel;
+}
+
+function _getFormatSuggestionCandidates(data) {
+  if (Array.isArray(data?.candidates) && data.candidates.length) return data.candidates;
+  if (data?.content_type) {
+    return [{
+      content_type: data.content_type,
+      format_preset: data.format_preset || null,
+      confidence: data.confidence || 0,
+      matched: data.matched || 0,
+      total: data.total || 0,
+      examples: data.examples || [],
+    }];
+  }
+  return [];
+}
+
+function _formatSuggestionConfidence(candidate) {
+  const confidence = Number(candidate?.confidence || 0);
+  return `${Math.round(confidence * 100)} %`;
 }
 
 function _currentPanelMatchesSuggestion(colName, data) {
@@ -585,6 +633,76 @@ function _currentPanelMatchesSuggestion(colName, data) {
   } catch (_) {
     return false;
   }
+}
+
+function _renderFormatSuggestionCandidates(
+  colName,
+  data,
+  { manualFormatSaved = false, skipPrimary = false } = {}
+) {
+  const candidatesEl = document.getElementById('col-format-suggestion-candidates');
+  if (!candidatesEl) return;
+
+  const allCandidates = _getFormatSuggestionCandidates(data);
+  const startIndex = skipPrimary ? 1 : 0;
+  const entries = allCandidates
+    .slice(startIndex)
+    .map((candidate, offset) => ({
+      candidate,
+      index: startIndex + offset,
+      matchesCurrent: _currentPanelMatchesSuggestion(colName, candidate),
+    }));
+
+  candidatesEl.innerHTML = '';
+  if (!entries.length) {
+    candidatesEl.hidden = true;
+    return;
+  }
+
+  const title = document.createElement('p');
+  title.className = 'col-format-suggestion-candidates-title';
+  title.textContent = data.detected ? 'Autres pistes proches' : 'Pistes proposées';
+  candidatesEl.appendChild(title);
+
+  const list = document.createElement('div');
+  list.className = 'col-format-suggestion-candidate-list';
+
+  entries.forEach(({ candidate, index, matchesCurrent }) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-secondary btn-sm col-format-suggestion-candidate';
+    if (matchesCurrent) btn.classList.add('is-current');
+    btn.disabled = manualFormatSaved || matchesCurrent;
+    btn.title = [
+      _formatSuggestionLabel(candidate),
+      `Compatibilité : ${candidate.matched}/${candidate.total}`,
+      `Confiance : ${_formatSuggestionConfidence(candidate)}`,
+      candidate.examples?.length ? `Exemples : ${candidate.examples.join(', ')}` : '',
+    ].filter(Boolean).join('\n');
+    btn.addEventListener('click', () => applyFormatSuggestion(index));
+
+    const label = document.createElement('span');
+    label.className = 'col-format-suggestion-candidate-label';
+    label.textContent = _formatSuggestionLabel(candidate);
+    btn.appendChild(label);
+
+    const score = document.createElement('span');
+    score.className = 'col-format-suggestion-candidate-score';
+    score.textContent = ` · ${candidate.matched}/${candidate.total} · ${_formatSuggestionConfidence(candidate)}`;
+    btn.appendChild(score);
+
+    list.appendChild(btn);
+  });
+
+  candidatesEl.appendChild(list);
+  candidatesEl.hidden = false;
+}
+
+function _hideFormatSuggestionCandidates() {
+  const candidatesEl = document.getElementById('col-format-suggestion-candidates');
+  if (!candidatesEl) return;
+  candidatesEl.hidden = true;
+  candidatesEl.innerHTML = '';
 }
 
 function _renderFormatSuggestion(colName) {
@@ -600,6 +718,7 @@ function _renderFormatSuggestion(colName) {
       tone: 'loading',
       message: 'Analyse automatique en cours pour cette colonne…',
     });
+    _hideFormatSuggestionCandidates();
     return;
   }
 
@@ -608,7 +727,9 @@ function _renderFormatSuggestion(colName) {
       tone: 'warning',
       message: 'Suggestion automatique indisponible pour cette colonne.',
       note: cached.error || '',
+      showRefreshButton: true,
     });
+    _hideFormatSuggestionCandidates();
     return;
   }
 
@@ -618,31 +739,76 @@ function _renderFormatSuggestion(colName) {
     return;
   }
 
-  if (!data.detected) {
+  const candidates = _getFormatSuggestionCandidates(data);
+  const primaryCandidate = candidates[0] || null;
+  const manualFormatSaved = !!state.columnUserFormatSaved?.[colName];
+  const dismissed = !!state.columnFormatSuggestionDismissed?.[colName];
+
+  if (dismissed) {
+    const metaParts = [];
+    if (primaryCandidate) {
+      metaParts.push(`Dernière piste : ${_formatSuggestionLabel(primaryCandidate)}`);
+      metaParts.push(`Compatibilité : ${primaryCandidate.matched}/${primaryCandidate.total}`);
+      metaParts.push(`Confiance : ${_formatSuggestionConfidence(primaryCandidate)}`);
+    }
     _setFormatSuggestionCard({
       tone: 'muted',
-      message: data.message || 'Aucune suggestion fiable.',
-      meta: data.examples?.length ? `Exemples lus : ${data.examples.join(', ')}` : '',
+      message: 'Suggestion automatique ignorée pour cette colonne.',
+      meta: metaParts.join(' · '),
+      note: 'Utilisez « Ré-analyser » pour recalculer la suggestion à partir des valeurs courantes.',
+      showRefreshButton: true,
     });
+    _hideFormatSuggestionCandidates();
     return;
   }
 
-  const manualFormatSaved = !!state.columnUserFormatSaved?.[colName];
-  const alreadyInForm = _currentPanelMatchesSuggestion(colName, data);
+  if (!data.detected) {
+    const metaParts = [];
+    if (primaryCandidate) {
+      metaParts.push(`Piste la plus proche : ${_formatSuggestionLabel(primaryCandidate)}`);
+      metaParts.push(`Compatibilité : ${primaryCandidate.matched}/${primaryCandidate.total}`);
+    } else if (data.examples?.length) {
+      metaParts.push(`Exemples lus : ${data.examples.join(', ')}`);
+    }
+    _setFormatSuggestionCard({
+      tone: 'muted',
+      message: data.message || 'Aucune suggestion fiable.',
+      meta: metaParts.join(' · '),
+      note: candidates.length
+        ? (
+          manualFormatSaved
+            ? 'Plusieurs pistes sont visibles ci-dessous, mais votre choix manuel actuel reste prioritaire.'
+            : 'Choisissez une piste ci-dessous pour la recopier dans le formulaire.'
+        )
+        : '',
+      showDismissButton: !!(candidates.length || data.message),
+      showRefreshButton: true,
+    });
+    _renderFormatSuggestionCandidates(colName, data, { manualFormatSaved, skipPrimary: false });
+    return;
+  }
+
+  const alreadyInForm = _currentPanelMatchesSuggestion(colName, primaryCandidate || data);
   const note = manualFormatSaved
     ? 'Une nature ou un format a déjà été enregistré manuellement pour cette colonne. La suggestion reste informative.'
     : alreadyInForm
       ? 'Le formulaire correspond déjà à cette suggestion. Utilisez « Appliquer » en bas du panneau pour l’enregistrer si besoin.'
-      : '';
+      : candidates.length > 1
+        ? 'D’autres pistes proches sont proposées ci-dessous.'
+        : '';
 
   const metaParts = [`Compatibilité : ${data.matched}/${data.total}`];
+  metaParts.push(`Confiance : ${_formatSuggestionConfidence(primaryCandidate || data)}`);
   if (data.examples?.length) metaParts.push(`Exemples : ${data.examples.join(', ')}`);
   _setFormatSuggestionCard({
-    message: `Suggestion automatique : ${_formatSuggestionLabel(data)}`,
+    message: `Suggestion automatique : ${_formatSuggestionLabel(primaryCandidate || data)}`,
     meta: metaParts.join(' · '),
     note,
-    showButton: !manualFormatSaved && !alreadyInForm,
+    showApplyButton: !manualFormatSaved && !alreadyInForm,
+    showDismissButton: true,
+    showRefreshButton: true,
   });
+  _renderFormatSuggestionCandidates(colName, data, { manualFormatSaved, skipPrimary: true });
 }
 
 function _refreshFormatSuggestionUI() {
@@ -651,6 +817,65 @@ function _refreshFormatSuggestionUI() {
     return;
   }
   _renderFormatSuggestion(state.activeColumn);
+}
+
+function _invalidateFormatSuggestionCache(colName = null) {
+  state.formatSuggestionSeq += 1;
+  if (!colName) {
+    state.columnFormatSuggestions = {};
+    state.columnFormatSuggestionDismissed = {};
+    return;
+  }
+  delete state.columnFormatSuggestions[colName];
+  delete state.columnFormatSuggestionDismissed[colName];
+}
+
+function dismissFormatSuggestion() {
+  const colName = state.activeColumn;
+  if (!colName) return;
+  state.columnFormatSuggestionDismissed[colName] = true;
+  _renderFormatSuggestion(colName);
+}
+
+function reanalyzeFormatSuggestion() {
+  const colName = state.activeColumn;
+  if (!colName) return;
+  delete state.columnFormatSuggestionDismissed[colName];
+  _invalidateFormatSuggestionCache(colName);
+  void _loadFormatSuggestion(colName, true);
+}
+
+function _updatePreviewDataCell(rowIndex, colName, newValue, { markEdited = false } = {}) {
+  if (!colName || !Number.isInteger(rowIndex) || rowIndex < 0) return;
+
+  const colIdx = state.columns.indexOf(colName);
+  if (colIdx >= 0 && Array.isArray(state.previewDataRows) && rowIndex < state.previewDataRows.length) {
+    const row = state.previewDataRows[rowIndex];
+    if (Array.isArray(row) && colIdx < row.length) {
+      row[colIdx] = newValue;
+      if (state.showSampleValues && state.sampleRowIndex === rowIndex) {
+        _buildColumnNavList(state.columns);
+      }
+    }
+  }
+
+  const selector = `#preview-body td[data-row="${rowIndex}"][data-col="${CSS.escape(colName)}"]`;
+  const td = document.querySelector(selector);
+  if (!td) return;
+  td.dataset.rawText = newValue;
+  if (state.showSpecialChars) {
+    td.innerHTML = renderVisibleChars(newValue);
+  } else {
+    td.textContent = newValue;
+  }
+  if (markEdited) td.classList.add('cell-edited');
+}
+
+function _refreshOpenColumnAfterDataMutation(changedColumn = null) {
+  if (!state.activeColumn) return;
+  if (changedColumn && state.activeColumn !== changedColumn) return;
+  _schedulePreviewRule();
+  void _loadFormatSuggestion(state.activeColumn, true);
 }
 
 async function _loadFormatSuggestion(colName, force = false) {
@@ -687,12 +912,15 @@ async function _loadFormatSuggestion(colName, force = false) {
   _renderFormatSuggestion(colName);
 }
 
-function applyFormatSuggestion() {
+function applyFormatSuggestion(candidateIndex = 0) {
   const colName = state.activeColumn;
   if (!colName) return;
   if (state.columnUserFormatSaved?.[colName]) return;
-  const suggestion = state.columnFormatSuggestions[colName]?.data;
-  if (!suggestion?.detected) return;
+  const data = state.columnFormatSuggestions[colName]?.data;
+  const candidates = _getFormatSuggestionCandidates(data);
+  const index = Number(candidateIndex);
+  const suggestion = candidates[Number.isNaN(index) ? 0 : index] || null;
+  if (!suggestion?.content_type) return;
 
   const contentType = suggestion.content_type || '';
   document.getElementById('cfg-content-type').value = contentType;
@@ -706,7 +934,7 @@ function applyFormatSuggestion() {
   _schedulePreviewRule();
   _renderFormatSuggestion(colName);
   _showToast(
-    'Suggestion copiée dans le formulaire. Utilisez « Appliquer » en bas du panneau pour l’enregistrer.',
+    `Suggestion « ${_formatSuggestionLabel(suggestion)} » copiée dans le formulaire. Utilisez « Appliquer » en bas du panneau pour l’enregistrer.`,
     'success',
     5000
   );
@@ -1445,6 +1673,7 @@ async function doUpload(options = {}) {
     state.columnUserSaved = {};
     state.columnUserFormatSaved = {};
     state.columnFormatSuggestions = {};
+    state.columnFormatSuggestionDismissed = {};
     state.formatSuggestionSeq = 0;
     state.userColumnConfigSaved = false;
     state.activeColumn = null;
@@ -1531,7 +1760,7 @@ async function doUpload(options = {}) {
 const FORMAT_PRESETS = {
   // Formats généraux
   year:         { regex: '^\\d{4}$',                            hint: 'Accepte : 2024, 1999. Rejette : 24, deux mille.' },
-  yes_no:       { regex: '(?i)^(oui|non|o|n|yes|no|vrai|faux|true|false|1|0)$', hint: 'Accepte : oui, non, o, n, vrai, faux, 1, 0 (majuscules ou minuscules).' },
+  yes_no:       { regex: '(?i)^(oui|non|o|n|yes|no|vrai|faux|true|false|1|0|actif|inactif|active|inactive|enabled|disabled)$', hint: 'Accepte : oui/non, vrai/faux, 1/0, actif/inactif, enabled/disabled (majuscules ou minuscules).' },
   alphanum:     { regex: '^[A-Za-z0-9]+$',                      hint: 'Accepte : ABC123, test42. Rejette : test@42, hello world.' },
   letters_only: { regex: "^[A-Za-z\\u00C0-\\u00FF\\s\\-']+$",  hint: "Accepte : Jean-Pierre, José, l'Île. Rejette : test123, @nom." },
   positive_int: { regex: '^\\d+$',                              hint: 'Accepte : 0, 42, 1000. Rejette : -1, 3.14.' },
@@ -1560,8 +1789,8 @@ const FORMAT_PRESETS = {
 };
 
 // Default Oui/Non values
-const YESNO_DEFAULT_TRUE  = 'oui, o, vrai, true, yes, y, 1';
-const YESNO_DEFAULT_FALSE = 'non, n, faux, false, no, 0';
+const YESNO_DEFAULT_TRUE  = 'oui, o, vrai, true, yes, y, 1, actif, active, enabled';
+const YESNO_DEFAULT_FALSE = 'non, n, faux, false, no, 0, inactif, inactive, disabled';
 
 // Build a case-insensitive regex from Oui/Non text fields
 function _buildYesNoRegex() {
@@ -1945,6 +2174,8 @@ async function loadPreview() {
           td.classList.toggle('column-selected', i === colIdx);
         });
       });
+      _schedulePreviewRule();
+      void _loadFormatSuggestion(state.activeColumn, true);
     }
 
     // Apply cell-level issue highlights if validation has already been run
@@ -2507,6 +2738,7 @@ async function undoFix() {
     const data = await resp.json();
     if (data.success) {
       _showToast('↩ Modification annulée', 'success');
+      _invalidateFormatSuggestionCache();
       if (state.currentStep === 'configure') {
         await loadPreview();
       } else {
@@ -2529,6 +2761,7 @@ async function redoFix() {
     const data = await resp.json();
     if (data.success) {
       _showToast('↪ Modification rétablie', 'success');
+      _invalidateFormatSuggestionCache();
       if (state.currentStep === 'configure') {
         await loadPreview();
       } else {
@@ -2677,6 +2910,9 @@ async function _applySuggestionToCell(rowNum, colName, suggestion) {
       throw new Error(_formatActionError('Application de la suggestion', resp.status, detail));
     }
 
+    _updatePreviewDataCell(rowNum - 1, colName, suggestion, { markEdited: true });
+    _invalidateFormatSuggestionCache(colName);
+    _refreshOpenColumnAfterDataMutation(colName);
     _manualEditsCount++;
     _showCellsEditedBanner();
     await updateUndoRedoButtons();
@@ -3980,9 +4216,12 @@ function startCellEdit(td) {
         });
         if (resp.ok) {
           td.classList.add('cell-edited');
+          _updatePreviewDataCell(row, col, newValue, { markEdited: true });
+          _invalidateFormatSuggestionCache(col);
+          _refreshOpenColumnAfterDataMutation(col);
           _manualEditsCount++;
           _showCellsEditedBanner();
-          updateUndoRedoButtons();
+          await updateUndoRedoButtons();
         }
       } catch (_) { /* non-bloquant */ }
     }

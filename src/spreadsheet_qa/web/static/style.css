@@ -1085,10 +1085,51 @@ body.tablerreur-step-configure .step-coach {
 .col-format-suggestion-note {
   margin: 0.35rem 0 0 0;
 }
+.col-format-suggestion-candidates {
+  margin-top: 0.55rem;
+}
+#col-format-suggestion-candidates[hidden] {
+  display: none !important;
+}
+.col-format-suggestion-candidates-title {
+  margin: 0 0 0.35rem 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+.col-format-suggestion-candidate-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+.col-format-suggestion-candidate.btn {
+  justify-content: flex-start;
+  max-width: 100%;
+  text-align: left;
+  white-space: normal;
+}
+.col-format-suggestion-candidate.is-current {
+  border-color: rgba(37, 99, 235, 0.35);
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+.col-format-suggestion-candidate-label {
+  font-weight: 600;
+}
+.col-format-suggestion-candidate-score {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
 .col-format-suggestion-actions {
   flex: 0 0 auto;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
+  gap: 0.45rem;
+}
+#col-format-suggestion-actions[hidden] {
+  display: none !important;
 }
 .col-config-expert-toolbar {
   display: flex;
@@ -1928,6 +1969,14 @@ textarea.av-locked {
 }
 [data-theme="dark"] .col-format-suggestion-kicker {
   color: #93c5fd;
+}
+[data-theme="dark"] .col-format-suggestion-candidate.is-current {
+  border-color: rgba(96, 165, 250, 0.55);
+  background: rgba(37, 99, 235, 0.18);
+  color: #bfdbfe;
+}
+[data-theme="dark"] .col-format-suggestion-candidate-score {
+  color: #cbd5e1;
 }
 [data-theme="dark"] .configure-template-strip {
   background: #1e293b;

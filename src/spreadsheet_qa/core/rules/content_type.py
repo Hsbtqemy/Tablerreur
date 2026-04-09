@@ -41,8 +41,24 @@ _ISBN10_RE = re.compile(r"^[\dX\- ]{10,13}$", re.IGNORECASE)
 _BCP47_RE = re.compile(r"^[a-z]{2,3}(-[a-z0-9]{2,8})*$", re.IGNORECASE)
 _COUNTRY_RE = re.compile(r"^[a-z]{2}$", re.IGNORECASE)
 
-_BOOLEAN_TRUE_DEFAULT = "oui, o, vrai, true, yes, y, 1"
-_BOOLEAN_FALSE_DEFAULT = "non, n, faux, false, no, 0"
+_BOOLEAN_TRUE_DEFAULT = "oui, o, vrai, true, yes, y, 1, actif, active, enabled"
+_BOOLEAN_FALSE_DEFAULT = "non, n, faux, false, no, 0, inactif, inactive, disabled"
+
+
+def _normalize_identifier_token(value: str) -> str:
+    return re.sub(r"[\s\-]", "", value.strip()).upper()
+
+
+def _is_isbn13_token(value: str) -> bool:
+    normalized = _normalize_identifier_token(value)
+    return len(normalized) == 13 and normalized.isdigit() and normalized.startswith(("978", "979"))
+
+
+def _is_isbn10_token(value: str) -> bool:
+    normalized = _normalize_identifier_token(value)
+    if len(normalized) != 10:
+        return False
+    return normalized[:9].isdigit() and (normalized[9].isdigit() or normalized[9] == "X")
 
 
 def _is_integer(value: str, config: dict[str, Any] | None = None) -> bool:
@@ -73,6 +89,7 @@ def _is_date(value: str, config: dict[str, Any] | None = None) -> bool:
 
     Accepted patterns (tolerant approach for non-technical users):
       - YYYY-MM-DD  (ISO)
+      - YYYY-MM  (W3C-DTF month precision)
       - DD/MM/YYYY or DD-MM-YYYY  (FR)
       - MM/YYYY  (month/year)
       - YYYY  (year only, 1000–2099)
@@ -86,6 +103,11 @@ def _is_date(value: str, config: dict[str, Any] | None = None) -> bool:
     if m:
         mo, d = int(m.group(2)), int(m.group(3))
         return 1 <= mo <= 12 and 1 <= d <= 31
+
+    # W3C-DTF partial date: YYYY-MM
+    m = re.fullmatch(r"(\d{4})-(\d{2})", v)
+    if m:
+        return 1 <= int(m.group(2)) <= 12
 
     # FR: DD/MM/YYYY or DD-MM-YYYY
     m = re.fullmatch(r"(\d{2})[/\-](\d{2})[/\-](\d{4})", v)
@@ -135,9 +157,13 @@ def _is_boolean(value: str, config: dict[str, Any] | None = None) -> bool:
 
 def _is_identifier(value: str, config: dict[str, Any] | None = None) -> bool:
     v = value.strip()
-    return any(
-        regex.match(v)
-        for regex in (_DOI_RE, _ORCID_RE, _ARK_RE, _ISSN_RE, _ISBN13_RE, _ISBN10_RE)
+    return (
+        bool(_DOI_RE.match(v))
+        or bool(_ORCID_RE.match(v))
+        or bool(_ARK_RE.match(v))
+        or bool(_ISSN_RE.match(v))
+        or (bool(_ISBN13_RE.match(v)) and _is_isbn13_token(v))
+        or (bool(_ISBN10_RE.match(v)) and _is_isbn10_token(v))
     )
 
 
