@@ -174,6 +174,70 @@ Pour le **périmètre audit / sécurité / robustesse**, suivre la section **« 
 3. **UX config** — Filtre formats par type, fusion type Nombre, presets restants (URL catalogue, code postal, …).
 4. **Flux import / modèle (§12)** — **Complet** (y compris FLUX-03). Re-téléversement + `POST` couvrent les sidecars sans `PATCH`.
 
+### Tickets opérationnels (prochaine itération)
+
+#### Curation
+
+- [ ] **CUR-01 — Curation ciblée depuis Résultats**
+  Objectif : réduire la friction issue → cellule.
+  Portée : depuis la liste des problèmes, ouvrir directement la cellule cible en mode édition quand la ligne est visible dans l’aperçu ; garder un fallback clair quand la ligne est hors aperçu.
+  Critères d’acceptation : un clic sur l’action de correction ouvre la bonne cellule, le focus est posé dans l’éditeur, et le comportement reste explicite pour les lignes > 30.
+
+- [ ] **CUR-02 — Historique visible des éditions manuelles**
+  Objectif : distinguer clairement les éditions manuelles des correctifs d’hygiène.
+  Portée : UI de statut simple pour les cellules/lignes touchées, libellés d’historique lisibles, et retour utilisateur cohérent lors des undo/redo après édition manuelle.
+  Critères d’acceptation : une édition manuelle est identifiable dans l’interface, undo/redo reste compréhensible, et la notion de “lignes touchées” est visible sans relire tout le tableau.
+
+- [ ] **CUR-03 — Décision produit sur une étape Curation dédiée**
+  Objectif : trancher entre “édition in-place suffisante” et “vraie étape workflow”.
+  Portée : cadrage produit + maquette + règle de passage Correctifs → Valider si une étape dédiée est retenue.
+  Critères d’acceptation : décision documentée, emplacement dans le workflow fixé, et liste des impacts code/UI explicitée.
+
+Ordre conseillé : **CUR-01**, puis **CUR-02**. **CUR-03** seulement si le produit veut formaliser une étape distincte.
+
+#### UX config
+
+- [ ] **UXCFG-01 — Restreindre les formats selon le type choisi**
+  Objectif : supprimer les combinaisons type/format incohérentes dans le panneau Configurer.
+  Portée : filtrage du menu “Format attendu” selon la table de compatibilité de `docs/type-format-mapping.md`, avec conservation propre des valeurs existantes lors du chargement d’un job.
+  Critères d’acceptation : le menu se réduit quand un type est choisi, les formats incompatibles ne sont plus proposés, et aucun réglage existant n’est perdu silencieusement.
+
+- [ ] **UXCFG-02 — Fusionner “Nombre entier” et “Nombre décimal” en type “Nombre”**
+  Objectif : simplifier le modèle mental côté utilisateur.
+  Portée : libellés UI, normalisation frontend/backend, compatibilité ascendante des configs existantes et des suggestions automatiques.
+  Critères d’acceptation : un seul type “Nombre” visible en UI, anciens jobs/configs encore relus correctement, et les presets `integer` / `decimal` restent exploitables.
+
+- [ ] **UXCFG-03 — Ajouter les presets prioritaires manquants**
+  Objectif : compléter les cas concrets encore absents du menu Format.
+  Portée : date FR (`DD/MM/YYYY`), mois-année (`MM/YYYY`), `ISBN`, `Handle`, `entier_ou_decimal`, `latitude`, `longitude` ; tests backend + web alignés.
+  Critères d’acceptation : chaque preset apparaît dans le menu, la validation associée existe, et des tests dédiés couvrent au moins un cas valide et un cas invalide.
+
+Ordre conseillé : **UXCFG-01**, puis **UXCFG-02**, puis **UXCFG-03**.
+
+#### NAKALA
+
+- [ ] **NAK-01 — Documenter précisément l’API NAKALA utile au template**
+  Objectif : arrêter les hypothèses sur le schéma réellement exposé.
+  Portée : doc technique courte listant endpoints, champs utiles, vocabulaires, contraintes, zones d’incertitude et mapping vers Tablerreur.
+  Critères d’acceptation : une source de vérité unique existe dans `docs/`, suffisante pour implémenter le template sans relecture manuelle de l’API à chaque fois.
+
+- [ ] **NAK-02 — Générer un template “NAKALA pur”**
+  Objectif : proposer un template prêt à l’emploi dérivé du schéma confirmé.
+  Portée : template builtin ou généré, couvrant les champs centraux et les règles minimales attendues pour un dépôt NAKALA.
+  Critères d’acceptation : un utilisateur peut appliquer ce template sur un job et obtenir une configuration NAKALA cohérente sans réglage manuel colonne par colonne.
+
+- [ ] **NAK-03 — Ajouter le mode “une seule valeur” et le bouton “Personnaliser”**
+  Objectif : rendre exploitable la sélection partielle de vocabulaire au quotidien.
+  Portée : UI de verrouillage sur une valeur unique, puis déverrouillage/reprise de l’édition de la liste chargée.
+  Critères d’acceptation : après chargement d’un vocabulaire, l’utilisateur peut forcer une seule valeur ou revenir à une personnalisation libre, et l’état est persisté dans `column-config`.
+
+- [ ] **NAK-04 — Clarifier la cohérence entre règles NAKALA et sous-ensemble sélectionné**
+  Objectif : éviter des messages contradictoires entre vocabulaire API et liste filtrée localement.
+  Portée : décision explicite sur la règle de priorité, puis alignement des messages/règles côté backend et UI.
+  Critères d’acceptation : la validation applique une logique unique et documentée, et les messages d’erreur reflètent cette logique.
+
+Ordre conseillé : **NAK-01**, puis **NAK-02**, puis **NAK-03**, puis **NAK-04**.
+
 ---
 
 ## 7. Vocabulaires NAKALA — sélection et templates
