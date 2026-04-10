@@ -328,6 +328,8 @@ columns:
     required: false
     # Codes ISO 639-3 (3 lettres : fra, eng, deu…)
     # NakalaClient valide dynamiquement (8039 codes) quand disponible.
+    nakala_vocabulary: "languages"
+    allowed_values_locked: true
     list_separator: "|"
     list_trim: true
     rule_overrides:

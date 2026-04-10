@@ -230,6 +230,21 @@ class TestContentTypeRuleDate:
         df = pd.DataFrame({"D": ["2024"]})
         assert rule.check(df, "D", {"content_type": "date"}) == []
 
+    def test_month_words_fr_en_es_valid(self):
+        df = pd.DataFrame(
+            {
+                "D": [
+                    "janvier 2024",
+                    "février 2020",
+                    "15 mars 2023",
+                    "November 2019",
+                    "marzo 2024",
+                    "15 octubre 2023",
+                ]
+            }
+        )
+        assert rule.check(df, "D", {"content_type": "date"}) == []
+
     def test_invalid_flagged(self):
         df = pd.DataFrame({"D": ["not-a-date"]})
         issues = rule.check(df, "D", {"content_type": "date"})
@@ -315,7 +330,7 @@ class TestContentTypeRuleUrl:
 class TestContentTypeRuleIdentifier:
     def test_recognized_identifiers_valid(self):
         df = pd.DataFrame(
-            {"I": ["10.1000/xyz123", "0000-0002-1825-0097", "978-1-23-456789-0"]}
+            {"I": ["10.1000/xyz123", "0000-0002-1825-0097", "978-1-23-456789-0", "20.500.12345/abc"]}
         )
         assert rule.check(df, "I", {"content_type": "identifier"}) == []
 
@@ -330,6 +345,11 @@ class TestContentTypeRuleLanguage:
     def test_iso_and_bcp47_valid(self):
         df = pd.DataFrame({"L": ["fr", "fr-FR", "eng"]})
         assert rule.check(df, "L", {"content_type": "language"}) == []
+
+    def test_invalid_iso639_primary_flagged(self):
+        df = pd.DataFrame({"L": ["qq", "xx", "zzz"]})
+        issues = rule.check(df, "L", {"content_type": "language"})
+        assert len(issues) == 3
 
     def test_invalid_flagged(self):
         df = pd.DataFrame({"L": ["français"]})

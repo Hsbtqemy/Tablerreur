@@ -89,6 +89,7 @@ class Job:
     export_errors: list[str] = field(default_factory=list)
     # Undo/redo history for hygiene fixes
     command_history: CommandHistory = field(default_factory=CommandHistory)
+    validation_baseline_undo_count: int = 0
     # TTL glissant : toute activité API (get/update) prolonge la session
     last_access_at: float = field(default_factory=time.time)
 

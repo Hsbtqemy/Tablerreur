@@ -120,6 +120,36 @@ def test_edit_cell_then_undo():
     assert _get_df_value(job_id, 0, "titre") == "Valeur initiale"
 
 
+def test_history_reports_manual_edit_summary():
+    job_id = _upload_csv(
+        ["titre", "annee"],
+        [["Valeur initiale", "2023"], ["Autre", "2022"]],
+    )
+
+    resp = client.post(
+        f"/api/jobs/{job_id}/edit-cells",
+        json={
+            "edits": [
+                {"row": 0, "column": "titre", "value": "Valeur modifiée"},
+                {"row": 1, "column": "annee", "value": "2024"},
+            ]
+        },
+    )
+    assert resp.status_code == 200
+
+    history_resp = client.get(f"/api/jobs/{job_id}/history")
+    assert history_resp.status_code == 200
+    history = history_resp.json()
+
+    assert history["can_undo"] is True
+    assert history["has_manual_edits"] is True
+    assert history["manual_edit_actions"] == 1
+    assert history["manual_edit_cells"] == 2
+    assert history["manual_edit_rows"] == [1, 2]
+    assert "manuelles" in history["undo_description"]
+    assert "manuelles" in history["last_manual_edit_description"]
+
+
 # ---------------------------------------------------------------------------
 # Test 3 — edit-cells (bulk) modifie plusieurs cellules en une seule commande
 # ---------------------------------------------------------------------------
@@ -211,6 +241,13 @@ def test_revalidate_after_fixing_error():
 
     # Après correction, il doit y avoir moins de problèmes (ou au moins autant)
     assert total_after <= total_before
+
+    history_resp = client.get(f"/api/jobs/{job_id}/history")
+    assert history_resp.status_code == 200
+    history = history_resp.json()
+    assert history["has_manual_edits"] is False
+    assert history["manual_edit_cells"] == 0
+    assert history["manual_edit_rows"] == []
 
 
 # ---------------------------------------------------------------------------

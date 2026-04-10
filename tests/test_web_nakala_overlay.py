@@ -169,3 +169,30 @@ def test_overlay_nakala_type_has_locked_allowed_values():
     assert nakala_type.get("allowed_values_locked") is True, (
         "nakala:type allowed_values should be locked"
     )
+
+
+def test_overlay_nakala_extended_language_column_exposes_nakala_vocabulary():
+    """dcterms:language should expose the NAKALA languages vocabulary directly in the overlay."""
+    columns = [
+        "nakala:type",
+        "nakala:title",
+        "nakala:creator",
+        "nakala:created",
+        "nakala:license",
+        "dcterms:language",
+    ]
+    rows = [[
+        "http://purl.org/coar/resource_type/c_c513",
+        "Titre",
+        "Nom, Prénom",
+        "2024",
+        "CC-BY-4.0",
+        "fra",
+    ]]
+
+    job_id = _upload(columns, rows, template_id="generic_default", overlay_id="nakala_extended")
+    cfg = _get_column_config(job_id)
+
+    language_cfg = cfg.get("dcterms:language", {})
+    assert language_cfg.get("nakala_vocabulary") == "languages"
+    assert language_cfg.get("allowed_values_locked") is True

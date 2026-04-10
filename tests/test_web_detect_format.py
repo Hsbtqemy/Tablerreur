@@ -89,6 +89,48 @@ def test_detect_format_endpoint_suggests_yes_no_boolean():
     assert data["candidates"][0]["format_preset"] == "yes_no"
 
 
+def test_detect_format_endpoint_suggests_month_year():
+    csv_bytes = _make_csv(["periode"], [["01/2024"], ["02/2024"], ["12/2025"]])
+    resp = client.post(
+        "/api/jobs",
+        files={"file": ("data.csv", io.BytesIO(csv_bytes), "text/csv")},
+        data={"header_row": "1", "template_id": "generic_default", "overlay_id": ""},
+    )
+    assert resp.status_code == 200
+    job_id = resp.json()["job_id"]
+
+    detect = client.post(
+        f"/api/jobs/{job_id}/detect-format",
+        json={"column": "periode"},
+    )
+    assert detect.status_code == 200, detect.text
+    data = detect.json()
+    assert data["detected"] is True
+    assert data["content_type"] == "date"
+    assert data["format_preset"] == "month_year"
+
+
+def test_detect_format_endpoint_suggests_handle():
+    csv_bytes = _make_csv(["handle_reference"], [["20.500.12345/abc"], ["123456789/42"], ["20.500.9/test"]])
+    resp = client.post(
+        "/api/jobs",
+        files={"file": ("data.csv", io.BytesIO(csv_bytes), "text/csv")},
+        data={"header_row": "1", "template_id": "generic_default", "overlay_id": ""},
+    )
+    assert resp.status_code == 200
+    job_id = resp.json()["job_id"]
+
+    detect = client.post(
+        f"/api/jobs/{job_id}/detect-format",
+        json={"column": "handle_reference"},
+    )
+    assert detect.status_code == 200, detect.text
+    data = detect.json()
+    assert data["detected"] is True
+    assert data["content_type"] == "identifier"
+    assert data["format_preset"] == "handle"
+
+
 def test_detect_format_endpoint_returns_candidates_for_ambiguous_years():
     csv_bytes = _make_csv(["code"], [["2020"], ["2021"], ["2022"], ["2023"]])
     resp = client.post(
@@ -115,8 +157,10 @@ def test_detect_format_endpoint_returns_candidates_for_ambiguous_years():
     ("column_name", "rows", "expected_type", "expected_preset"),
     [
         ("doi_reference", [["10.1234/alpha"], ["10.5281/zenodo.42"], ["10.1000/test"]], "identifier", "doi"),
+        ("handle_reference", [["20.500.12345/abc"], ["123456789/42"], ["20.500.9/test"]], "identifier", "handle"),
         ("latitude", [["48.8566"], ["43.2965"], ["-21.1151"]], "number", "latitude"),
         ("date_publication", [["2024-01"], ["2024-02"], ["2025-03"]], "date", "w3cdtf"),
+        ("periode", [["01/2024"], ["02/2024"], ["12/2025"]], "date", "month_year"),
         ("date_publication", [["2024-01-15"], ["2024-02-01"], ["2025-03-31"]], "date", "iso_date"),
         ("statut", [["actif"], ["inactif"], ["actif"], ["inactif"]], "boolean", "yes_no"),
     ],

@@ -23,6 +23,7 @@ import pickle
 import re
 import tempfile
 import unicodedata
+from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -157,6 +158,10 @@ class WebBulkFixCommand(Command):
     def touched_cells(self) -> set[tuple[int, str]]:
         return {(int(row_idx), str(col)) for row_idx, col, _, _ in self._changes}
 
+    @property
+    def is_manual_edit(self) -> bool:
+        return self._label.startswith("Édition manuelle") or self._label.startswith("Éditions manuelles")
+
 # ---------------------------------------------------------------------------
 # Client NAKALA — singleton avec cache disque
 # ---------------------------------------------------------------------------
@@ -273,6 +278,48 @@ _FORMAT_OVERRIDE_KEYS = (
     "yes_no_true_values",
     "yes_no_false_values",
 )
+_FORMAT_CONTENT_TYPE_ALIASES = {
+    "integer": ("number", "integer"),
+    "decimal": ("number", "decimal"),
+    "email": ("address", "email_preset"),
+    "url": ("address", "url"),
+}
+_NAKALA_VOCABULARY_RULE_IDS = {
+    "datatypes": "nakala.deposit_type",
+    "licenses": "nakala.license",
+    "languages": "nakala.language",
+}
+_FORMAT_PRESET_REGEXES: dict[str, str] = {
+    "year": r"^\d{4}$",
+    "alphanum": r"^[A-Za-z0-9]+$",
+    "letters_only": r"^[A-Za-z\u00C0-\u00FF\s\-']+$",
+    "positive_int": r"^\d+$",
+    "integer_or_decimal": r"^-?\d+(?:[\.,]\d+)?$",
+    "doi": r"^10\.\d{4,9}/[^\s]+$",
+    "orcid": r"^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$",
+    "ark": r"^ark:/\d{5}/.+$",
+    "issn": r"^\d{4}-\d{3}[\dX]$",
+    "handle": r"^(?!10\.\d{4,9}/)(?:\d{4,9}|\d{2,}\.\d+(?:\.\d+)*)/\S+$",
+    "isbn": r"^(?:97[89][\d\- ]{10,14}|[\dX\- ]{10,13})$",
+    "isbn13": r"^97[89][\d\- ]{10,14}$",
+    "isbn10": r"^[\dX\- ]{10,13}$",
+    "email_preset": r"^[^@\s]+@[^@\s]+\.[^@\s]+$",
+    "url": r"^(https?://\S+|www\.[^\s/]+\.\S+)$",
+    "w3cdtf": r"^\d{4}(-\d{2}(-\d{2})?)?$",
+    "iso_date": r"^\d{4}-\d{2}-\d{2}$",
+    "date_fr": r"^\d{2}/\d{2}/\d{4}$",
+    "month_year": r"^(0[1-9]|1[0-2])/\d{4}$",
+    "date_month_words": r"(?i)^(?:(?:[0-3]?\d)\s+)?(?:janvier|f\u00e9vrier|fevrier|mars|avril|mai|juin|juillet|ao\u00fbt|aout|septembre|octobre|novembre|d\u00e9cembre|decembre|january|february|march|april|may|june|july|august|september|october|november|december|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\s+\d{4}$",
+    "lang_iso639": r"(?i)^[a-z]{2,3}$",
+    "bcp47": r"^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8})*$",
+    "country_iso": r"^[A-Z]{2}$",
+    "integer": r"^-?\d+$",
+    "decimal": r"^-?\d+(?:[\.,]\d+)?$",
+    "latitude": r"^-?([0-8]?\d(\.\d+)?|90(\.0+)?)$",
+    "longitude": r"^-?(1[0-7]\d(\.\d+)?|180(\.0+)?|[0-9]{1,2}(\.\d+)?)$",
+}
+_YESNO_DEFAULT_TRUE = "oui, o, vrai, true, yes, y, 1, actif, active, enabled"
+_YESNO_DEFAULT_FALSE = "non, n, faux, false, no, 0, inactif, inactive, disabled"
 
 
 def _normalize_override_value(value: Any) -> Any:
@@ -283,6 +330,79 @@ def _normalize_override_value(value: Any) -> Any:
     return value
 
 
+def _normalize_string_list(value: Any, *, allow_empty: bool = False) -> list[str] | None:
+    if value is None or not isinstance(value, list):
+        return None
+    items = [str(item).strip() for item in value if str(item).strip()]
+    if items or allow_empty:
+        return items
+    return None
+
+
+def _is_model_allowed_values_config(config: dict[str, Any] | None) -> bool:
+    cfg = config or {}
+    return bool(
+        _normalize_string_list(cfg.get("allowed_values"))
+        or _normalize_override_value(cfg.get("nakala_vocabulary"))
+        or cfg.get("allowed_values_locked")
+    )
+
+
+def _resolve_allowed_values_layers(
+    template_cfg: dict[str, Any] | None = None,
+    user_cfg: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    tpl = template_cfg or {}
+    user = user_cfg or {}
+
+    domain_allowed_values = _normalize_string_list(tpl.get("allowed_values"))
+    model_driven = _is_model_allowed_values_config(tpl)
+
+    selected_allowed_values = None
+    if "allowed_values_selection" in user:
+        raw_selection = user.get("allowed_values_selection")
+        if isinstance(raw_selection, list):
+            selected_allowed_values = _normalize_string_list(raw_selection, allow_empty=True)
+    elif model_driven and "allowed_values" in user:
+        legacy_selection = user.get("allowed_values")
+        if isinstance(legacy_selection, list):
+            selected_allowed_values = _normalize_string_list(legacy_selection, allow_empty=True)
+
+    manual_allowed_values = None
+    if not model_driven and "allowed_values" in user:
+        manual_allowed_values = _normalize_string_list(user.get("allowed_values"))
+
+    effective_allowed_values = domain_allowed_values
+    if selected_allowed_values is not None:
+        effective_allowed_values = selected_allowed_values
+    elif domain_allowed_values is None and manual_allowed_values is not None:
+        effective_allowed_values = manual_allowed_values
+
+    return {
+        "domain_allowed_values": domain_allowed_values,
+        "selected_allowed_values": selected_allowed_values,
+        "effective_allowed_values": effective_allowed_values,
+        "model_driven": model_driven,
+    }
+
+
+def _apply_effective_allowed_values(
+    config: dict[str, Any] | None,
+    template_cfg: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    cfg = deepcopy(config or {})
+    pseudo_template = template_cfg or {
+        "allowed_values": cfg.get("allowed_values_domain"),
+        "nakala_vocabulary": cfg.get("nakala_vocabulary"),
+        "allowed_values_locked": cfg.get("allowed_values_locked"),
+    }
+    allowed_layers = _resolve_allowed_values_layers(pseudo_template, cfg)
+    cfg["allowed_values"] = allowed_layers["effective_allowed_values"]
+    cfg["allowed_values_domain"] = allowed_layers["domain_allowed_values"]
+    cfg["allowed_values_selection"] = allowed_layers["selected_allowed_values"]
+    return cfg
+
+
 def _canonicalize_format_config(config: dict[str, Any] | None) -> tuple[Any, Any, Any, Any, Any]:
     cfg = config or {}
     content_type = _normalize_override_value(cfg.get("content_type"))
@@ -291,18 +411,14 @@ def _canonicalize_format_config(config: dict[str, Any] | None) -> tuple[Any, Any
     yes_no_true_values = _normalize_override_value(cfg.get("yes_no_true_values"))
     yes_no_false_values = _normalize_override_value(cfg.get("yes_no_false_values"))
 
-    if content_type == "integer" and not format_preset:
-        content_type = "number"
-        format_preset = "integer"
-    elif content_type == "decimal" and not format_preset:
-        content_type = "number"
-        format_preset = "decimal"
-    elif content_type == "email" and not format_preset:
-        content_type = "address"
-        format_preset = "email_preset"
-    elif content_type == "url" and not format_preset:
-        content_type = "address"
-        format_preset = "url"
+    if not format_preset and regex:
+        format_preset = "custom"
+
+    alias_target = _FORMAT_CONTENT_TYPE_ALIASES.get(content_type)
+    if alias_target:
+        content_type, default_preset = alias_target
+        if not format_preset:
+            format_preset = default_preset
 
     if format_preset and format_preset != "custom":
         regex = None
@@ -320,6 +436,65 @@ def _canonicalize_format_config(config: dict[str, Any] | None) -> tuple[Any, Any
         yes_no_true_values,
         yes_no_false_values,
     )
+
+
+def _canonicalize_format_config_dict(config: dict[str, Any] | None) -> dict[str, Any]:
+    cfg = dict(config or {})
+    (
+        content_type,
+        format_preset,
+        regex,
+        yes_no_true_values,
+        yes_no_false_values,
+    ) = _canonicalize_format_config(cfg)
+
+    cfg["content_type"] = content_type
+    cfg["format_preset"] = format_preset
+    cfg["regex"] = regex
+    cfg["yes_no_true_values"] = yes_no_true_values
+    cfg["yes_no_false_values"] = yes_no_false_values
+    return cfg
+
+
+def _apply_canonical_format_keys(config: dict[str, Any] | None) -> dict[str, Any]:
+    cfg = dict(config or {})
+    canonical = _canonicalize_format_config_dict(cfg)
+    for key in _FORMAT_OVERRIDE_KEYS:
+        if key in cfg or canonical.get(key) is not None:
+            cfg[key] = canonical.get(key)
+    return cfg
+
+
+def _build_yes_no_regex(
+    true_values: Any = None,
+    false_values: Any = None,
+) -> str:
+    raw_true = str(true_values or "").strip() or _YESNO_DEFAULT_TRUE
+    raw_false = str(false_values or "").strip() or _YESNO_DEFAULT_FALSE
+    tokens = [
+        token.strip()
+        for token in [*raw_true.split(","), *raw_false.split(",")]
+        if token.strip()
+    ]
+    escaped = [re.escape(token) for token in tokens]
+    return rf"(?i)^({'|'.join(escaped)})$"
+
+
+def _materialize_format_constraints(config: dict[str, Any] | None) -> dict[str, Any]:
+    cfg = _apply_canonical_format_keys(config)
+    preset = cfg.get("format_preset")
+    if cfg.get("regex") or not preset:
+        return cfg
+    if preset == "yes_no":
+        cfg["regex"] = _build_yes_no_regex(
+            cfg.get("yes_no_true_values"),
+            cfg.get("yes_no_false_values"),
+        )
+        return cfg
+    regex = _FORMAT_PRESET_REGEXES.get(str(preset))
+    if regex:
+        cfg["regex"] = regex
+    return cfg
 
 
 def _has_manual_format_override(user_cfg: dict[str, Any], template_cfg: dict[str, Any]) -> bool:
@@ -360,6 +535,7 @@ async def get_column_config(job_id: str):
         user = job.column_config.get(col, {})
         user_overrides[col] = bool(user)
         user_format_overrides[col] = _has_manual_format_override(user, tpl)
+        allowed_layers = _resolve_allowed_values_layers(tpl, user)
 
         def _pick(key: str, default):
             # User override wins if set, else template, else default
@@ -370,12 +546,14 @@ async def get_column_config(job_id: str):
                 return v
             return default
 
-        result[col] = {
+        result[col] = _canonicalize_format_config_dict({
             "required": _pick("required", False),
             "content_type": _pick("content_type", None),
             "unique": _pick("unique", False),
             "multiline_ok": _pick("multiline_ok", False),
-            "allowed_values": _pick("allowed_values", None),
+            "allowed_values": allowed_layers["effective_allowed_values"],
+            "allowed_values_domain": allowed_layers["domain_allowed_values"],
+            "allowed_values_selection": allowed_layers["selected_allowed_values"],
             "allowed_values_locked": _pick("allowed_values_locked", False),
             "regex": _pick("regex", None),
             "format_preset": _pick("format_preset", None),
@@ -396,13 +574,72 @@ async def get_column_config(job_id: str):
             "rare_min_total": _pick("rare_min_total", 10),
             "detect_similar_values": _pick("detect_similar_values", False),
             "similar_threshold": _pick("similar_threshold", 85),
-        }
+        })
 
     return {
         "columns": result,
         "user_overrides": user_overrides,
         "user_format_overrides": user_format_overrides,
     }
+
+
+def _compile_template_metadata(template_id: str, overlay_id: str | None) -> dict[str, Any]:
+    """Return the exact column definitions carried by the active template."""
+    try:
+        mgr = TemplateManager()
+        tpl_config = mgr.compile_config(
+            generic_id=template_id,
+            overlay_id=overlay_id,
+            column_names=None,
+        )
+    except Exception:
+        tpl_config = {}
+
+    raw_columns = tpl_config.get("columns", {})
+    if not isinstance(raw_columns, dict):
+        raw_columns = {}
+
+    raw_column_groups = tpl_config.get("column_groups", {})
+    if not isinstance(raw_column_groups, dict):
+        raw_column_groups = {}
+
+    columns = {
+        str(col): _canonicalize_format_config_dict(deepcopy(cfg))
+        for col, cfg in raw_columns.items()
+        if isinstance(col, str) and col != "*" and isinstance(cfg, dict)
+    }
+    column_groups = {
+        str(pattern): _canonicalize_format_config_dict(deepcopy(cfg))
+        for pattern, cfg in raw_column_groups.items()
+        if isinstance(pattern, str) and isinstance(cfg, dict)
+    }
+
+    required_columns = [
+        str(col)
+        for col in tpl_config.get("required_columns", [])
+        if str(col).strip()
+    ]
+    recommended_columns = [
+        str(col)
+        for col in tpl_config.get("recommended_columns", [])
+        if str(col).strip()
+    ]
+
+    return {
+        "template_id": template_id,
+        "overlay_id": overlay_id,
+        "columns": columns,
+        "column_groups": column_groups,
+        "required_columns": required_columns,
+        "recommended_columns": recommended_columns,
+    }
+
+
+@app.get("/api/jobs/{job_id}/template-metadata")
+async def get_job_template_metadata(job_id: str):
+    """Expose the active template's exact column definitions to the UI."""
+    job = _get_job(job_id)
+    return _compile_template_metadata(job.template_id, job.overlay_id)
 
 
 @app.put("/api/jobs/{job_id}/column-config")
@@ -417,6 +654,8 @@ async def update_column_config(job_id: str, request: Request):
             job.column_config[col] = {}
         for key, val in cfg.items():
             job.column_config[col][key] = val
+        if any(key in _FORMAT_OVERRIDE_KEYS for key in cfg):
+            job.column_config[col] = _apply_canonical_format_keys(job.column_config[col])
 
     job_manager.update(job)
     return {"ok": True}
@@ -470,7 +709,9 @@ async def preview_rule(job_id: str, request: Request):
     df = _load_df(job)
     body = await request.json()
     column: str = body.get("column", "")
-    config: dict = body.get("config", {})
+    config: dict = _apply_effective_allowed_values(
+        _materialize_format_constraints(body.get("config", {}))
+    )
 
     if not column or column not in df.columns:
         raise HTTPException(status_code=400, detail="Colonne introuvable")
@@ -774,13 +1015,7 @@ def _apply_fixes(value: str, opts: dict[str, bool]) -> str:
 async def get_fix_history(job_id: str):
     """Return the current undo/redo state for a job's fix history."""
     job = _get_job(job_id)
-    h = job.command_history
-    return {
-        "can_undo": h.can_undo,
-        "can_redo": h.can_redo,
-        "undo_count": h.undo_count,
-        "redo_count": h.redo_count,
-    }
+    return _history_payload(job)
 
 
 @app.post("/api/jobs/{job_id}/undo")
@@ -789,21 +1024,21 @@ async def undo_fix(job_id: str):
     job = _get_job(job_id)
     h = job.command_history
     if not h.can_undo:
-        return {
+        payload = {
             "success": False,
             "message": "Rien à annuler.",
-            "can_undo": False,
-            "can_redo": h.can_redo,
         }
+        payload.update(_history_payload(job))
+        return payload
     h.undo()
     job_manager.update(job)
-    return {
+    payload = {
         "success": True,
         "action": "undo",
         "message": "Correctif annulé.",
-        "can_undo": h.can_undo,
-        "can_redo": h.can_redo,
     }
+    payload.update(_history_payload(job))
+    return payload
 
 
 @app.post("/api/jobs/{job_id}/redo")
@@ -812,21 +1047,21 @@ async def redo_fix(job_id: str):
     job = _get_job(job_id)
     h = job.command_history
     if not h.can_redo:
-        return {
+        payload = {
             "success": False,
             "message": "Rien à rétablir.",
-            "can_undo": h.can_undo,
-            "can_redo": False,
         }
+        payload.update(_history_payload(job))
+        return payload
     h.redo()
     job_manager.update(job)
-    return {
+    payload = {
         "success": True,
         "action": "redo",
         "message": "Correctif rétabli.",
-        "can_undo": h.can_undo,
-        "can_redo": h.can_redo,
     }
+    payload.update(_history_payload(job))
+    return payload
 
 
 # ---------------------------------------------------------------------------
@@ -989,11 +1224,26 @@ def _compile_validation_config(job: Job, df: pd.DataFrame) -> dict[str, Any]:
     if job.column_config:
         config_cols = config.setdefault("columns", {})
         for col, user_overrides in job.column_config.items():
-            if col not in config_cols:
-                config_cols[col] = {}
-            for key, val in user_overrides.items():
+            template_col_cfg = deepcopy(config_cols.get(col, {}))
+            merged_col_cfg = deepcopy(template_col_cfg)
+            for key, val in _materialize_format_constraints(user_overrides).items():
                 if val is not None:
-                    config_cols[col][key] = val
+                    merged_col_cfg[key] = val
+
+            merged_col_cfg = _apply_effective_allowed_values(merged_col_cfg, template_col_cfg)
+
+            selected_allowed_values = merged_col_cfg.get("allowed_values_selection")
+            vocab_name = _normalize_override_value(merged_col_cfg.get("nakala_vocabulary"))
+            if isinstance(selected_allowed_values, list) and selected_allowed_values and vocab_name:
+                rule_id = _NAKALA_VOCABULARY_RULE_IDS.get(str(vocab_name))
+                if rule_id:
+                    rule_overrides = deepcopy(merged_col_cfg.get("rule_overrides", {}))
+                    override_cfg = deepcopy(rule_overrides.get(rule_id, {}))
+                    override_cfg["enabled"] = False
+                    rule_overrides[rule_id] = override_cfg
+                    merged_col_cfg["rule_overrides"] = rule_overrides
+
+            config_cols[col] = merged_col_cfg
     return config
 
 
@@ -1111,6 +1361,48 @@ def _collect_touched_cells(job: Job) -> set[tuple[int, str]]:
     return touched
 
 
+def _commands_since_validation(job: Job) -> list:
+    undo_stack = list(getattr(job.command_history, "_undo_stack", []))
+    baseline = max(0, int(getattr(job, "validation_baseline_undo_count", 0) or 0))
+    if baseline >= len(undo_stack):
+        return []
+    return undo_stack[baseline:]
+
+
+def _manual_edit_summary(job: Job) -> dict[str, Any]:
+    commands = [
+        cmd for cmd in _commands_since_validation(job)
+        if getattr(cmd, "is_manual_edit", False)
+    ]
+    touched_rows = sorted({
+        int(row_idx) + 1
+        for cmd in commands
+        for row_idx in getattr(cmd, "touched_rows", set())
+    })
+    touched_cells = sum(int(getattr(cmd, "cells_count", 0) or 0) for cmd in commands)
+    return {
+        "has_manual_edits": bool(commands),
+        "manual_edit_actions": len(commands),
+        "manual_edit_cells": touched_cells,
+        "manual_edit_rows": touched_rows,
+        "last_manual_edit_description": commands[-1].description if commands else None,
+    }
+
+
+def _history_payload(job: Job) -> dict[str, Any]:
+    h = job.command_history
+    payload = {
+        "can_undo": h.can_undo,
+        "can_redo": h.can_redo,
+        "undo_count": h.undo_count,
+        "redo_count": h.redo_count,
+        "undo_description": h.undo_description,
+        "redo_description": h.redo_description,
+    }
+    payload.update(_manual_edit_summary(job))
+    return payload
+
+
 def _normalize_export_scope(scope: str) -> str:
     normalized = (scope or "all").strip().lower()
     if normalized not in _VALID_EXPORT_SCOPES:
@@ -1186,6 +1478,7 @@ async def validate_job(job_id: str):
     _save_issues_snapshot(job, issues)
     job.issue_statuses = {}
     job.exports_dirty = False
+    job.validation_baseline_undo_count = job.command_history.undo_count
 
     _generate_outputs(job, df, issues)
 
@@ -1222,6 +1515,7 @@ async def revalidate_job(job_id: str):
     _save_issues_snapshot(job, issues)
     job.issue_statuses = {}
     job.exports_dirty = False
+    job.validation_baseline_undo_count = job.command_history.undo_count
 
     _generate_outputs(job, df, issues)
 
@@ -1708,6 +2002,8 @@ _COLUMN_DEFAULTS: dict[str, Any] = {
     "multiline_ok": False,
     "content_type": None,
     "allowed_values": None,
+    "allowed_values_domain": None,
+    "allowed_values_selection": None,
     "allowed_values_locked": False,
     "regex": None,
     "format_preset": None,
@@ -1783,7 +2079,7 @@ async def export_template(job_id: str):
     for col, cfg in job.column_config.items():
         if col not in df.columns:
             continue
-        filtered = _filter_column_defaults(cfg)
+        filtered = _filter_column_defaults(_canonicalize_format_config_dict(cfg))
         if filtered:
             col_configs[col] = filtered
 
@@ -1940,7 +2236,8 @@ async def import_template(job_id: str, file: UploadFile = File(...)):
         if col in job.columns:
             if col not in job.column_config:
                 job.column_config[col] = {}
-            for key, val in col_cfg.items():
+            canonical_cfg = _canonicalize_format_config_dict(col_cfg)
+            for key, val in canonical_cfg.items():
                 job.column_config[col][key] = val
             applied.append(col)
         else:

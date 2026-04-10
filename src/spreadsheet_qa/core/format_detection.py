@@ -18,11 +18,52 @@ from spreadsheet_qa.core.rules.content_type import (
     _is_isbn10_token,
     _is_isbn13_token,
     _is_identifier,
+    _is_iso639_language_token,
     _is_language,
+    _is_month_name_date,
     _is_number,
     _split_boolean_values,
 )
 from spreadsheet_qa.core.rules.pseudo_missing import _DEFAULT_TOKENS as _PSEUDO_MISSING_TOKENS
+
+# Biais sur le score ajusté des types (évite qu’un « texte » l’emporte sur langue / pays quand les deux matchent).
+_TYPE_ORDER_BIAS: dict[str, float] = {"text": -0.02}
+
+
+def _is_letters_only_value(value: str) -> bool:
+    """Libellés type noms / intitulés : lettres, espaces, ponctuation usuelle (sans chiffres ni URL)."""
+    v = value.strip()
+    if not v or len(v) > 500:
+        return False
+    lo = v.lower()
+    if "http://" in lo or "https://" in lo or "www." in lo:
+        return False
+    if "@" in v:
+        return False
+    seen_letter = False
+    for ch in v:
+        cat = unicodedata.category(ch)
+        if cat.startswith("L"):
+            seen_letter = True
+            continue
+        if cat.startswith("M"):
+            continue
+        if cat == "Zs" or ch in "\n\r\t":
+            continue
+        if ch in "-'ʼ'’`.,()/:;":
+            continue
+        if ch.isdigit():
+            return False
+        return False
+    return seen_letter
+
+
+def _is_alphanumeric_token(value: str) -> bool:
+    v = value.strip()
+    if not v or len(v) > 200:
+        return False
+    return bool(re.fullmatch(r"[A-Za-z0-9]+", v))
+
 
 _TYPE_VALIDATORS: dict[str, Callable[[str], bool]] = {
     "boolean": lambda value: _is_boolean(value, None),
@@ -32,6 +73,7 @@ _TYPE_VALIDATORS: dict[str, Callable[[str], bool]] = {
     "language": lambda value: _is_language(value, None),
     "date": lambda value: _is_date(value, None),
     "number": lambda value: _is_number(value, None),
+    "text": _is_letters_only_value,
 }
 
 _TYPE_HINTS: dict[str, tuple[str, ...]] = {
@@ -42,11 +84,28 @@ _TYPE_HINTS: dict[str, tuple[str, ...]] = {
     "language": ("langue", "language", "lang", "locale"),
     "date": ("date", "annee", "year", "created", "creation", "publication", "published"),
     "number": ("nombre", "number", "count", "qty", "quantite", "taille", "size"),
+    "text": (
+        "nom",
+        "prenom",
+        "name",
+        "auteur",
+        "author",
+        "intitule",
+        "titre",
+        "libelle",
+        "personne",
+        "contact",
+        "denomination",
+        "appellation",
+        "raison",
+        "sociale",
+    ),
 }
 
 _PRESET_TO_TYPE: dict[str, str] = {
     "integer": "number",
     "decimal": "number",
+    "integer_or_decimal": "number",
     "positive_int": "number",
     "year": "date",
     "latitude": "number",
@@ -56,6 +115,8 @@ _PRESET_TO_TYPE: dict[str, str] = {
     "orcid": "identifier",
     "ark": "identifier",
     "issn": "identifier",
+    "handle": "identifier",
+    "isbn": "identifier",
     "isbn13": "identifier",
     "isbn10": "identifier",
     "email_preset": "address",
@@ -63,24 +124,30 @@ _PRESET_TO_TYPE: dict[str, str] = {
     "w3cdtf": "date",
     "iso_date": "date",
     "date_fr": "date",
+    "month_year": "date",
+    "date_month_words": "date",
     "lang_iso639": "language",
     "bcp47": "language",
     "country_iso": "country",
+    "letters_only": "text",
+    "alphanum": "text",
 }
 
 _TYPE_TO_PRESETS: dict[str, tuple[str, ...]] = {
-    "number": ("integer", "decimal", "positive_int", "latitude", "longitude"),
+    "number": ("integer", "decimal", "integer_or_decimal", "positive_int", "latitude", "longitude"),
     "boolean": ("yes_no",),
-    "identifier": ("doi", "orcid", "ark", "issn", "isbn13", "isbn10"),
+    "identifier": ("doi", "orcid", "ark", "issn", "handle", "isbn13", "isbn10", "isbn"),
     "address": ("email_preset", "url"),
     "country": ("country_iso",),
     "language": ("lang_iso639", "bcp47"),
-    "date": ("iso_date", "date_fr", "year", "w3cdtf"),
+    "date": ("iso_date", "date_fr", "month_year", "date_month_words", "year", "w3cdtf"),
+    "text": ("letters_only", "alphanum"),
 }
 
 _PRESET_HINTS: dict[str, tuple[str, ...]] = {
     "integer": ("entier", "integer"),
     "decimal": ("decimal", "decim", "float"),
+    "integer_or_decimal": ("nombre", "number", "decimal", "float", "montant", "valeur"),
     "positive_int": ("nombre", "count", "qty", "quantite", "taille", "size"),
     "year": ("annee", "year"),
     "latitude": ("lat", "latitude"),
@@ -90,6 +157,8 @@ _PRESET_HINTS: dict[str, tuple[str, ...]] = {
     "orcid": ("orcid",),
     "ark": ("ark",),
     "issn": ("issn",),
+    "handle": ("handle",),
+    "isbn": ("isbn",),
     "isbn13": ("isbn",),
     "isbn10": ("isbn",),
     "email_preset": ("mail", "email", "courriel"),
@@ -97,19 +166,27 @@ _PRESET_HINTS: dict[str, tuple[str, ...]] = {
     "w3cdtf": ("date", "created", "creation", "publication"),
     "iso_date": ("date", "created", "creation", "publication"),
     "date_fr": ("date",),
+    "month_year": ("date", "mois", "month", "periode", "period"),
+    "date_month_words": ("date", "mois", "publication", "created", "creation", "periode"),
     "lang_iso639": ("langue", "language", "lang"),
     "bcp47": ("langue", "language", "locale"),
     "country_iso": ("pays", "country"),
+    "letters_only": ("nom", "prenom", "name", "auteur", "personne", "intitule", "titre", "libelle"),
+    "alphanum": ("code", "ref", "reference", "identifiant", "id"),
 }
 
 _PRESET_SPECIFICITY: dict[str, int] = {
     "iso_date": 5,
     "date_fr": 5,
+    "month_year": 5,
+    "date_month_words": 5,
     "year": 4,
     "doi": 5,
     "orcid": 5,
     "ark": 5,
     "issn": 5,
+    "handle": 4,
+    "isbn": 3,
     "isbn13": 5,
     "isbn10": 5,
     "email_preset": 4,
@@ -121,9 +198,12 @@ _PRESET_SPECIFICITY: dict[str, int] = {
     "longitude": 2,
     "integer": 4,
     "decimal": 3,
+    "integer_or_decimal": 2,
     "positive_int": 2,
     "w3cdtf": 1,
     "yes_no": 4,
+    "letters_only": 5,
+    "alphanum": 3,
 }
 
 _YEAR_RE = re.compile(r"^\d{4}$")
@@ -136,13 +216,13 @@ _DOI_RE = re.compile(r"^10\.\d{4,9}/[^\s]+$", re.IGNORECASE)
 _ORCID_RE = re.compile(r"^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$", re.IGNORECASE)
 _ARK_RE = re.compile(r"^ark:/\d{5}/.+$", re.IGNORECASE)
 _ISSN_RE = re.compile(r"^\d{4}-\d{3}[\dX]$", re.IGNORECASE)
+_HANDLE_RE = re.compile(r"^(?!10\.\d{4,9}/)(?:\d{4,9}|\d{2,}\.\d+(?:\.\d+)*)/\S+$", re.IGNORECASE)
 _ISBN13_RE = re.compile(r"^97[89][\d\- ]{10,14}$")
 _ISBN10_RE = re.compile(r"^[\dX\- ]{10,13}$", re.IGNORECASE)
 _ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _DATE_FR_RE = re.compile(r"^\d{2}/\d{2}/\d{4}$")
+_MONTH_YEAR_RE = re.compile(r"^(0[1-9]|1[0-2])/\d{4}$")
 _W3CDTF_RE = re.compile(r"^\d{4}(?:-\d{2}(?:-\d{2})?)?$")
-_LANG_ISO639_RE = re.compile(r"(?i)^[a-z]{2,3}$")
-_BCP47_RE = re.compile(r"^[a-zA-Z]{2,3}(?:-[a-zA-Z0-9]{2,8})*$")
 _COUNTRY_ISO_RE = re.compile(r"^[A-Z]{2}$")
 _LATITUDE_RE = re.compile(r"^-?([0-8]?\d(?:\.\d+)?|90(?:\.0+)?)$")
 _LONGITUDE_RE = re.compile(r"^-?(1[0-7]\d(?:\.\d+)?|180(?:\.0+)?|[0-9]{1,2}(?:\.\d+)?)$")
@@ -152,6 +232,7 @@ _YES_NO_FALSE = _split_boolean_values("", _BOOLEAN_FALSE_DEFAULT)
 _PRESET_DETECTORS: dict[str, Callable[[str], bool]] = {
     "integer": lambda value: bool(_INT_RE.fullmatch(value)),
     "decimal": lambda value: bool(_DECIMAL_RE.fullmatch(value)),
+    "integer_or_decimal": lambda value: bool(_DECIMAL_RE.fullmatch(value)),
     "positive_int": lambda value: bool(_POSITIVE_INT_RE.fullmatch(value)),
     "year": lambda value: bool(_YEAR_RE.fullmatch(value)) and 1000 <= int(value) <= 2099,
     "latitude": lambda value: bool(_LATITUDE_RE.fullmatch(value)),
@@ -161,6 +242,11 @@ _PRESET_DETECTORS: dict[str, Callable[[str], bool]] = {
     "orcid": lambda value: bool(_ORCID_RE.fullmatch(value)),
     "ark": lambda value: bool(_ARK_RE.fullmatch(value)),
     "issn": lambda value: bool(_ISSN_RE.fullmatch(value)),
+    "handle": lambda value: bool(_HANDLE_RE.fullmatch(value)),
+    "isbn": lambda value: (
+        (bool(_ISBN13_RE.fullmatch(value)) and _is_isbn13_token(value))
+        or (bool(_ISBN10_RE.fullmatch(value)) and _is_isbn10_token(value))
+    ),
     "isbn13": lambda value: bool(_ISBN13_RE.fullmatch(value)) and _is_isbn13_token(value),
     "isbn10": lambda value: bool(_ISBN10_RE.fullmatch(value)) and _is_isbn10_token(value),
     "email_preset": lambda value: bool(_EMAIL_RE.fullmatch(value)),
@@ -168,9 +254,13 @@ _PRESET_DETECTORS: dict[str, Callable[[str], bool]] = {
     "w3cdtf": lambda value: bool(_W3CDTF_RE.fullmatch(value)),
     "iso_date": lambda value: bool(_ISO_DATE_RE.fullmatch(value)),
     "date_fr": lambda value: bool(_DATE_FR_RE.fullmatch(value)),
-    "lang_iso639": lambda value: bool(_LANG_ISO639_RE.fullmatch(value)),
-    "bcp47": lambda value: bool(_BCP47_RE.fullmatch(value)),
+    "month_year": lambda value: bool(_MONTH_YEAR_RE.fullmatch(value)),
+    "date_month_words": lambda value: _is_month_name_date(value),
+    "lang_iso639": lambda value: _is_iso639_language_token(value),
+    "bcp47": lambda value: _is_language(value, None),
     "country_iso": lambda value: bool(_COUNTRY_ISO_RE.fullmatch(value)),
+    "letters_only": lambda value: _is_letters_only_value(value),
+    "alphanum": lambda value: _is_alphanumeric_token(value),
 }
 
 
@@ -208,7 +298,37 @@ def _header_bonus(ascii_header: str, tokens: set[str], hints: tuple[str, ...]) -
     return 0.0
 
 
-def _type_context_bonus(content_type: str, values: list[str]) -> float:
+def _language_header_penalty(tokens: set[str], ascii_header: str) -> float:
+    """Réduit le score « langue » quand l’en-tête évoque plutôt un référentiel / indexation."""
+    neg = frozenset(
+        {
+            "index",
+            "indexation",
+            "referencement",
+            "catalogue",
+            "cotation",
+            "classement",
+            "notation",
+            "referentiel",
+            "classification",
+            "zem",
+        }
+    )
+    if tokens & neg:
+        return -0.18
+    for hint in neg:
+        if len(hint) >= 5 and hint in ascii_header:
+            return -0.12
+    return 0.0
+
+
+def _type_context_bonus(
+    content_type: str,
+    values: list[str],
+    _hint_bonus: float,
+    tokens: set[str],
+    ascii_header: str,
+) -> float:
     normalized_values = [v.strip().lower() for v in values]
     unique_normalized = {v for v in normalized_values if v}
     boolean_tokens = _YES_NO_TRUE | _YES_NO_FALSE
@@ -219,18 +339,25 @@ def _type_context_bonus(content_type: str, values: list[str]) -> float:
     if content_type == "country" and values and all(_COUNTRY_ISO_RE.fullmatch(v) for v in values):
         return 0.03
     if content_type == "language":
+        pen = _language_header_penalty(tokens, ascii_header)
         if boolean_like:
-            return -0.08
+            return -0.08 + pen
         if any("-" in v for v in values):
-            return 0.04
+            return 0.04 + pen
         if any(v.islower() for v in values if v.isalpha()):
-            return 0.02
+            return 0.02 + pen
         if any(len(v) == 3 for v in values if v.isalpha()):
-            return 0.02
-    if content_type == "date" and any("-" in v or "/" in v for v in values):
-        return 0.03
+            return 0.02 + pen
+        return pen
+    if content_type == "date":
+        if any(_is_month_name_date(v) for v in values):
+            return 0.07
+        if any("-" in v or "/" in v for v in values):
+            return 0.03
     if content_type == "number" and any("." in v or "," in v for v in values):
         return 0.02
+    if content_type == "text" and any(" " in v.strip() for v in values):
+        return 0.04
     return 0.0
 
 
@@ -256,7 +383,7 @@ def _rank_candidates(
     hint_map: dict[str, tuple[str, ...]],
     ascii_header: str,
     tokens: set[str],
-    context_bonus_fn: Callable[[str, list[str], float], float] | None = None,
+    context_bonus_fn: Callable[[str, list[str], float, set[str], str], float] | None = None,
 ) -> list[dict[str, Any]]:
     total = len(values)
     ranked: list[dict[str, Any]] = []
@@ -271,8 +398,18 @@ def _rank_candidates(
                     matched_examples.append(value)
         raw_score = matched / total if total else 0.0
         hint_bonus = _header_bonus(ascii_header, tokens, hint_map.get(name, ()))
-        context_bonus = context_bonus_fn(name, values, hint_bonus) if context_bonus_fn else 0.0
-        adjusted_score = raw_score + hint_bonus + context_bonus + (_PRESET_SPECIFICITY.get(name, 0) * 0.002)
+        context_bonus = (
+            context_bonus_fn(name, values, hint_bonus, tokens, ascii_header)
+            if context_bonus_fn
+            else 0.0
+        )
+        adjusted_score = (
+            raw_score
+            + hint_bonus
+            + context_bonus
+            + (_PRESET_SPECIFICITY.get(name, 0) * 0.002)
+            + _TYPE_ORDER_BIAS.get(name, 0.0)
+        )
         ranked.append(
             {
                 "name": name,
@@ -288,16 +425,38 @@ def _rank_candidates(
     return ranked
 
 
-def _type_ranker(name: str, values: list[str], _header_bonus_value: float) -> float:
-    return _type_context_bonus(name, values)
+def _type_ranker(
+    name: str,
+    values: list[str],
+    hint_bonus: float,
+    tokens: set[str],
+    ascii_header: str,
+) -> float:
+    return _type_context_bonus(name, values, hint_bonus, tokens, ascii_header)
 
 
-def _preset_ranker(name: str, values: list[str], header_bonus_value: float) -> float:
+def _preset_ranker(
+    name: str,
+    values: list[str],
+    header_bonus_value: float,
+    _tokens: set[str],
+    _ascii_header: str,
+) -> float:
     return _preset_context_bonus(name, values, header_bonus_value)
+
+
+_AMBIGUITY_EXCLUDE_PAIRS: frozenset[frozenset[str]] = frozenset(
+    {
+        frozenset({"language", "text"}),
+        frozenset({"country", "text"}),
+    }
+)
 
 
 def _is_ambiguous(best: dict[str, Any], runner_up: dict[str, Any] | None, min_score: float) -> bool:
     if runner_up is None or runner_up["raw_score"] < min_score:
+        return False
+    if frozenset({best["name"], runner_up["name"]}) in _AMBIGUITY_EXCLUDE_PAIRS:
         return False
     close_raw = abs(best["raw_score"] - runner_up["raw_score"]) < 0.05
     close_adjusted = abs(best["adjusted_score"] - runner_up["adjusted_score"]) < 0.05
@@ -361,6 +520,15 @@ def _special_preset_choice(
         and all(len(v) == 2 and v.isalpha() and "-" not in v for v in values)
     ):
         return next((p for p in preset_candidates if p["name"] == "lang_iso639"), None)
+
+    # Lettres uniquement vs alphanum. : les deux matchent souvent sans chiffre — on privilégie « letters_only ».
+    if (
+        runner_preset
+        and {best_preset["name"], runner_preset["name"]} == {"letters_only", "alphanum"}
+        and values
+        and all(not any(ch.isdigit() for ch in v) for v in values)
+    ):
+        return next((p for p in preset_candidates if p["name"] == "letters_only"), None)
 
     return None
 
@@ -558,6 +726,26 @@ def detect_column_format(
             "total": total,
             "examples": best_type["examples"],
             "message": "Aucune nature dominante suffisamment nette n’a été détectée.",
+            "candidates": _merge_candidates(None, candidate_pool),
+        }
+
+    if (
+        best_type["name"] == "language"
+        and _language_header_penalty(tokens, ascii_header) < -0.05
+        and best_type["adjusted_score"] < 0.90
+    ):
+        return {
+            "detected": False,
+            "content_type": None,
+            "format_preset": None,
+            "confidence": round(best_type["raw_score"], 3),
+            "matched": best_type["matched"],
+            "total": total,
+            "examples": best_type["examples"],
+            "message": (
+                "Les valeurs ressemblent à des codes ISO 639, mais l’en-tête évoque plutôt "
+                "une classification ou un référentiel — aucune suggestion automatique."
+            ),
             "candidates": _merge_candidates(None, candidate_pool),
         }
 

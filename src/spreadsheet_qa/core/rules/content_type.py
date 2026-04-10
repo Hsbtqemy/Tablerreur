@@ -17,10 +17,12 @@ from __future__ import annotations
 
 import logging
 import re
+import unicodedata
 from typing import Any, Callable
 
 import pandas as pd
 
+from spreadsheet_qa.core.language_codes import ISO639_1_CODES, ISO639_2_CODES
 from spreadsheet_qa.core.models import Issue, Severity
 from spreadsheet_qa.core.rule_base import Rule, registry
 
@@ -38,6 +40,7 @@ _ARK_RE = re.compile(r"^ark:/\d{5}/.+$", re.IGNORECASE)
 _ISSN_RE = re.compile(r"^\d{4}-\d{3}[\dX]$", re.IGNORECASE)
 _ISBN13_RE = re.compile(r"^97[89][\d\- ]{10,14}$")
 _ISBN10_RE = re.compile(r"^[\dX\- ]{10,13}$", re.IGNORECASE)
+_HANDLE_RE = re.compile(r"^(?!10\.\d{4,9}/)(?:\d{4,9}|\d{2,}\.\d+(?:\.\d+)*)/\S+$", re.IGNORECASE)
 _BCP47_RE = re.compile(r"^[a-z]{2,3}(-[a-z0-9]{2,8})*$", re.IGNORECASE)
 _COUNTRY_RE = re.compile(r"^[a-z]{2}$", re.IGNORECASE)
 
@@ -84,6 +87,90 @@ def _is_number(value: str, config: dict[str, Any] | None = None) -> bool:
     return _is_integer(value) or _is_decimal(value)
 
 
+def _strip_diacritics(s: str) -> str:
+    return "".join(c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn")
+
+
+# Month names (ASCII after diacritic strip) — FR + EN + ES
+_MONTH_WORDS_FR: frozenset[str] = frozenset(
+    {
+        "janvier",
+        "fevrier",
+        "mars",
+        "avril",
+        "mai",
+        "juin",
+        "juillet",
+        "aout",
+        "septembre",
+        "octobre",
+        "novembre",
+        "decembre",
+    }
+)
+_MONTH_WORDS_EN: frozenset[str] = frozenset(
+    {
+        "january",
+        "february",
+        "march",
+        "april",
+        "may",
+        "june",
+        "july",
+        "august",
+        "september",
+        "october",
+        "november",
+        "december",
+    }
+)
+_MONTH_WORDS_ES: frozenset[str] = frozenset(
+    {
+        "enero",
+        "febrero",
+        "marzo",
+        "abril",
+        "mayo",
+        "junio",
+        "julio",
+        "agosto",
+        "septiembre",
+        "octubre",
+        "noviembre",
+        "diciembre",
+    }
+)
+
+
+def _is_month_name_date(value: str) -> bool:
+    """True if value looks like « mois en toutes lettres YYYY » (FR/EN/ES), optional day."""
+    raw = value.strip()
+    if not raw:
+        return False
+    collapsed = re.sub(r"\s+", " ", raw)
+    parts = collapsed.split()
+    if len(parts) < 2:
+        return False
+    if not re.fullmatch(r"\d{4}", parts[-1]):
+        return False
+    year = int(parts[-1])
+    if not 1000 <= year <= 2099:
+        return False
+    rest = parts[:-1]
+    if len(rest) == 1:
+        month_word = rest[0]
+    elif len(rest) == 2 and rest[0].isdigit() and 1 <= len(rest[0]) <= 2:
+        month_word = rest[1]
+    else:
+        return False
+    month_norm = _strip_diacritics(month_word).lower()
+    return (
+        month_norm in _MONTH_WORDS_FR
+        or month_norm in _MONTH_WORDS_EN
+        or month_norm in _MONTH_WORDS_ES
+    )
+
+
 def _is_date(value: str, config: dict[str, Any] | None = None) -> bool:
     """Accept common FR and ISO date formats.
 
@@ -93,10 +180,14 @@ def _is_date(value: str, config: dict[str, Any] | None = None) -> bool:
       - DD/MM/YYYY or DD-MM-YYYY  (FR)
       - MM/YYYY  (month/year)
       - YYYY  (year only, 1000–2099)
+      - Month name + year (e.g. « janvier 2024 », « March 2019 », « marzo 2024 »), optional day
 
     Rejected: "32/13/2024" (out-of-range day/month), free text.
     """
     v = value.strip()
+
+    if _is_month_name_date(v):
+        return True
 
     # ISO: YYYY-MM-DD
     m = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", v)
@@ -162,13 +253,31 @@ def _is_identifier(value: str, config: dict[str, Any] | None = None) -> bool:
         or bool(_ORCID_RE.match(v))
         or bool(_ARK_RE.match(v))
         or bool(_ISSN_RE.match(v))
+        or bool(_HANDLE_RE.match(v))
         or (bool(_ISBN13_RE.match(v)) and _is_isbn13_token(v))
         or (bool(_ISBN10_RE.match(v)) and _is_isbn10_token(v))
     )
 
 
 def _is_language(value: str, config: dict[str, Any] | None = None) -> bool:
-    return bool(_BCP47_RE.match(value.strip()))
+    """RFC 5646-style language tag: primary subtag must be ISO 639-1 or ISO 639-2."""
+    v = value.strip()
+    if not _BCP47_RE.fullmatch(v):
+        return False
+    primary = v.split("-", 1)[0].lower()
+    if len(primary) == 2:
+        return primary in ISO639_1_CODES
+    if len(primary) == 3:
+        return primary in ISO639_2_CODES
+    return False
+
+
+def _is_iso639_language_token(value: str) -> bool:
+    """ISO 639 code without region/script (preset « lang_iso639 »)."""
+    v = value.strip()
+    if "-" in v:
+        return False
+    return _is_language(v, None)
 
 
 def _is_country(value: str, config: dict[str, Any] | None = None) -> bool:

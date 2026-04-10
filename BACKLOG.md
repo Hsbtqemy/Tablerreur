@@ -30,10 +30,10 @@ Après évaluation de la **faisabilité** (technique, dépendances, effort) et *
 | **P1** | NAKALA — sélection | Sous-ensemble du vocabulaire chargé | 🟢 | **Fait** — `app.js` : sélecteur à cases à cocher après chargement (`#vocab-selector-list`), persistance dans `allowed_values` + `nakala_vocabulary`. |
 | **P1** | UX avancée | Caractères invisibles/espaces ; Mapala | 🟢 / 🟡 | **Fait (Tablerreur)** — toggle « Caractères spéciaux » (`renderVisibleChars`), persistance préférence UX. **Fait (Mapala)** — onglet Mapala + API `/api/mapala/*` dans la même app web (`mapala.js`). |
 | **P2** | NAKALA — template API | Doc API puis template « NAKALA pur » | 🔴 → 🟡 | **Backlog** — inchangé. |
-| **P2** | Presets & règles | Presets ISBN, Date FR, BCP 47, Pays ISO, Lat/Long ; normalisation casse (suggestion) | 🟢 | **Presets** — **déjà dans l’UI** (`FORMAT_PRESETS` + `index.html`) : ISBN-13/10, date FR, BCP 47, pays ISO, latitude/longitude, e-mail (preset). **Reste** : normalisation casse en mode suggestion, etc. |
+| **P2** | Presets & règles | Presets ISBN, Date FR, BCP 47, Pays ISO, Lat/Long ; normalisation casse (suggestion) | 🟢 | **Fait** — catalogue UI + backend alignés pour `isbn`, `isbn10`, `isbn13`, `date_fr`, `month_year`, `integer_or_decimal`, `bcp47`, `country_iso`, `latitude`, `longitude`, `email_preset`. **Reste** : normalisation casse en mode suggestion, etc. |
 | **P2** | Curation avancée | Undo dans l’étape curation | 🟢 | **Backlog** — undo/redo global des **correctifs** existe ; pas d’historique dédié aux seules éditions manuelles de cellules. |
 | **P2** | NAKALA détail | « Une seule valeur », déverrouiller après chargement | 🟢 | **Backlog** — la sélection partielle couvre une partie du besoin ; bouton « Personnaliser » / liste déroulante stricte encore ouverts. |
-| **P3 — Basse** | Presets secondaires | URL (preset dédié), Handle, slug, intervalle années, code postal FR ; coordonnées east/north | 🟢 / 🔮 | **Backlog** — l’URL existe comme **type de contenu** (`content_type: url`), pas comme entrée du catalogue « Format attendu » au même titre que les autres presets. |
+| **P3 — Basse** | Presets secondaires | slug, intervalle années, code postal FR ; coordonnées east/north | 🟢 / 🔮 | **Partiel** — `url` et `handle` existent désormais comme **presets** du catalogue « Format attendu ». Restent surtout `slug`, intervalle d’années, code postal FR, coordonnées structurées east/north. |
 | **Long terme** | Enrichissement | Auto-update Tauri, constructeur visuel regex, détection automatique du format | 🟡 / 🔮 | **Backlog** — inchangé. |
 
 ### Faisabilité par bloc (résumé)
@@ -89,19 +89,20 @@ Implémentation : `FORMAT_PRESETS` dans `web/static/app.js` et liste déroulante
 |---|---|---|
 | Année, Oui/Non, Alphanumérique, Lettres uniquement, Entier positif | Fait | |
 | DOI, ORCID, ARK, ISSN | Fait | |
-| ISBN-13, ISBN-10 | Fait | `isbn13`, `isbn10` |
+| ISBN (10 ou 13), ISBN-13, ISBN-10 | Fait | `isbn`, `isbn13`, `isbn10` |
 | Adresse e-mail (preset) | Fait | `email_preset` (distinct du `content_type: email`) |
-| Date W3C-DTF, Date ISO stricte, Date française (JJ/MM/AAAA) | Fait | `w3cdtf`, `iso_date`, `date_fr` |
+| Handle, URL (preset) | Fait | `handle`, `url` |
+| Date W3C-DTF, Date ISO stricte, Date française (JJ/MM/AAAA), Mois / année (MM/AAAA), Mois (libellé) et année | Fait | `w3cdtf`, `iso_date`, `date_fr`, `month_year`, `date_month_words` |
 | Langue ISO 639, BCP 47, Pays ISO 3166-1 alpha-2 | Fait | `lang_iso639`, `bcp47`, `country_iso` |
-| Latitude, Longitude | Fait | `latitude`, `longitude` |
+| Entier ou décimal, Latitude, Longitude | Fait | `integer_or_decimal`, `latitude`, `longitude` |
 | Personnalisé (regex) | Fait | `custom` |
 
 ### Reste à ajouter ou à clarifier
 
 | Preset / besoin | Statut | Priorité |
 |---|---|---|
-| URL comme entrée du même catalogue « Format attendu » (regex type `https?://…`) | Backlog | Basse — aujourd’hui couvert par **type de contenu** URL |
-| Handle (Handle.net) | Backlog | Basse |
+| URL comme entrée du même catalogue « Format attendu » (regex type `https?://…`) | Fait | `url` dans le catalogue + compatibilité `address` / alias legacy `content_type: url` |
+| Handle (Handle.net) | Fait | `handle` dans le catalogue, regex backend/web, détection et aperçu |
 | Identifiant interne (slug) | Backlog | Basse |
 | Intervalle d'années (YYYY-YYYY) | Backlog | Basse |
 | Code postal FR | Backlog | Basse |
@@ -139,9 +140,9 @@ Implémentation : `FORMAT_PRESETS` dans `web/static/app.js` et liste déroulante
 | Aperçu temps réel | Fait | `POST /api/jobs/{id}/preview-rule` (debounce 300 ms côté client) |
 | Badges colonnes, résumé avant étape suivante, surlignage cellules | Fait | `GET /api/jobs/{id}/preview-issues` |
 | Import/export YAML, import vocabulaire, NAKALA, similar_values | Fait | |
-| Enrichir le menu « Type de contenu » | Backlog | Toujours 5 types dans l’UI ; voir `docs/type-format-mapping.md` |
-| Restreindre les formats selon le type choisi | Backlog | |
-| Un seul type « Nombre » avec sous-formats | Backlog | |
+| Enrichir le menu « Type de contenu » | Partiel | UI déjà consolidée autour de `text`, `number`, `date`, `boolean`, `language`, `country`, `identifier`, `address` ; types métier supplémentaires éventuels encore à arbitrer |
+| Restreindre les formats selon le type choisi | Fait | Filtrage via table de compatibilité + préservation contrôlée des presets legacy incompatibles au chargement |
+| Un seul type « Nombre » avec sous-formats | Fait | UI = un seul type visible `number` ; compat ascendante `integer` / `decimal` canonisée côté frontend + API |
 | Constructeur visuel de regex | Long terme | |
 | Détection automatique du format probable | Long terme | |
 
@@ -170,7 +171,7 @@ Implémentation : `FORMAT_PRESETS` dans `web/static/app.js` et liste déroulante
 Pour le **périmètre audit / sécurité / robustesse**, suivre la section **« Backlog audit technique & sécurité (exécutable) »** en fin de document (items `AUD-Px-xx`), en priorité **P0** puis **P1**.
 
 1. **Curation** — Optionnel : étape dédiée, undo local des éditions cellule, parité avec critères §11 (passage Correctifs → Valider si ERROR ouverts).
-2. **NAKALA** — Template depuis API (§7B), raffinages (personnaliser après chargement, etc.).
+2. **NAKALA** — Modèles contraignants, vocabulaires auto-appliqués, suggestions de correspondance colonnes → champs NAKALA.
 3. **UX config** — Filtre formats par type, fusion type Nombre, presets restants (URL catalogue, code postal, …).
 4. **Flux import / modèle (§12)** — **Complet** (y compris FLUX-03). Re-téléversement + `POST` couvrent les sidecars sans `PATCH`.
 
@@ -178,12 +179,12 @@ Pour le **périmètre audit / sécurité / robustesse**, suivre la section **« 
 
 #### Curation
 
-- [ ] **CUR-01 — Curation ciblée depuis Résultats**
+- [x] **CUR-01 — Curation ciblée depuis Résultats**
   Objectif : réduire la friction issue → cellule.
   Portée : depuis la liste des problèmes, ouvrir directement la cellule cible en mode édition quand la ligne est visible dans l’aperçu ; garder un fallback clair quand la ligne est hors aperçu.
   Critères d’acceptation : un clic sur l’action de correction ouvre la bonne cellule, le focus est posé dans l’éditeur, et le comportement reste explicite pour les lignes > 30.
 
-- [ ] **CUR-02 — Historique visible des éditions manuelles**
+- [x] **CUR-02 — Historique visible des éditions manuelles**
   Objectif : distinguer clairement les éditions manuelles des correctifs d’hygiène.
   Portée : UI de statut simple pour les cellules/lignes touchées, libellés d’historique lisibles, et retour utilisateur cohérent lors des undo/redo après édition manuelle.
   Critères d’acceptation : une édition manuelle est identifiable dans l’interface, undo/redo reste compréhensible, et la notion de “lignes touchées” est visible sans relire tout le tableau.
@@ -197,20 +198,23 @@ Ordre conseillé : **CUR-01**, puis **CUR-02**. **CUR-03** seulement si le produ
 
 #### UX config
 
-- [ ] **UXCFG-01 — Restreindre les formats selon le type choisi**
+- [x] **UXCFG-01 — Restreindre les formats selon le type choisi**
   Objectif : supprimer les combinaisons type/format incohérentes dans le panneau Configurer.
   Portée : filtrage du menu “Format attendu” selon la table de compatibilité de `docs/type-format-mapping.md`, avec conservation propre des valeurs existantes lors du chargement d’un job.
   Critères d’acceptation : le menu se réduit quand un type est choisi, les formats incompatibles ne sont plus proposés, et aucun réglage existant n’est perdu silencieusement.
+  Vérifié : `format_compat_helpers.js`, filtrage `CONTENT_TYPE_FORMAT_COMPAT` dans `app.js`, préservation contrôlée des presets incompatibles au chargement, tests JS ciblés.
 
-- [ ] **UXCFG-02 — Fusionner “Nombre entier” et “Nombre décimal” en type “Nombre”**
+- [x] **UXCFG-02 — Fusionner “Nombre entier” et “Nombre décimal” en type “Nombre”**
   Objectif : simplifier le modèle mental côté utilisateur.
   Portée : libellés UI, normalisation frontend/backend, compatibilité ascendante des configs existantes et des suggestions automatiques.
   Critères d’acceptation : un seul type “Nombre” visible en UI, anciens jobs/configs encore relus correctement, et les presets `integer` / `decimal` restent exploitables.
+  Vérifié : UI visible en `number` unique ; alias legacy `integer` / `decimal` relus et canonisés en `number + preset` côté frontend, API, import/export template et validation.
 
-- [ ] **UXCFG-03 — Ajouter les presets prioritaires manquants**
+- [x] **UXCFG-03 — Ajouter les presets prioritaires manquants**
   Objectif : compléter les cas concrets encore absents du menu Format.
   Portée : date FR (`DD/MM/YYYY`), mois-année (`MM/YYYY`), `ISBN`, `Handle`, `entier_ou_decimal`, `latitude`, `longitude` ; tests backend + web alignés.
   Critères d’acceptation : chaque preset apparaît dans le menu, la validation associée existe, et des tests dédiés couvrent au moins un cas valide et un cas invalide.
+  Vérifié : presets présents dans `index.html` / `app.js`, regex backend via `preview-rule`, détection de format web/core, et cas valides/invalides couverts sur les presets prioritaires.
 
 Ordre conseillé : **UXCFG-01**, puis **UXCFG-02**, puis **UXCFG-03**.
 
@@ -236,7 +240,35 @@ Ordre conseillé : **UXCFG-01**, puis **UXCFG-02**, puis **UXCFG-03**.
   Portée : décision explicite sur la règle de priorité, puis alignement des messages/règles côté backend et UI.
   Critères d’acceptation : la validation applique une logique unique et documentée, et les messages d’erreur reflètent cette logique.
 
-Ordre conseillé : **NAK-01**, puis **NAK-02**, puis **NAK-03**, puis **NAK-04**.
+- [x] **NAK-05 — Auto-appliquer les vocabulaires imposés par le modèle NAKALA**
+  Objectif : faire du modèle NAKALA une vraie contrainte active dès son application, sans étape manuelle “Charger”.
+  Portée : pour les colonnes portant `nakala_vocabulary` et/ou `allowed_values` dans les overlays NAKALA, charger automatiquement le vocabulaire utile, afficher immédiatement le domaine autorisé, et persister cet état dans `column-config`.
+  Critères d’acceptation : sur `nakala:type`, `nakala:license`, `dcterms:type`, `dcterms:license` et les autres champs NAKALA concernés, l’utilisateur voit directement les valeurs autorisées par le modèle ; aucune action manuelle n’est requise pour rendre la contrainte visible.
+  Vérifié : préchargement silencieux des vocabulaires configurés, auto-chargement à l’ouverture d’une colonne NAKALA, helper `nakala_vocab_helpers.js`, et exposition de `dcterms:language` avec `nakala_vocabulary: "languages"` dans l’overlay étendu.
+
+- [ ] **NAK-06 — Séparer le domaine autorisé par le modèle du sous-ensemble choisi par l’utilisateur**
+  Objectif : éviter que `allowed_values` serve à la fois de contrainte modèle et de sélection utilisateur.
+  Portée : clarifier et implémenter deux niveaux distincts : 1) domaine autorisé par le modèle NAKALA ; 2) sous-ensemble éventuellement retenu par l’utilisateur pour son jeu de données. Aligner backend, UI et messages de validation.
+  Critères d’acceptation : le modèle continue de représenter le domaine NAKALA autorisé, l’utilisateur peut le restreindre explicitement sans perdre cette information, et les messages d’erreur reflètent correctement le niveau de contrainte appliqué.
+
+- [ ] **NAK-07 — Rendre le sélecteur de vocabulaire exploitable sur les gros référentiels**
+  Objectif : supprimer la limite pratique actuelle sur les vocabulaires volumineux (licences, langues).
+  Portée : remplacer l’affichage tronqué aux 100 premières valeurs par un mécanisme robuste (recherche sur l’ensemble du vocabulaire, pagination ou virtualisation), en conservant compteurs et sélection partielle.
+  Critères d’acceptation : une valeur présente au-delà des 100 premières entrées peut être retrouvée et sélectionnée depuis l’UI, sans contournement manuel.
+
+- [x] **NAK-08 — Proposer des correspondances colonnes → champs NAKALA lors du choix d’un modèle**
+  Objectif : aider l’utilisateur quand les colonnes du fichier ne portent pas déjà les noms exacts `nakala:*` / `dcterms:*`.
+  Portée : heuristiques de suggestion basées sur le nom de colonne (alias, motifs, vocabulaire courant) et, si utile, sur le format détecté ; affichage de propositions confirmables par l’utilisateur lors de l’application d’un modèle NAKALA.
+  Critères d’acceptation : des colonnes comme `title`, `licence`, `language`, `creator_name` ou variantes proches déclenchent une suggestion explicite vers un champ NAKALA pertinent ; aucune correspondance n’est appliquée silencieusement.
+  Vérifié : endpoint `GET /api/jobs/{id}/template-metadata`, helper `nakala_template_match_helpers.js`, bloc UI “Correspondances suggérées” dans la bande modèle avec application explicite unitaire ou en lot, et test d’intégration sur l’application de la config `nakala:creator` à une colonne alias.
+
+- [x] **NAK-09 — Étendre les alias et motifs reconnus pour les champs NAKALA fréquents**
+  Objectif : rendre les suggestions de correspondance réellement utiles sur des fichiers hétérogènes.
+  Portée : définir et maintenir un petit référentiel d’alias/motifs par champ cible (ex. `title`, `main_title`, `lang_title` → `nakala:title` ou `dcterms:title`; `language`, `lang`, `iso_lang` → `dcterms:language`).
+  Critères d’acceptation : le référentiel est documenté et testé ; les suggestions couvrent les cas courants sans sur-généraliser.
+  Vérifié : référentiel étendu dans `nakala_template_match_helpers.js` avec support des groupes de colonnes (`nakala:title_*`, `keywords_*`, `dcterms:identifier*`, etc.), documentation dédiée dans `docs/nakala-template-matching.md`, et tests JS ciblés sur alias exacts et motifs.
+
+Ordre conseillé : **NAK-01**, puis **NAK-02**, puis **NAK-06**, puis **NAK-07**, puis **NAK-08**, puis **NAK-09**, en gardant **NAK-03** et **NAK-04** comme raffinements UX/règles à intégrer dans ce chantier.
 
 ---
 
@@ -276,9 +308,9 @@ Les autres lignes (libellé ↔ URI, champs dcterms, DataCite, collections, etc.
 |------|--------|--------|
 | Étape « Curation » dédiée dans le workflow | Backlog | Pas d’étape séparée aujourd’hui |
 | Édition in-place sur le tableau d'aperçu | Fait | Double-clic ; `POST .../edit-cell` |
-| Curation ciblée (issue → cellule) | Partiel | Navigation / flash cellule côté résultats ; pas d’ouverture automatique en mode édition |
+| Curation ciblée (issue → cellule) | Fait | Depuis Résultats : localisation + ouverture directe en mode édition pour les lignes visibles dans l’aperçu ; fallback explicite hors aperçu |
 | Persistance + revalidation | Fait | `POST .../revalidate` |
-| Historique / undo éditions manuelles | Backlog | |
+| Historique / undo éditions manuelles | Fait | Résumé visible des cellules/lignes touchées depuis la dernière validation + libellés undo/redo enrichis dans l’UI |
 | Export reflétant les edits | Fait | Données du job à jour ; export de travail disponible dès Correctifs + résultats finaux |
 
 ---

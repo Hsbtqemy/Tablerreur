@@ -1,6 +1,102 @@
 /* Tablerreur Web App — Frontend JavaScript (French UI) */
 'use strict';
 
+const _curationHelpers = globalThis.TablerreurCurationHelpers || {
+  canTargetPreviewRow(row1based, maxPreviewRows = 30) {
+    return Number.isInteger(row1based) && row1based >= 1 && row1based <= maxPreviewRows;
+  },
+  buildPreviewLimitMessage(row1based, options = {}) {
+    const maxPreviewRows = Number.isInteger(options.maxPreviewRows) ? options.maxPreviewRows : 30;
+    const mode = options.mode === 'edit' ? 'edit' : 'navigate';
+    const prefix = `Ligne ${row1based} hors aperçu (${maxPreviewRows} premières lignes).`;
+    if (mode === 'edit') {
+      return `${prefix} La correction ciblée n'est disponible que dans l'aperçu. Utilisez l'export de travail ou corrigez cette ligne dans le fichier source.`;
+    }
+    return `${prefix} La localisation directe n'est disponible que dans l'aperçu.`;
+  },
+  makePendingCellNavigation(row1based, colName, options = {}) {
+    return {
+      rowIdx: row1based - 1,
+      colName: String(colName || ''),
+      startEdit: !!options.startEdit,
+    };
+  },
+};
+
+const _formatCompatHelpers = globalThis.TablerreurFormatCompatHelpers || {
+  analyzeFormatPresetSelection({
+    contentType = '',
+    preferredValue = '',
+    compatMap = {},
+    optionValues = [],
+  } = {}) {
+    const preferred = String(preferredValue || '').trim();
+    const allowedValues = Array.isArray(compatMap?.[contentType]) ? compatMap[contentType] : null;
+    const allowed = allowedValues ? new Set(allowedValues) : null;
+    const known = new Set((optionValues || []).map((value) => String(value || '').trim()).filter(Boolean));
+    const hasPreferred = preferred.length > 0 && known.has(preferred);
+    const isCompatible = !preferred || !allowed || allowed.has(preferred);
+    const preserveIncompatible = hasPreferred && !isCompatible;
+
+    return {
+      allowedValues,
+      hasPreferred,
+      isCompatible,
+      preserveIncompatible,
+      effectiveValue: preserveIncompatible || isCompatible ? preferred : '',
+    };
+  },
+  buildIncompatiblePresetLabel(presetLabel, typeLabel) {
+    const preset = String(presetLabel || '').trim() || 'Pr\u00e9r\u00e9glage';
+    const type = String(typeLabel || '').trim() || 'la nature actuelle';
+    return `${preset} \u2014 incompatible avec \u00ab ${type} \u00bb`;
+  },
+};
+
+const _nakalaVocabHelpers = globalThis.TablerreurNakalaVocabHelpers || {
+  formatCountLabel(count) {
+    const n = Number.isInteger(count) ? count : 0;
+    return `${n} valeur${n > 1 ? 's' : ''}`;
+  },
+  resolveNakalaVocabularySelection({
+    vocabValues = [],
+    selectedValues = null,
+  } = {}) {
+    const normalizedValues = Array.isArray(vocabValues)
+      ? vocabValues.map((value) => String(value || '').trim()).filter(Boolean)
+      : [];
+    const knownValues = new Set(normalizedValues);
+    const normalizedSelectedValues = Array.isArray(selectedValues) && selectedValues.length > 0
+      ? selectedValues
+          .map((value) => String(value || '').trim())
+          .filter((value) => knownValues.has(value))
+      : null;
+    const effectiveSelectedValues = normalizedSelectedValues && normalizedSelectedValues.length > 0
+      ? normalizedSelectedValues
+      : null;
+    const selectedCount = effectiveSelectedValues ? effectiveSelectedValues.length : normalizedValues.length;
+    const countMessage = effectiveSelectedValues && selectedCount !== normalizedValues.length
+      ? `${this.formatCountLabel(selectedCount)} s\u00e9lectionn\u00e9e${selectedCount > 1 ? 's' : ''} par l\u2019utilisateur (${this.formatCountLabel(normalizedValues.length)} autoris\u00e9es par le mod\u00e8le NAKALA)`
+      : `${this.formatCountLabel(selectedCount)} autoris\u00e9e${selectedCount > 1 ? 's' : ''} via le vocabulaire NAKALA`;
+
+    return {
+      normalizedValues,
+      effectiveSelectedValues,
+      selectedCount,
+      countMessage,
+    };
+  },
+};
+
+const _nakalaTemplateMatchHelpers = globalThis.TablerreurNakalaTemplateMatchHelpers || {
+  getNakalaFieldLabel(fieldName) {
+    return String(fieldName || '').trim();
+  },
+  suggestTemplateFieldMappings() {
+    return { suggestions: [] };
+  },
+};
+
 // ---------------------------------------------------------------------------
 // État global de l'application
 // ---------------------------------------------------------------------------
@@ -24,6 +120,8 @@ const state = {
   columnFormatSuggestions: {},
   /** Par colonne : suggestion masquée localement jusqu’à nouvelle analyse ou mutation des données. */
   columnFormatSuggestionDismissed: {},
+  templateMetadata: null,
+  templateColumnSuggestions: [],
   activeColumn: null,   // name of the currently open config panel
   /** True après au moins une sauvegarde serveur des réglages colonne (PUT column-config). Utilisé pour FLUX-03 (changement de modèle). */
   userColumnConfigSaved: false,
@@ -33,6 +131,7 @@ const state = {
   loadedVocabLabels: {},  // cache { vocabName: {uri: labelFR} } for datatypes display
   ruleFailures: [],       // échecs d'exécution de règles (moteur)
   exportWarnings: [],     // avertissements_export (fichiers téléchargeables)
+  historyState: null,     // can_undo/can_redo + descriptions + résumé des éditions manuelles
   /** Lignes d’aperçu Configurer (GET /preview) pour l’exemple vertical */
   previewDataRows: null,
   /** Index 0-based de la ligne affichée pour les valeurs d’exemple dans la liste des colonnes */
@@ -42,6 +141,8 @@ const state = {
   formatSuggestionSeq: 0,
 };
 let _currentProblemsTotal = 0;
+const _nakalaVocabLoadPromises = {};
+let _vocabSelectorState = null;
 
 /** Clés legacy (sessionStorage) — migrées vers ACTIVE_JOB_KEY */
 const SESSION_JOB_ID_KEY = 'tablerreur.job_id';
@@ -360,11 +461,14 @@ const FORMAT_PRESET_LABELS = {
   letters_only: 'Lettres uniquement',
   integer: 'Nombre entier',
   decimal: 'Nombre décimal',
+  integer_or_decimal: 'Nombre entier ou décimal',
   positive_int: 'Nombre entier positif',
   doi: 'DOI',
   orcid: 'ORCID',
   ark: 'ARK',
   issn: 'ISSN',
+  handle: 'Handle',
+  isbn: 'ISBN (10 ou 13)',
   isbn13: 'ISBN-13',
   isbn10: 'ISBN-10',
   email_preset: 'Adresse e-mail',
@@ -372,6 +476,8 @@ const FORMAT_PRESET_LABELS = {
   w3cdtf: 'Date W3C-DTF',
   iso_date: 'Date ISO stricte',
   date_fr: 'Date française (JJ/MM/AAAA)',
+  month_year: 'Mois / année (MM/AAAA)',
+  date_month_words: 'Mois (libellé) et année',
   lang_iso639: 'Langue ISO 639',
   bcp47: 'Langue BCP 47',
   country_iso: 'Pays ISO 3166',
@@ -388,11 +494,14 @@ const _FORMAT_PRESET_SHORT = {
   letters_only: 'Lettres',
   integer: 'Entier',
   decimal: 'Décimal',
+  integer_or_decimal: 'Entier/décimal',
   positive_int: 'Entier +',
   doi: 'DOI',
   orcid: 'ORCID',
   ark: 'ARK',
   issn: 'ISSN',
+  handle: 'Handle',
+  isbn: 'ISBN',
   isbn13: 'ISBN-13',
   isbn10: 'ISBN-10',
   email_preset: 'E-mail',
@@ -400,6 +509,8 @@ const _FORMAT_PRESET_SHORT = {
   w3cdtf: 'W3C-DTF',
   iso_date: 'ISO',
   date_fr: 'JJ/MM/AAAA',
+  month_year: 'MM/AAAA',
+  date_month_words: 'Mois + année',
   lang_iso639: 'ISO 639',
   bcp47: 'BCP 47',
   country_iso: 'Pays',
@@ -410,12 +521,12 @@ const _FORMAT_PRESET_SHORT = {
 
 const CONTENT_TYPE_FORMAT_COMPAT = {
   text: ['alphanum', 'letters_only', 'custom'],
-  number: ['integer', 'decimal', 'year', 'positive_int', 'latitude', 'longitude', 'custom'],
+  number: ['integer', 'decimal', 'integer_or_decimal', 'year', 'positive_int', 'latitude', 'longitude', 'custom'],
   integer: ['integer', 'year', 'positive_int', 'custom'],
-  decimal: ['decimal', 'latitude', 'longitude', 'custom'],
-  date: ['year', 'w3cdtf', 'iso_date', 'date_fr', 'custom'],
+  decimal: ['decimal', 'integer_or_decimal', 'latitude', 'longitude', 'custom'],
+  date: ['year', 'w3cdtf', 'iso_date', 'date_fr', 'month_year', 'date_month_words', 'custom'],
   boolean: ['yes_no', 'custom'],
-  identifier: ['doi', 'orcid', 'ark', 'issn', 'isbn13', 'isbn10', 'custom'],
+  identifier: ['doi', 'orcid', 'ark', 'issn', 'handle', 'isbn', 'isbn13', 'isbn10', 'custom'],
   language: ['lang_iso639', 'bcp47', 'custom'],
   country: ['country_iso', 'custom'],
   address: ['email_preset', 'url', 'custom'],
@@ -425,12 +536,12 @@ const CONTENT_TYPE_FORMAT_COMPAT = {
 
 const CONTENT_TYPE_FORMAT_HINTS = {
   text: 'Formats compatibles : alphanumérique, lettres uniquement ou regex personnalisée.',
-  number: 'Formats compatibles : entier, décimal, année, entier positif, latitude, longitude ou regex personnalisée.',
+  number: 'Formats compatibles : entier, décimal, entier ou décimal, année, entier positif, latitude, longitude ou regex personnalisée.',
   integer: 'Formats compatibles : entier, année, entier positif ou regex personnalisée.',
-  decimal: 'Formats compatibles : décimal, latitude, longitude ou regex personnalisée.',
-  date: 'Formats compatibles : année, W3C-DTF, ISO stricte, date française ou regex personnalisée.',
+  decimal: 'Formats compatibles : décimal, entier ou décimal, latitude, longitude ou regex personnalisée.',
+  date: 'Formats compatibles : année, W3C-DTF, ISO stricte, date française, mois / année, mois en toutes lettres + année, ou regex personnalisée.',
   boolean: 'Formats compatibles : Oui / Non ou regex personnalisée.',
-  identifier: 'Formats compatibles : DOI, ORCID, ARK, ISSN, ISBN-10, ISBN-13 ou regex personnalisée.',
+  identifier: 'Formats compatibles : DOI, ORCID, ARK, ISSN, Handle, ISBN, ISBN-10, ISBN-13 ou regex personnalisée.',
   language: 'Formats compatibles : ISO 639, BCP 47 ou regex personnalisée.',
   country: 'Formats compatibles : ISO 3166 ou regex personnalisée.',
   address: 'Formats compatibles : adresse e-mail, URL ou regex personnalisée.',
@@ -478,13 +589,21 @@ function _captureFormatPresetOptions() {
 }
 
 const _FORMAT_PRESET_OPTION_SOURCE = _captureFormatPresetOptions();
+const _FORMAT_PRESET_OPTION_VALUES = _FORMAT_PRESET_OPTION_SOURCE.groups.flatMap((group) =>
+  group.options.map((option) => option.value)
+);
 
-function _rebuildFormatPresetOptions(contentType, preferredValue = '') {
+function _rebuildFormatPresetOptions(contentType, preferredValue = '', options = {}) {
   const select = document.getElementById('cfg-format-preset');
   if (!select) return '';
 
-  const allowedValues = CONTENT_TYPE_FORMAT_COMPAT[contentType] || null;
-  const allowed = allowedValues ? new Set(allowedValues) : null;
+  const preserveIncompatible = options.preserveIncompatible === true;
+  const analysis = _formatCompatHelpers.analyzeFormatPresetSelection({
+    contentType,
+    preferredValue,
+    compatMap: CONTENT_TYPE_FORMAT_COMPAT,
+    optionValues: _FORMAT_PRESET_OPTION_VALUES,
+  });
   select.innerHTML = '';
 
   if (_FORMAT_PRESET_OPTION_SOURCE.placeholder) {
@@ -494,12 +613,23 @@ function _rebuildFormatPresetOptions(contentType, preferredValue = '') {
     select.appendChild(opt);
   }
 
+  if (preserveIncompatible && analysis.preserveIncompatible) {
+    const opt = document.createElement('option');
+    opt.value = analysis.effectiveValue;
+    opt.dataset.compat = 'incompatible';
+    opt.textContent = _formatCompatHelpers.buildIncompatiblePresetLabel(
+      FORMAT_PRESET_LABELS[analysis.effectiveValue] || analysis.effectiveValue,
+      CONTENT_TYPE_LABELS[contentType] || contentType || 'la nature actuelle',
+    );
+    select.appendChild(opt);
+  }
+
   _FORMAT_PRESET_OPTION_SOURCE.groups.forEach((group) => {
-    const options = group.options.filter((opt) => !allowed || allowed.has(opt.value));
-    if (!options.length) return;
+    const groupOptions = group.options.filter((opt) => !analysis.allowedValues || analysis.allowedValues.includes(opt.value));
+    if (!groupOptions.length) return;
     const optgroup = document.createElement('optgroup');
     optgroup.label = group.label;
-    options.forEach((item) => {
+    groupOptions.forEach((item) => {
       const opt = document.createElement('option');
       opt.value = item.value;
       opt.textContent = item.label;
@@ -508,20 +638,18 @@ function _rebuildFormatPresetOptions(contentType, preferredValue = '') {
     select.appendChild(optgroup);
   });
 
-  const effectiveValue = preferredValue && (!allowed || allowed.has(preferredValue))
-    ? preferredValue
-    : '';
-  select.value = effectiveValue;
-  return effectiveValue;
+  select.value = analysis.effectiveValue;
+  return analysis.effectiveValue;
 }
 
-function _syncFormatPresetOptions(preferredValue = null) {
+function _syncFormatPresetOptions(preferredValue = null, options = {}) {
   const contentType = document.getElementById('cfg-content-type')?.value || '';
   const select = document.getElementById('cfg-format-preset');
   const fallbackValue = select?.value || '';
   const effectiveValue = _rebuildFormatPresetOptions(
     contentType,
     preferredValue == null ? fallbackValue : preferredValue,
+    options,
   );
   _updateFormatPresetUI(effectiveValue, contentType);
   return effectiveValue;
@@ -817,6 +945,238 @@ function _refreshFormatSuggestionUI() {
     return;
   }
   _renderFormatSuggestion(state.activeColumn);
+}
+
+function _hideTemplateColumnSuggestions() {
+  const card = document.getElementById('template-column-suggestions');
+  const listEl = document.getElementById('template-column-suggestions-list');
+  const messageEl = document.getElementById('template-column-suggestions-message');
+  const noteEl = document.getElementById('template-column-suggestions-note');
+  const actionsEl = document.getElementById('template-column-suggestions-actions');
+  if (!card || !listEl || !messageEl || !noteEl || !actionsEl) return;
+  card.hidden = true;
+  card.className = 'template-column-suggestions';
+  listEl.hidden = true;
+  listEl.innerHTML = '';
+  messageEl.textContent = '';
+  noteEl.hidden = true;
+  noteEl.textContent = '';
+  actionsEl.hidden = true;
+}
+
+function _templateSuggestionReasonText(entry) {
+  const alias = entry?.matchedAlias ? `« ${entry.matchedAlias} »` : 'un alias connu';
+  switch (entry?.matchKind) {
+    case 'exact':
+      return `Nom reconnu exactement via ${alias}.`;
+    case 'pattern':
+      return `Motif reconnu via ${alias}.`;
+    case 'edge':
+      return `Nom de colonne commençant ou finissant par ${alias}.`;
+    case 'contains_tokens':
+      return `Nom de colonne contenant directement ${alias}.`;
+    case 'token_subset':
+      return `Motif proche reconnu via ${alias}.`;
+    case 'contains':
+      return `Correspondance textuelle approchée via ${alias}.`;
+    default:
+      return 'Correspondance proposée à partir du nom de la colonne.';
+  }
+}
+
+function _templateSuggestionRequirementLabel(entry) {
+  if (entry?.requirement === 'required') return 'Champ attendu';
+  if (entry?.requirement === 'recommended') return 'Champ recommandé';
+  return 'Champ du modèle';
+}
+
+function _selectedTemplateLabel() {
+  const sel = document.getElementById('template-id');
+  return sel?.selectedOptions?.[0]?.textContent?.trim() || 'ce modèle';
+}
+
+function _isNakalaTemplateMetadata(metadata) {
+  const overlayId = String(metadata?.overlay_id || '').trim();
+  if (overlayId.startsWith('nakala_')) return true;
+  const targetNames = [
+    ...Object.keys(metadata?.columns || {}),
+    ...Object.keys(metadata?.column_groups || {}),
+  ];
+  return targetNames.some((fieldName) => (
+    String(fieldName || '').startsWith('nakala:') || String(fieldName || '').startsWith('dcterms:') || String(fieldName || '').startsWith('keywords_')
+  ));
+}
+
+function _renderTemplateColumnSuggestions() {
+  const card = document.getElementById('template-column-suggestions');
+  const listEl = document.getElementById('template-column-suggestions-list');
+  const messageEl = document.getElementById('template-column-suggestions-message');
+  const noteEl = document.getElementById('template-column-suggestions-note');
+  const actionsEl = document.getElementById('template-column-suggestions-actions');
+  const applyAllBtn = document.getElementById('btn-apply-all-template-suggestions');
+  if (!card || !listEl || !messageEl || !noteEl || !actionsEl || !applyAllBtn) return;
+
+  const suggestions = Array.isArray(state.templateColumnSuggestions)
+    ? state.templateColumnSuggestions
+    : [];
+  const applicable = suggestions.filter((entry) => !entry.userSaved);
+
+  card.className = 'template-column-suggestions';
+  listEl.innerHTML = '';
+
+  if (!_isNakalaTemplateMetadata(state.templateMetadata)) {
+    _hideTemplateColumnSuggestions();
+    return;
+  }
+
+  if (suggestions.length === 0) {
+    card.classList.add('is-muted');
+    messageEl.textContent = `Aucune correspondance évidente trouvée pour ${_selectedTemplateLabel()}.`;
+    noteEl.hidden = false;
+    noteEl.textContent = 'Le modèle reste actif sur les colonnes déjà nommées en NAKALA ; pour le reste, ouvrez une colonne et configurez-la manuellement si besoin.';
+    listEl.hidden = true;
+    actionsEl.hidden = true;
+    card.hidden = false;
+    return;
+  }
+
+  const blockedCount = suggestions.length - applicable.length;
+  messageEl.textContent = `${suggestions.length} correspondance${suggestions.length > 1 ? 's' : ''} suggérée${suggestions.length > 1 ? 's' : ''} pour ${_selectedTemplateLabel()}.`;
+  noteEl.hidden = false;
+  noteEl.textContent = blockedCount > 0
+    ? `${blockedCount} colonne${blockedCount > 1 ? 's' : ''} déjà enregistrée${blockedCount > 1 ? 's restent' : ' reste'} informative${blockedCount > 1 ? 's' : ''} pour éviter d'écraser un réglage manuel. Les suggestions copient les contraintes du champ NAKALA sans renommer la colonne source.`
+    : 'Les suggestions copient les contraintes du champ NAKALA sans renommer la colonne source.';
+
+  suggestions.forEach((entry, index) => {
+    const row = document.createElement('div');
+    row.className = 'template-column-suggestion-row';
+    if (entry.userSaved) row.classList.add('is-blocked');
+
+    const copy = document.createElement('div');
+    copy.className = 'template-column-suggestion-copy';
+
+    const title = document.createElement('p');
+    title.className = 'template-column-suggestion-title';
+    title.innerHTML = `<code>${esc(entry.sourceColumn)}</code> → <strong>${esc(entry.targetLabel || _nakalaTemplateMatchHelpers.getNakalaFieldLabel(entry.targetField))}</strong> <span class="template-column-suggestion-target">(${esc(entry.targetField)})</span>`;
+    copy.appendChild(title);
+
+    const meta = document.createElement('p');
+    meta.className = 'template-column-suggestion-meta format-hint';
+    const score = `${Math.round(Number(entry.score || 0) * 100)} %`;
+    meta.textContent = `${_templateSuggestionRequirementLabel(entry)} · ${_templateSuggestionReasonText(entry)} · Confiance ${score}.`;
+    copy.appendChild(meta);
+
+    row.appendChild(copy);
+
+    const action = document.createElement('button');
+    action.type = 'button';
+    action.className = 'btn btn-secondary btn-sm';
+    action.textContent = entry.userSaved ? 'Déjà personnalisée' : 'Appliquer';
+    action.disabled = !!entry.userSaved;
+    action.addEventListener('click', () => {
+      void applyTemplateSuggestion(index);
+    });
+    row.appendChild(action);
+
+    listEl.appendChild(row);
+  });
+
+  listEl.hidden = false;
+  applyAllBtn.hidden = applicable.length <= 1;
+  actionsEl.hidden = applicable.length === 0;
+  card.hidden = false;
+}
+
+function _refreshTemplateColumnSuggestions() {
+  if (!state.jobId || !_isNakalaTemplateMetadata(state.templateMetadata)) {
+    state.templateColumnSuggestions = [];
+    _hideTemplateColumnSuggestions();
+    return;
+  }
+
+  const analysis = _nakalaTemplateMatchHelpers.suggestTemplateFieldMappings({
+    availableColumns: state.columns,
+    templateColumns: state.templateMetadata?.columns || {},
+    templateColumnGroups: state.templateMetadata?.column_groups || {},
+    requiredColumns: state.templateMetadata?.required_columns || [],
+    recommendedColumns: state.templateMetadata?.recommended_columns || [],
+    userSavedColumns: state.columnUserSaved,
+  });
+  state.templateColumnSuggestions = Array.isArray(analysis?.suggestions) ? analysis.suggestions : [];
+  _renderTemplateColumnSuggestions();
+}
+
+async function _persistTemplateColumnSuggestions(entries) {
+  const selectedEntries = Array.isArray(entries) ? entries.filter(Boolean) : [];
+  if (!state.jobId || selectedEntries.length === 0) return 0;
+
+  const columnsPayload = {};
+  selectedEntries.forEach((entry) => {
+    const templateCfg = entry.targetSource === 'column_group'
+      ? state.templateMetadata?.column_groups?.[entry.targetField]
+      : state.templateMetadata?.columns?.[entry.targetField];
+    if (!templateCfg || entry.userSaved) return;
+    columnsPayload[entry.sourceColumn] = JSON.parse(JSON.stringify(templateCfg));
+  });
+
+  const payloadColumns = Object.keys(columnsPayload);
+  if (payloadColumns.length === 0) return 0;
+
+  const resp = await fetch(`/api/jobs/${state.jobId}/column-config`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ columns: columnsPayload }),
+  });
+  if (!resp.ok) {
+    throw new Error('Échec de l’enregistrement des correspondances suggérées.');
+  }
+
+  _markUserColumnConfigSaved();
+  payloadColumns.forEach((colName) => {
+    state.columnUserSaved[colName] = true;
+  });
+  await _reloadColumnConfigFromServer();
+  _updateColumnBadges();
+  _refreshTemplateColumnSuggestions();
+
+  if (state.activeColumn && payloadColumns.includes(state.activeColumn)) {
+    openColumnConfig(state.activeColumn);
+  }
+  return payloadColumns.length;
+}
+
+async function applyTemplateSuggestion(index) {
+  const suggestion = state.templateColumnSuggestions?.[index] || null;
+  if (!suggestion || suggestion.userSaved) return;
+  try {
+    const applied = await _persistTemplateColumnSuggestions([suggestion]);
+    if (applied > 0) {
+      _showToast(
+        `Correspondance appliquée : ${suggestion.sourceColumn} reprend maintenant les contraintes de ${suggestion.targetField}.`,
+        'success',
+        5000
+      );
+    }
+  } catch (err) {
+    _showToast(err?.message || 'Impossible d’appliquer cette correspondance.', 'error', 6000);
+  }
+}
+
+async function applyAllTemplateSuggestions() {
+  const applicable = (state.templateColumnSuggestions || []).filter((entry) => !entry.userSaved);
+  if (applicable.length === 0) return;
+  try {
+    const applied = await _persistTemplateColumnSuggestions(applicable);
+    if (applied > 0) {
+      _showToast(
+        `${applied} correspondance${applied > 1 ? 's' : ''} NAKALA appliquée${applied > 1 ? 's' : ''}.`,
+        'success',
+        5000
+      );
+    }
+  } catch (err) {
+    _showToast(err?.message || 'Impossible d’appliquer les correspondances suggérées.', 'error', 6000);
+  }
 }
 
 function _invalidateFormatSuggestionCache(colName = null) {
@@ -1674,12 +2034,15 @@ async function doUpload(options = {}) {
     state.columnUserFormatSaved = {};
     state.columnFormatSuggestions = {};
     state.columnFormatSuggestionDismissed = {};
+    state.templateMetadata = null;
+    state.templateColumnSuggestions = [];
     state.formatSuggestionSeq = 0;
     state.userColumnConfigSaved = false;
     state.activeColumn = null;
     state.validationDone = false;
     state.ruleFailures = [];
     state.exportWarnings = [];
+    state.historyState = null;
     _currentProblemsTotal = 0;
     _hideCellsEditedBanner();
     _hideFormatSuggestion();
@@ -1764,12 +2127,15 @@ const FORMAT_PRESETS = {
   yes_no:       { regex: '(?i)^(oui|non|o|n|yes|no|vrai|faux|true|false|1|0|actif|inactif|active|inactive|enabled|disabled)$', hint: 'Accepte : oui/non, vrai/faux, 1/0, actif/inactif, enabled/disabled (majuscules ou minuscules).' },
   alphanum:     { regex: '^[A-Za-z0-9]+$',                      hint: 'Accepte : ABC123, test42. Rejette : test@42, hello world.' },
   letters_only: { regex: "^[A-Za-z\\u00C0-\\u00FF\\s\\-']+$",  hint: "Accepte : Jean-Pierre, José, l'Île. Rejette : test123, @nom." },
+  integer_or_decimal: { regex: '^-?\\d+(?:[\\.,]\\d+)?$',      hint: 'Accepte : 42, 3.14, 2,5, -0.75. Rejette : 12.3.4, texte.' },
   positive_int: { regex: '^\\d+$',                              hint: 'Accepte : 0, 42, 1000. Rejette : -1, 3.14.' },
   // Identifiants & liens
   doi:          { regex: '^10\\.\\d{4,9}/[^\\s]+$',            hint: "Accepte : 10.1000/xyz123, 10.5281/zenodo.12345. Rejette : doi:10.1000 (préfixe 'doi:' non inclus), texte libre." },
   orcid:        { regex: '^\\d{4}-\\d{4}-\\d{4}-\\d{3}[\\dX]$', hint: 'Accepte : 0000-0002-1825-0097, 0000-0001-5109-3700. Rejette : sans tirets, trop court.' },
   ark:          { regex: '^ark:/\\d{5}/.+$',                    hint: 'Accepte : ark:/67375/ABC-123. Rejette : ark:67375 (manque le /), texte libre.' },
   issn:         { regex: '^\\d{4}-\\d{3}[\\dX]$',              hint: 'Accepte : 0317-8471, 1234-567X. Rejette : sans tiret, trop court.' },
+  handle:       { regex: '^(?!10\\.\\d{4,9}/)(?:\\d{4,9}|\\d{2,}\\.\\d+(?:\\.\\d+)*)/\\S+$', hint: 'Accepte : 123456789/42, 20.500.12345/abc. Rejette : DOI, texte libre, espace.' },
+  isbn:         { regex: '^(?:97[89][\\d\\- ]{10,14}|[\\dX\\- ]{10,13})$', hint: 'Accepte : ISBN-10 ou ISBN-13, avec ou sans tirets. Rejette : trop court, texte libre.' },
   isbn13:       { regex: '^97[89][\\d\\- ]{10,14}$',            hint: 'Accepte : 9781234567890, 978-1-23-456789-0. Rejette : 123456789, trop court.' },
   isbn10:       { regex: '^[\\dX\\- ]{10,13}$',                hint: 'Accepte : 0123456789, 012345678X, 0-12-345678-9. Rejette : trop court, lettres.' },
   email_preset: { regex: '^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$',     hint: 'Accepte : user@example.com, a.b@c.fr. Rejette : user@, @domain, texte libre.' },
@@ -1778,9 +2144,14 @@ const FORMAT_PRESETS = {
   w3cdtf:       { regex: '^\\d{4}(-\\d{2}(-\\d{2})?)?$',       hint: 'Accepte : 2024, 2024-01, 2024-01-15. Rejette : 15/01/2024, 24.' },
   iso_date:     { regex: '^\\d{4}-\\d{2}-\\d{2}$',             hint: 'Accepte : 2024-01-15. Rejette : 2024, 15/01/2024, 2024-1-5.' },
   date_fr:      { regex: '^\\d{2}/\\d{2}/\\d{4}$',             hint: 'Accepte : 15/01/2024, 01/12/1999. Rejette : 2024-01-15 (format ISO), 1/1/2024 (sans zéros).' },
+  month_year:   { regex: '^(0[1-9]|1[0-2])/\\d{4}$',           hint: 'Accepte : 01/2024, 12/1999. Rejette : 2024-01, 1/2024, 13/2024.' },
+  date_month_words: {
+    regex: '(?i)^(?:(?:[0-3]?\\d)\\s+)?(?:janvier|février|fevrier|mars|avril|mai|juin|juillet|août|aout|septembre|octobre|novembre|décembre|decembre|january|february|march|april|may|june|july|august|september|october|november|december|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\\s+\\d{4}$',
+    hint: 'Accepte : janvier 2024, March 2019, marzo 2024, 15 octubre 2023. Rejette : 01/01/2024, 2024-01-15.',
+  },
   // Codes & référentiels
-  lang_iso639:  { regex: '(?i)^[a-z]{2,3}$',                   hint: 'Accepte : fr, en, de, ita, oci. Rejette : français, FR-fr, french.' },
-  bcp47:        { regex: '^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8})*$', hint: 'Accepte : fr, fr-FR, en-GB, oc, pt-BR. Rejette : français, FRA (trop long sans subtag).' },
+  lang_iso639:  { regex: '(?i)^[a-z]{2,3}$',                   hint: 'Masque large ; la validation applique la liste ISO 639 (codes enregistrés uniquement). Ex. : fr, en, eng. Rejette : sous-étiquettes (fr-FR), texte libre.' },
+  bcp47:        { regex: '^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8})*$', hint: 'Masque large ; la validation vérifie le code langue primaire (ISO 639-1 / ISO 639-2). Ex. : fr, eng, fr-FR. Rejette : texte libre, codes hors référentiel.' },
   country_iso:  { regex: '^[A-Z]{2}$',                         hint: 'Accepte : FR, DE, US, IT. Rejette : fra (3 lettres), France (nom complet), fr (minuscules).' },
   // Nombres & mesures
   integer:      { regex: '^-?\\d+$',                           hint: 'Accepte : 42, -7, 0. Rejette : 3.14, 2,5, texte.' },
@@ -1810,6 +2181,30 @@ function _updateFormatPresetUI(presetValue, contentType = null) {
   const customWrap  = document.getElementById('cfg-custom-regex-wrap');
   const yesnoWrap   = document.getElementById('cfg-yesno-wrap');
   const currentType = contentType ?? (document.getElementById('cfg-content-type')?.value || '');
+  const analysis = _formatCompatHelpers.analyzeFormatPresetSelection({
+    contentType: currentType,
+    preferredValue: presetValue,
+    compatMap: CONTENT_TYPE_FORMAT_COMPAT,
+    optionValues: _FORMAT_PRESET_OPTION_VALUES,
+  });
+  const incompatHint = analysis.preserveIncompatible
+    ? _formatCompatHelpers.buildIncompatiblePresetLabel(
+        FORMAT_PRESET_LABELS[presetValue] || presetValue,
+        CONTENT_TYPE_LABELS[currentType] || currentType || 'la nature actuelle',
+      )
+    : '';
+  const applyHintText = (presetHint) => {
+    if (!hintEl) return;
+    const baseHint = String(presetHint || '').trim();
+    if (incompatHint && baseHint) {
+      hintEl.textContent = `${incompatHint}. ${baseHint}`;
+    } else if (incompatHint) {
+      hintEl.textContent = incompatHint;
+    } else {
+      hintEl.textContent = baseHint;
+    }
+    hintEl.hidden = !hintEl.textContent;
+  };
 
   hintEl.hidden     = true;
   customWrap.hidden = true;
@@ -1818,15 +2213,14 @@ function _updateFormatPresetUI(presetValue, contentType = null) {
   if (presetValue === 'custom') {
     customWrap.hidden = false;
   } else if (presetValue === 'yes_no') {
-    hintEl.textContent = FORMAT_PRESETS['yes_no'].hint;
-    hintEl.hidden = false;
+    applyHintText(FORMAT_PRESETS['yes_no'].hint);
     yesnoWrap.hidden = false;
   } else if (presetValue && FORMAT_PRESETS[presetValue]) {
-    hintEl.textContent = FORMAT_PRESETS[presetValue].hint;
-    hintEl.hidden = false;
+    applyHintText(FORMAT_PRESETS[presetValue].hint);
   } else if (currentType && CONTENT_TYPE_FORMAT_HINTS[currentType]) {
-    hintEl.textContent = CONTENT_TYPE_FORMAT_HINTS[currentType];
-    hintEl.hidden = false;
+    applyHintText(CONTENT_TYPE_FORMAT_HINTS[currentType]);
+  } else if (incompatHint) {
+    applyHintText('');
   }
 }
 
@@ -2048,6 +2442,9 @@ async function loadPreview() {
   _restoreJobSession();
   _syncConfigureStepButton();
   if (!state.jobId) {
+    state.templateMetadata = null;
+    state.templateColumnSuggestions = [];
+    _hideTemplateColumnSuggestions();
     _setColumnNavNoSessionMessage();
     return;
   }
@@ -2058,6 +2455,9 @@ async function loadPreview() {
   const body = document.getElementById('preview-body');
   if (!loadingEl || !tableEl || !headerRow || !body) {
     console.error('loadPreview: éléments #preview-loading / #preview-table introuvables');
+    state.templateMetadata = null;
+    state.templateColumnSuggestions = [];
+    _hideTemplateColumnSuggestions();
     const colNavMissing = _getColumnNavEl();
     if (colNavMissing) {
       colNavMissing.removeAttribute('aria-busy');
@@ -2089,9 +2489,10 @@ async function loadPreview() {
   _updateSampleLinePickerVisibility();
 
   try {
-    const [previewResp, configResp] = await Promise.all([
+    const [previewResp, configResp, templateMetaResp] = await Promise.all([
       fetch(`/api/jobs/${state.jobId}/preview?rows=30`),
       fetch(`/api/jobs/${state.jobId}/column-config`),
+      fetch(`/api/jobs/${state.jobId}/template-metadata`).catch(() => null),
     ]);
 
     if (!previewResp.ok) {
@@ -2109,6 +2510,12 @@ async function loadPreview() {
       state.columnConfig = configData.columns || {};
       state.columnUserSaved = configData.user_overrides || {};
       state.columnUserFormatSaved = configData.user_format_overrides || {};
+      _prefetchNakalaVocabularies(state.columnConfig);
+    }
+    if (templateMetaResp && templateMetaResp.ok) {
+      state.templateMetadata = await templateMetaResp.json();
+    } else {
+      state.templateMetadata = null;
     }
 
     let rawCols = Array.isArray(preview.columns) ? preview.columns : [];
@@ -2138,6 +2545,7 @@ async function loadPreview() {
     _buildColumnNavList(state.columns);
 
     _persistJobSession();
+    _refreshTemplateColumnSuggestions();
 
     // Build body rows
     state.previewDataRows.forEach((row, rowIdx) => {
@@ -2187,16 +2595,13 @@ async function loadPreview() {
       const nav = _pendingCellNav;
       _pendingCellNav = null;
       setTimeout(() => {
-        const sel = document.getElementById('sample-row-select');
-        if (sel && !sel.disabled && nav.rowIdx >= 0 && nav.rowIdx < sel.options.length) {
-          state.sampleRowIndex = nav.rowIdx;
-          sel.value = String(nav.rowIdx);
-          _buildColumnNavList(state.columns);
-        }
-        _highlightCell(nav.rowIdx, nav.colName);
+        _activatePendingCellNavigation(nav);
       }, 50);
     }
   } catch (err) {
+    state.templateMetadata = null;
+    state.templateColumnSuggestions = [];
+    _hideTemplateColumnSuggestions();
     loadingEl.textContent = 'Erreur lors du chargement de l\'aperçu : ' + err.message;
     loadingEl.className = 'msg-error';
     if (_previewScrollTopEl) _previewScrollTopEl.hidden = true;
@@ -2280,7 +2685,7 @@ function openColumnConfig(colName) {
   _updateListOptionsState(listSep);
   // Format preset: restore dropdown + conditional fields
   let preset = normalized.preset;
-  preset = _rebuildFormatPresetOptions(contentType, preset);
+  preset = _rebuildFormatPresetOptions(contentType, preset, { preserveIncompatible: true });
   document.getElementById('cfg-regex').value = preset === 'custom' ? (cfg.regex || '') : '';
   // Oui/Non custom values
   document.getElementById('cfg-yesno-true').value  = cfg.yes_no_true_values  || '';
@@ -2333,18 +2738,11 @@ function openColumnConfig(colName) {
   nakalaStatusEl.textContent = '';
   nakalaStatusEl.className = 'format-hint';
 
+  _vocabSelectorState = null;
   // Restaurer le sélecteur de sous-ensemble si le vocabulaire est en cache
   const vocabSelectorEl = document.getElementById('cfg-vocab-selector');
-  const cachedVocab = cfg.nakala_vocabulary ? state.loadedVocabs[cfg.nakala_vocabulary] : null;
-  const cachedLabels = cfg.nakala_vocabulary ? (state.loadedVocabLabels[cfg.nakala_vocabulary] || {}) : {};
-  if (cachedVocab && cachedVocab.length > 0) {
-    const savedSelection = Array.isArray(cfg.allowed_values) && cfg.allowed_values.length > 0
-      ? cfg.allowed_values : null;
-    _buildVocabSelector(cachedVocab, savedSelection, cachedLabels);
-  } else {
-    vocabSelectorEl.hidden = true;
-    document.getElementById('vocab-selector-list').innerHTML = '';
-  }
+  vocabSelectorEl.hidden = true;
+  document.getElementById('vocab-selector-list').innerHTML = '';
 
   // Reset saved indicator
   const savedEl = document.getElementById('col-config-saved');
@@ -2360,6 +2758,7 @@ function openColumnConfig(colName) {
   // Trigger initial preview
   _schedulePreviewRule();
   void _loadFormatSuggestion(colName);
+  void _autoLoadNakalaVocabularyForActiveColumn(cfg);
 
   if (prevOpen && prevOpen !== colName) _updateConfiguredMarker(prevOpen);
   _updateConfiguredMarker(colName);
@@ -2445,6 +2844,16 @@ function _readPanelValues() {
     allowed_values: avList,
     allowed_values_locked: avLocked,
     nakala_vocabulary: document.getElementById('cfg-nakala-vocabulary').value || null,
+    ...(() => {
+      const nk = document.getElementById('cfg-nakala-vocabulary').value || '';
+      const vs = _vocabSelectorState;
+      if (!nk || !vs || !Array.isArray(vs.allValues) || !vs.selectedSet) {
+        return {};
+      }
+      const checked = vs.allValues.filter((value) => vs.selectedSet.has(value));
+      const sel = _nakalaSelectionPayloadForPut(checked, vs.allValues);
+      return { allowed_values_selection: sel };
+    })(),
     // List fields
     list_separator: document.getElementById('cfg-list-separator').value.trim() || null,
     list_unique: document.getElementById('cfg-list-unique').checked || false,
@@ -2850,7 +3259,7 @@ async function undoFix() {
     } else {
       _showToast(data.message || 'Rien à annuler.', 'warning');
     }
-    _syncUndoRedoButtons(data.can_undo, data.can_redo);
+    _applyHistoryState(data);
   } catch (err) {
     _showToast('Erreur : ' + err.message, 'error');
   }
@@ -2873,7 +3282,7 @@ async function redoFix() {
     } else {
       _showToast(data.message || 'Rien à rétablir.', 'warning');
     }
-    _syncUndoRedoButtons(data.can_undo, data.can_redo);
+    _applyHistoryState(data);
   } catch (err) {
     _showToast('Erreur : ' + err.message, 'error');
   }
@@ -2886,11 +3295,72 @@ async function updateUndoRedoButtons() {
     const resp = await fetch(`/api/jobs/${state.jobId}/history`);
     if (!resp.ok) return;
     const data = await resp.json();
-    _syncUndoRedoButtons(data.can_undo, data.can_redo);
+    _applyHistoryState(data);
   } catch (_) { /* non-bloquant */ }
 }
 
-function _syncUndoRedoButtons(canUndo, canRedo) {
+function _formatTouchedRowsLabel(rows) {
+  if (!Array.isArray(rows) || !rows.length) return '';
+  const shown = rows.slice(0, 5).join(', ');
+  const extra = rows.length > 5 ? `, +${rows.length - 5}` : '';
+  return `Lignes touchées : ${shown}${extra}`;
+}
+
+function _renderHistoryStatus() {
+  const history = state.historyState || {};
+  const summaryEl = document.getElementById('cells-edited-summary');
+  const rowsEl = document.getElementById('cells-edited-rows');
+  const lastActionEl = document.getElementById('cells-edited-last-action');
+  const banner = document.getElementById('cells-edited-banner');
+  const historyLine = document.getElementById('history-status-configure');
+
+  if (historyLine) {
+    const parts = [];
+    if (history.undo_description) parts.push(`Annuler : ${history.undo_description}`);
+    if (history.redo_description) parts.push(`Rétablir : ${history.redo_description}`);
+    historyLine.hidden = parts.length === 0;
+    historyLine.textContent = parts.join(' · ');
+  }
+
+  if (!banner || !summaryEl || !rowsEl || !lastActionEl) return;
+  if (!history.has_manual_edits) {
+    banner.hidden = true;
+    summaryEl.textContent = 'Des cellules ont été modifiées manuellement.';
+    rowsEl.textContent = '';
+    lastActionEl.textContent = '';
+    return;
+  }
+
+  const cells = Number(history.manual_edit_cells || 0);
+  const rows = Array.isArray(history.manual_edit_rows) ? history.manual_edit_rows : [];
+  const actions = Number(history.manual_edit_actions || 0);
+  summaryEl.textContent = `${cells} cellule${cells > 1 ? 's' : ''} modifiée${cells > 1 ? 's' : ''} manuellement depuis la dernière validation.`;
+  rowsEl.textContent = _formatTouchedRowsLabel(rows);
+  lastActionEl.textContent = history.last_manual_edit_description
+    ? `Dernière action : ${history.last_manual_edit_description}${actions > 1 ? ` · ${actions} action${actions > 1 ? 's' : ''}` : ''}`
+    : '';
+  banner.hidden = false;
+}
+
+function _applyHistoryState(data = {}) {
+  state.historyState = {
+    can_undo: !!data.can_undo,
+    can_redo: !!data.can_redo,
+    undo_count: Number(data.undo_count || 0),
+    redo_count: Number(data.redo_count || 0),
+    undo_description: data.undo_description || '',
+    redo_description: data.redo_description || '',
+    has_manual_edits: !!data.has_manual_edits,
+    manual_edit_actions: Number(data.manual_edit_actions || 0),
+    manual_edit_cells: Number(data.manual_edit_cells || 0),
+    manual_edit_rows: Array.isArray(data.manual_edit_rows) ? data.manual_edit_rows : [],
+    last_manual_edit_description: data.last_manual_edit_description || '',
+  };
+  _syncUndoRedoButtons(state.historyState.can_undo, state.historyState.can_redo, state.historyState);
+  _renderHistoryStatus();
+}
+
+function _syncUndoRedoButtons(canUndo, canRedo, history = state.historyState || {}) {
   const btnUndo = document.getElementById('btn-undo');
   const btnRedo = document.getElementById('btn-redo');
   if (btnUndo) btnUndo.disabled = !canUndo;
@@ -2900,6 +3370,21 @@ function _syncUndoRedoButtons(canUndo, canRedo) {
   const btnRedoConf = document.getElementById('btn-redo-configure');
   if (btnUndoConf) btnUndoConf.disabled = !canUndo;
   if (btnRedoConf) btnRedoConf.disabled = !canRedo;
+
+  const undoTitle = history.undo_description
+    ? `Annuler : ${history.undo_description}`
+    : 'Annuler la dernière modification des valeurs';
+  const redoTitle = history.redo_description
+    ? `Rétablir : ${history.redo_description}`
+    : 'Rétablir la dernière modification des valeurs';
+  [btnUndo, btnUndoConf].forEach((btn) => {
+    if (!btn) return;
+    btn.title = undoTitle;
+  });
+  [btnRedo, btnRedoConf].forEach((btn) => {
+    if (!btn) return;
+    btn.title = redoTitle;
+  });
 }
 
 function skipFixes() {
@@ -2976,6 +3461,7 @@ async function runValidation() {
     progEl.hidden = true;
     sumEl.hidden = false;
     state.validationDone = true;
+    await updateUndoRedoButtons();
 
     enableStep('results');
     _updateStepCoach();
@@ -3016,8 +3502,6 @@ async function _applySuggestionToCell(rowNum, colName, suggestion) {
     _updatePreviewDataCell(rowNum - 1, colName, suggestion, { markEdited: true });
     _invalidateFormatSuggestionCache(colName);
     _refreshOpenColumnAfterDataMutation(colName);
-    _manualEditsCount++;
-    _showCellsEditedBanner();
     await updateUndoRedoButtons();
     _showToastWithRevalidateLink('Suggestion appliquée. Pensez à re-valider.');
     return true;
@@ -3182,70 +3666,7 @@ async function loadProblems(page) {
         bFix.title = 'Corriger cette cellule';
         bFix.addEventListener('click', async (e) => {
           e.stopPropagation();
-          const colName = tr.dataset.col;
-
-          if (rowNum > 30) {
-            _showToast(
-              `Ligne ${rowNum} hors aperçu (30 lignes max). Corrigez via export ou par lot.`,
-              'warning',
-              6000
-            );
-            return;
-          }
-
-          if (suggestion) {
-            // Afficher un dialogue inline
-            const existing = tdNav.querySelector('.fix-inline-dialog');
-            if (existing) { existing.remove(); return; }
-            const dialog = document.createElement('div');
-            dialog.className = 'fix-inline-dialog';
-            dialog.style.cssText = 'position:absolute;z-index:100;background:var(--color-surface);border:1px solid var(--color-border);border-radius:6px;padding:0.5rem 0.75rem;box-shadow:0 4px 16px rgba(0,0,0,.15);font-size:0.85rem;min-width:200px;right:0;top:1.5rem;';
-            dialog.innerHTML = `<div style="margin-bottom:0.4rem;">Appliquer <strong>${esc(suggestion)}</strong> ?</div>`;
-            const btnApply = document.createElement('button');
-            btnApply.className = 'btn btn-primary btn-sm';
-            btnApply.style.fontSize = '0.8rem';
-            btnApply.style.padding = '3px 10px';
-            btnApply.textContent = 'Appliquer';
-            btnApply.onclick = async () => {
-              dialog.remove();
-              await _applySuggestionToCell(rowNum, colName, suggestion);
-            };
-            const btnEdit = document.createElement('button');
-            btnEdit.className = 'btn btn-secondary btn-sm';
-            btnEdit.style.fontSize = '0.8rem';
-            btnEdit.style.padding = '3px 10px';
-            btnEdit.style.marginLeft = '4px';
-            btnEdit.textContent = 'Modifier';
-            btnEdit.onclick = () => {
-              dialog.remove();
-              navigateToCell(rowNum, colName);
-              setTimeout(() => {
-                const colIdx = state.columns.indexOf(colName);
-                if (colIdx < 0) return;
-                const rows = document.querySelectorAll('#preview-body tr');
-                const tdTarget = rows[rowNum - 1]?.querySelectorAll('td')[colIdx];
-                if (tdTarget) startCellEdit(tdTarget);
-              }, 300);
-            };
-            dialog.appendChild(btnApply);
-            dialog.appendChild(btnEdit);
-            // Fermer en cliquant ailleurs
-            setTimeout(() => document.addEventListener('click', function _close(ev) {
-              if (!dialog.contains(ev.target)) { dialog.remove(); document.removeEventListener('click', _close); }
-            }), 50);
-            tdNav.style.position = 'relative';
-            tdNav.appendChild(dialog);
-          } else {
-            // Pas de suggestion — naviguer + éditer directement
-            navigateToCell(rowNum, colName);
-            setTimeout(() => {
-              const colIdx = state.columns.indexOf(colName);
-              if (colIdx < 0) return;
-              const rows = document.querySelectorAll('#preview-body tr');
-              const tdTarget = rows[rowNum - 1]?.querySelectorAll('td')[colIdx];
-              if (tdTarget) startCellEdit(tdTarget);
-            }, 300);
-          }
+          await _openIssueCellForEdit(rowNum, tr.dataset.col);
         });
         tdNav.appendChild(bFix);
         tr.appendChild(tdNav);
@@ -3505,60 +3926,296 @@ function _toggleAllowedValuesExpand() {
 // ---------------------------------------------------------------------------
 // Vocabulaire distant NAKALA
 // ---------------------------------------------------------------------------
-async function loadNakalaVocabulary() {
-  const vocabName = document.getElementById('cfg-nakala-vocabulary').value;
-  const statusEl  = document.getElementById('nakala-vocab-status');
+function _getNakalaVocabStatusEl() {
+  return document.getElementById('nakala-vocab-status');
+}
 
-  if (!vocabName) {
-    statusEl.textContent = 'Sélectionnez un vocabulaire dans la liste.';
-    statusEl.className = 'format-hint msg-warning';
-    statusEl.hidden = false;
+function _setNakalaVocabStatus(message = '', tone = '') {
+  const statusEl = _getNakalaVocabStatusEl();
+  if (!statusEl) return;
+  const text = String(message || '').trim();
+  statusEl.textContent = text;
+  statusEl.className = tone ? `format-hint ${tone}` : 'format-hint';
+  statusEl.hidden = text.length === 0;
+}
+
+function _hasCachedNakalaVocabulary(vocabName) {
+  return Object.prototype.hasOwnProperty.call(state.loadedVocabs, vocabName);
+}
+
+function _getCachedNakalaVocabulary(vocabName) {
+  return {
+    values: state.loadedVocabs[vocabName] || [],
+    labels: state.loadedVocabLabels[vocabName] || {},
+  };
+}
+
+async function _fetchNakalaVocabularyData(vocabName) {
+  const normalized = String(vocabName || '').trim();
+  if (!normalized) {
+    throw new Error('Vocabulaire NAKALA manquant.');
+  }
+  if (_hasCachedNakalaVocabulary(normalized)) {
+    return { ..._getCachedNakalaVocabulary(normalized), fromCache: true };
+  }
+  if (_nakalaVocabLoadPromises[normalized]) {
+    return _nakalaVocabLoadPromises[normalized];
+  }
+
+  _nakalaVocabLoadPromises[normalized] = (async () => {
+    const resp = await fetch(`/api/nakala/vocabulary/${normalized}`);
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      throw new Error(data.detail || 'Erreur lors du chargement du vocabulaire.');
+    }
+
+    const values = Array.isArray(data.values) ? data.values.map((value) => String(value)) : [];
+    const labels = data && typeof data.labels === 'object' && data.labels ? data.labels : {};
+
+    state.loadedVocabs[normalized] = values;
+    state.loadedVocabLabels[normalized] = labels;
+    return { values, labels, fromCache: false };
+  })();
+
+  try {
+    return await _nakalaVocabLoadPromises[normalized];
+  } finally {
+    delete _nakalaVocabLoadPromises[normalized];
+  }
+}
+
+function _getVocabSelectorSearchText(value, labels = {}) {
+  const rawValue = String(value || '');
+  const label = labels[rawValue] ? `${labels[rawValue]} (${rawValue})` : rawValue;
+  return {
+    label,
+    searchText: label.toLowerCase(),
+  };
+}
+
+function _getCurrentVocabSelectorState() {
+  return _vocabSelectorState || {
+    allValues: [],
+    labels: {},
+    selectedSet: new Set(),
+    query: '',
+  };
+}
+
+function _renderVocabSelectorList() {
+  const selectorEl = document.getElementById('cfg-vocab-selector');
+  const listEl = document.getElementById('vocab-selector-list');
+  const countEl = document.getElementById('vocab-selector-count');
+  const searchEl = document.getElementById('vocab-search');
+  if (!selectorEl || !listEl || !countEl || !searchEl) return;
+
+  const selectorState = _getCurrentVocabSelectorState();
+  const allValues = Array.isArray(selectorState.allValues) ? selectorState.allValues : [];
+  const labels = selectorState.labels || {};
+  const query = String(selectorState.query || '').trim().toLowerCase();
+  const filteredValues = query
+    ? allValues.filter((value) => _getVocabSelectorSearchText(value, labels).searchText.includes(query))
+    : allValues;
+  const renderLimit = query ? filteredValues.length : Math.min(filteredValues.length, 200);
+  const renderedValues = filteredValues.slice(0, renderLimit);
+
+  countEl.textContent = `${allValues.length} valeur${allValues.length > 1 ? 's' : ''} chargée${allValues.length > 1 ? 's' : ''}`;
+  if (searchEl.value !== selectorState.query) {
+    searchEl.value = selectorState.query;
+  }
+
+  listEl.innerHTML = '';
+  renderedValues.forEach((value) => {
+    const labelEl = document.createElement('label');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = value;
+    cb.checked = selectorState.selectedSet.has(value);
+    cb.addEventListener('change', () => {
+      const currentState = _getCurrentVocabSelectorState();
+      if (cb.checked) {
+        currentState.selectedSet.add(value);
+      } else {
+        currentState.selectedSet.delete(value);
+      }
+      _onVocabCheckChange();
+    });
+    labelEl.appendChild(cb);
+    const info = _getVocabSelectorSearchText(value, labels);
+    labelEl.appendChild(document.createTextNode(` ${info.label}`));
+    labelEl.dataset.searchText = info.searchText;
+    listEl.appendChild(labelEl);
+  });
+
+  if (!filteredValues.length) {
+    const note = document.createElement('p');
+    note.className = 'vocab-truncate-note';
+    note.textContent = query
+      ? 'Aucune valeur ne correspond à cette recherche.'
+      : 'Aucune valeur disponible dans ce vocabulaire.';
+    listEl.appendChild(note);
+  } else if (!query && filteredValues.length > renderedValues.length) {
+    const note = document.createElement('p');
+    note.className = 'vocab-truncate-note';
+    note.textContent = `Affichage limité aux ${renderedValues.length} premières valeurs. Utilisez la recherche pour le reste.`;
+    listEl.appendChild(note);
+  }
+
+  selectorEl.hidden = false;
+  _updateVocabCounters(allValues.length);
+}
+
+function _setLockedAllowedValuesUI(values, countMessage) {
+  const normalizedValues = Array.isArray(values)
+    ? values.map((value) => String(value || '').trim()).filter(Boolean)
+    : [];
+  const avEl = document.getElementById('cfg-allowed-values');
+  const countEl = document.getElementById('cfg-av-count-msg');
+  const expandBtn = document.getElementById('cfg-av-voir-tout');
+
+  if (!avEl || !countEl || !expandBtn) return;
+
+  avEl.readOnly = true;
+  avEl.classList.add('av-locked');
+  document.getElementById('cfg-av-locked-msg').hidden = false;
+
+  const previewLines = normalizedValues.slice(0, 20);
+  avEl.value = previewLines.join('\n') + (normalizedValues.length > 20 ? '\n…' : '');
+  countEl.textContent = countMessage || `${normalizedValues.length} valeurs autorisées`;
+  countEl.hidden = false;
+  expandBtn.hidden = true;
+  expandBtn.textContent = 'Voir tout';
+  expandBtn.dataset.full = normalizedValues.join('\n');
+}
+
+function _showNakalaVocabularySelection({
+  vocabName,
+  values,
+  labels,
+  selectedValues = null,
+  persistSelection = false,
+  autoLoaded = false,
+}) {
+  const {
+    normalizedValues,
+    effectiveSelectedValues,
+    selectedCount,
+    countMessage,
+  } = _nakalaVocabHelpers.resolveNakalaVocabularySelection({
+    vocabValues: values,
+    selectedValues,
+  });
+
+  _setLockedAllowedValuesUI(
+    effectiveSelectedValues || normalizedValues,
+    countMessage,
+  );
+  _buildVocabSelector(normalizedValues, effectiveSelectedValues, labels, { persistSelection });
+
+  if (autoLoaded) {
+    _setNakalaVocabStatus(
+      `${selectedCount} valeurs rendues disponibles automatiquement par le modèle NAKALA.`,
+      'msg-info',
+    );
+  } else {
+    _setNakalaVocabStatus(
+      `${normalizedValues.length} valeurs chargées. Affinez la sélection ci-dessous.`,
+      'msg-success',
+    );
+  }
+}
+
+function _prefetchNakalaVocabularies(columnsConfig = {}) {
+  const vocabNames = new Set();
+  Object.values(columnsConfig || {}).forEach((cfg) => {
+    const vocabName = String(cfg?.nakala_vocabulary || '').trim();
+    if (vocabName) vocabNames.add(vocabName);
+  });
+  vocabNames.forEach((vocabName) => {
+    if (vocabName === 'languages') return;
+    void _fetchNakalaVocabularyData(vocabName).catch(() => {});
+  });
+}
+
+async function _autoLoadNakalaVocabularyForActiveColumn(cfg = null) {
+  if (!state.activeColumn) return;
+  const currentCfg = cfg || state.columnConfig[state.activeColumn] || {};
+  const vocabName = String(currentCfg.nakala_vocabulary || '').trim();
+  if (!vocabName) return;
+
+  const rawSel = currentCfg.allowed_values_selection;
+  const selectedValues =
+    Array.isArray(rawSel) && rawSel.length > 0
+      ? rawSel
+      : Array.isArray(currentCfg.allowed_values) && currentCfg.allowed_values.length > 0
+        ? currentCfg.allowed_values
+        : null;
+  const requestColumn = state.activeColumn;
+  const requestVocab = vocabName;
+
+  if (_hasCachedNakalaVocabulary(requestVocab)) {
+    const cached = _getCachedNakalaVocabulary(requestVocab);
+    _showNakalaVocabularySelection({
+      vocabName: requestVocab,
+      values: cached.values,
+      labels: cached.labels,
+      selectedValues,
+      autoLoaded: true,
+    });
     return;
   }
 
-  statusEl.textContent = 'Chargement du vocabulaire…';
-  statusEl.className = 'format-hint';
-  statusEl.hidden = false;
+  _setNakalaVocabStatus('Chargement automatique du vocabulaire NAKALA du modèle…');
   document.getElementById('cfg-vocab-selector').hidden = true;
 
   try {
-    const resp = await fetch(`/api/nakala/vocabulary/${vocabName}`);
-    const data = await resp.json();
+    const data = await _fetchNakalaVocabularyData(requestVocab);
+    if (state.activeColumn !== requestColumn) return;
+    const selectedVocab = document.getElementById('cfg-nakala-vocabulary')?.value || '';
+    if (selectedVocab !== requestVocab) return;
 
-    if (!resp.ok) {
-      statusEl.textContent = data.detail || 'Erreur lors du chargement du vocabulaire.';
-      statusEl.className = 'format-hint msg-error';
-      return;
-    }
-
-    const values = data.values || [];
-    const labels = data.labels || {};
-
-    // Cache for panel-reopen restore
-    state.loadedVocabs[vocabName] = values;
-    state.loadedVocabLabels[vocabName] = labels;
-
-    // Lock the allowed-values textarea and populate it (all values by default)
-    const avEl = document.getElementById('cfg-allowed-values');
-    avEl.readOnly = true;
-    avEl.classList.add('av-locked');
-    document.getElementById('cfg-av-locked-msg').hidden = false;
-
-    const countEl = document.getElementById('cfg-av-count-msg');
-    countEl.textContent = `${values.length} valeurs chargées depuis NAKALA`;
-    countEl.hidden = false;
-    document.getElementById('cfg-av-voir-tout').hidden = true;
-
-    // Build selector — all selected by default (first load)
-    _buildVocabSelector(values, null, labels);
-
-    statusEl.textContent = `${values.length} valeurs chargées. Affinez la sélection ci-dessous.`;
-    statusEl.className = 'format-hint msg-success';
-    statusEl.hidden = false;
-
+    _showNakalaVocabularySelection({
+      vocabName: requestVocab,
+      values: data.values,
+      labels: data.labels,
+      selectedValues,
+      autoLoaded: true,
+    });
   } catch (err) {
-    statusEl.textContent = 'Erreur : ' + err.message;
-    statusEl.className = 'format-hint msg-error';
+    if (state.activeColumn !== requestColumn) return;
+    _setNakalaVocabStatus(`Erreur : ${err.message}`, 'msg-error');
+  }
+}
+
+async function loadNakalaVocabulary() {
+  const vocabName = document.getElementById('cfg-nakala-vocabulary').value;
+  if (!vocabName) {
+    _setNakalaVocabStatus('Sélectionnez un vocabulaire dans la liste.', 'msg-warning');
+    return;
+  }
+
+  _setNakalaVocabStatus('Chargement du vocabulaire…');
+  document.getElementById('cfg-vocab-selector').hidden = true;
+
+  try {
+    const data = await _fetchNakalaVocabularyData(vocabName);
+    const cfg = state.activeColumn ? (state.columnConfig[state.activeColumn] || {}) : {};
+    const rawSel = cfg.allowed_values_selection;
+    const selectedValues =
+      Array.isArray(rawSel) && rawSel.length > 0
+        ? rawSel
+        : Array.isArray(cfg.allowed_values) && cfg.allowed_values.length > 0
+          ? cfg.allowed_values
+          : null;
+    _showNakalaVocabularySelection({
+      vocabName,
+      values: data.values,
+      labels: data.labels,
+      selectedValues,
+      persistSelection: true,
+    });
+  } catch (err) {
+    _setNakalaVocabStatus('Erreur : ' + err.message, 'msg-error');
   }
 }
 
@@ -3570,79 +4227,54 @@ async function loadNakalaVocabulary() {
  *  @param {string[]} allValues  – full vocabulary list
  *  @param {string[]|null} selectedValues – subset to pre-check (null = all)
  *  @param {Object} [labels={}] – optional {uri: labelFR} for datatypes display
+ *  @param {{ persistSelection?: boolean }} [options]
  */
-function _buildVocabSelector(allValues, selectedValues, labels) {
-  labels = labels || {};
-  const selectorEl = document.getElementById('cfg-vocab-selector');
-  const listEl     = document.getElementById('vocab-selector-list');
-  const countEl    = document.getElementById('vocab-selector-count');
-  const searchEl   = document.getElementById('vocab-search');
-
-  const selectedSet = selectedValues ? new Set(selectedValues) : null;
-
-  // For large vocabularies, show only first 100 + note
-  const LIMIT = 100;
-  const displayValues = allValues.length > LIMIT ? allValues.slice(0, LIMIT) : allValues;
-  const truncated = allValues.length > LIMIT;
-
-  countEl.textContent = `${allValues.length} valeur${allValues.length > 1 ? 's' : ''} chargée${allValues.length > 1 ? 's' : ''}`;
-  searchEl.value = '';
-
-  listEl.innerHTML = '';
-  displayValues.forEach(val => {
-    const labelEl = document.createElement('label');
-    const cb = document.createElement('input');
-    cb.type = 'checkbox';
-    cb.value = val;
-    cb.checked = selectedSet === null || selectedSet.has(val);
-    cb.addEventListener('change', _onVocabCheckChange);
-    labelEl.appendChild(cb);
-    // Si un libellé FR est disponible, afficher "Libellé (URI)" ; sinon juste la valeur
-    const labelText = labels[val] ? `${labels[val]} (${val})` : val;
-    labelEl.appendChild(document.createTextNode(' ' + labelText));
-    // Stocker le texte de recherche combiné sur l'élément pour le filtre
-    labelEl.dataset.searchText = labelText.toLowerCase();
-    listEl.appendChild(labelEl);
-  });
-
-  if (truncated) {
-    const note = document.createElement('p');
-    note.className = 'vocab-truncate-note';
-    note.textContent = `Affichage limité aux ${LIMIT} premières valeurs. Utilisez la recherche pour trouver d'autres valeurs.`;
-    listEl.appendChild(note);
+function _buildVocabSelector(allValues, selectedValues, labels, options = {}) {
+  const normalizedValues = Array.isArray(allValues)
+    ? allValues.map((value) => String(value || '').trim()).filter(Boolean)
+    : [];
+  const selectedSet = new Set(
+    Array.isArray(selectedValues) && selectedValues.length > 0
+      ? selectedValues.map((value) => String(value || '').trim()).filter(Boolean)
+      : normalizedValues
+  );
+  _vocabSelectorState = {
+    allValues: normalizedValues,
+    labels: labels || {},
+    selectedSet,
+    query: '',
+  };
+  _renderVocabSelectorList();
+  if (options.persistSelection === true) {
+    _syncVocabToState();
   }
-
-  selectorEl.hidden = false;
-  _updateVocabCounters(allValues.length);
-  _syncVocabToState();
 }
 
 function _filterVocabSearch() {
-  const query = document.getElementById('vocab-search').value.toLowerCase();
-  document.querySelectorAll('#vocab-selector-list label').forEach(label => {
-    // Recherche sur searchText (libellé + URI combinés) stocké en data-attribute
-    const searchText = label.dataset.searchText || label.querySelector('input[type=checkbox]')?.value?.toLowerCase() || '';
-    label.hidden = query !== '' && !searchText.includes(query);
-  });
+  const selectorState = _getCurrentVocabSelectorState();
+  selectorState.query = document.getElementById('vocab-search').value.toLowerCase();
+  _renderVocabSelectorList();
 }
 
 function _vocabSelectAll() {
-  document.querySelectorAll('#vocab-selector-list label').forEach(label => {
-    if (!label.hidden) {
-      const cb = label.querySelector('input[type=checkbox]');
-      if (cb) cb.checked = true;
-    }
-  });
+  const selectorState = _getCurrentVocabSelectorState();
+  const labels = selectorState.labels || {};
+  const query = String(selectorState.query || '').trim().toLowerCase();
+  selectorState.allValues
+    .filter((value) => !query || _getVocabSelectorSearchText(value, labels).searchText.includes(query))
+    .forEach((value) => selectorState.selectedSet.add(value));
+  _renderVocabSelectorList();
   _onVocabCheckChange();
 }
 
 function _vocabSelectNone() {
-  document.querySelectorAll('#vocab-selector-list label').forEach(label => {
-    if (!label.hidden) {
-      const cb = label.querySelector('input[type=checkbox]');
-      if (cb) cb.checked = false;
-    }
-  });
+  const selectorState = _getCurrentVocabSelectorState();
+  const labels = selectorState.labels || {};
+  const query = String(selectorState.query || '').trim().toLowerCase();
+  selectorState.allValues
+    .filter((value) => !query || _getVocabSelectorSearchText(value, labels).searchText.includes(query))
+    .forEach((value) => selectorState.selectedSet.delete(value));
+  _renderVocabSelectorList();
   _onVocabCheckChange();
 }
 
@@ -3653,25 +4285,47 @@ function _onVocabCheckChange() {
   _syncVocabToState();
 }
 
+/** Sous-ensemble explicite pour l’API : null = tout le domaine du modèle (pas de restriction utilisateur). */
+function _nakalaSelectionPayloadForPut(checkedValues, domainValues) {
+  const domain = Array.isArray(domainValues) ? domainValues : [];
+  if (!checkedValues.length || checkedValues.length === domain.length) {
+    return null;
+  }
+  return checkedValues;
+}
+
 function _updateVocabCounters(totalCount) {
-  const checked = document.querySelectorAll('#vocab-selector-list input[type=checkbox]:checked');
+  const selectorState = _getCurrentVocabSelectorState();
+  const checkedCount = selectorState.selectedSet instanceof Set ? selectorState.selectedSet.size : 0;
   document.getElementById('vocab-selected-count').textContent =
-    `${checked.length} / ${totalCount} sélectionnée${checked.length > 1 ? 's' : ''}`;
+    `${checkedCount} / ${totalCount} sélectionnée${checkedCount > 1 ? 's' : ''}`;
 }
 
 /** Write current checkbox selection back to state and update the locked textarea. */
 function _syncVocabToState() {
-  const checkedValues = Array.from(
-    document.querySelectorAll('#vocab-selector-list input[type=checkbox]:checked')
-  ).map(cb => cb.value);
+  const selectorState = _getCurrentVocabSelectorState();
+  const checkedValues = selectorState.selectedSet instanceof Set
+    ? selectorState.allValues.filter((value) => selectorState.selectedSet.has(value))
+    : [];
 
   const vocabName = document.getElementById('cfg-nakala-vocabulary').value;
-  const avEl = document.getElementById('cfg-allowed-values');
-  avEl.value = checkedValues.slice(0, 20).join('\n') + (checkedValues.length > 20 ? '\n…' : '');
+  const domainValues = selectorState.allValues || [];
+  const selectionPayload = _nakalaSelectionPayloadForPut(checkedValues, domainValues);
+  const { normalizedValues, effectiveSelectedValues, countMessage } =
+    _nakalaVocabHelpers.resolveNakalaVocabularySelection({
+      vocabValues: domainValues,
+      selectedValues: selectionPayload,
+    });
+
+  _setLockedAllowedValuesUI(
+    effectiveSelectedValues || normalizedValues,
+    countMessage,
+  );
 
   if (state.activeColumn) {
     if (!state.columnConfig[state.activeColumn]) state.columnConfig[state.activeColumn] = {};
     state.columnConfig[state.activeColumn].allowed_values = checkedValues;
+    state.columnConfig[state.activeColumn].allowed_values_selection = selectionPayload;
     state.columnConfig[state.activeColumn].allowed_values_locked = true;
     state.columnConfig[state.activeColumn].nakala_vocabulary = vocabName;
   }
@@ -3685,6 +4339,7 @@ function _syncVocabToState() {
         columns: {
           [state.activeColumn]: {
             allowed_values: checkedValues,
+            allowed_values_selection: selectionPayload,
             allowed_values_locked: true,
             nakala_vocabulary: vocabName,
           },
@@ -3718,13 +4373,17 @@ function resetApp() {
   state.columnUserSaved = {};
   state.columnUserFormatSaved = {};
   state.columnFormatSuggestions = {};
+  state.templateMetadata = null;
+  state.templateColumnSuggestions = [];
   state.formatSuggestionSeq = 0;
   state.userColumnConfigSaved = false;
   state.uploadPreviewReady = false;
   state.activeColumn = null;
   state.validationDone = false;
+  state.historyState = null;
   _currentProblemsTotal = 0;
   _pendingCellNav = null;
+  _hideTemplateColumnSuggestions();
   const bulkBar = document.getElementById('bulk-action-bar');
   if (bulkBar) bulkBar.hidden = true;
   const checkAll = document.getElementById('check-all-problems');
@@ -3824,30 +4483,75 @@ function resetApp() {
 /** Navigation en attente quand le tableau n'est pas encore rendu. */
 let _pendingCellNav = null;
 
+function _findPreviewCell(rowIdx, colName) {
+  const colIdx = state.columns.indexOf(colName);
+  if (colIdx < 0) return null;
+  const rows = document.querySelectorAll('#preview-body tr');
+  const tr = rows[rowIdx];
+  if (!tr) return null;
+  return tr.querySelectorAll('td')[colIdx] || null;
+}
+
+function _syncSampleRowPicker(rowIdx) {
+  const sel = document.getElementById('sample-row-select');
+  if (!sel || sel.disabled || rowIdx < 0 || rowIdx >= sel.options.length) return;
+  state.sampleRowIndex = rowIdx;
+  sel.value = String(rowIdx);
+  _buildColumnNavList(state.columns);
+}
+
+function _activatePendingCellNavigation(nav) {
+  if (!nav) return false;
+  _syncSampleRowPicker(nav.rowIdx);
+  _highlightCell(nav.rowIdx, nav.colName);
+  if (nav.startEdit) {
+    const td = _findPreviewCell(nav.rowIdx, nav.colName);
+    if (!td) return false;
+    startCellEdit(td);
+  }
+  return true;
+}
+
+async function _openIssueCellForEdit(row1based, colName) {
+  if (!_curationHelpers.canTargetPreviewRow(row1based)) {
+    _showToast(_curationHelpers.buildPreviewLimitMessage(row1based, { mode: 'edit' }), 'warning', 7000);
+    return false;
+  }
+
+  const nav = _curationHelpers.makePendingCellNavigation(row1based, colName, { startEdit: true });
+  if (state.currentStep === 'configure') {
+    if (_activatePendingCellNavigation(nav)) return true;
+    _pendingCellNav = nav;
+    try {
+      await loadPreview();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  _pendingCellNav = nav;
+  goToStep('configure');
+  return true;
+}
+
 /**
  * Naviguer vers une cellule (row 1-based, colName) depuis l'étape Résultats.
  * Si row > 30 : toast informatif (au-delà du preview).
  * Sinon : basculer sur Configurer + scroll + flash.
  */
 function navigateToCell(row1based, colName) {
-  if (row1based > 30) {
-    _showToast(
-      `Ligne ${row1based} — au-delà de l'aperçu (30 premières lignes affichées)`,
-      'warning'
-    );
+  if (!_curationHelpers.canTargetPreviewRow(row1based)) {
+    _showToast(_curationHelpers.buildPreviewLimitMessage(row1based, { mode: 'navigate' }), 'warning');
     return;
   }
-  const rowIdx = row1based - 1;
+  const nav = _curationHelpers.makePendingCellNavigation(row1based, colName);
   if (state.currentStep === 'configure') {
-    const sel = document.getElementById('sample-row-select');
-    if (sel && !sel.disabled && rowIdx >= 0 && rowIdx < sel.options.length) {
-      state.sampleRowIndex = rowIdx;
-      sel.value = String(rowIdx);
-      _buildColumnNavList(state.columns);
-    }
-    _highlightCell(rowIdx, colName);
+    if (_activatePendingCellNavigation(nav)) return;
+    _pendingCellNav = nav;
+    void loadPreview().catch(() => {});
   } else {
-    _pendingCellNav = { rowIdx, colName };
+    _pendingCellNav = nav;
     goToStep('configure');
   }
 }
@@ -4081,6 +4785,7 @@ async function _reloadColumnConfigFromServer() {
           ...data.user_format_overrides,
         };
       }
+      _refreshTemplateColumnSuggestions();
     }
   } catch (_) { /* non-bloquant */ }
 }
@@ -4275,9 +4980,6 @@ function toggleTheme() {
 // Curation — édition in-place des cellules du tableau d'aperçu
 // ---------------------------------------------------------------------------
 
-/** Nombre de cellules modifiées manuellement depuis la dernière validation. */
-let _manualEditsCount = 0;
-
 /**
  * Active le mode édition sur une cellule <td> du tableau d'aperçu.
  * Appelé par dblclick.
@@ -4323,8 +5025,6 @@ function startCellEdit(td) {
           _updatePreviewDataCell(row, col, newValue, { markEdited: true });
           _invalidateFormatSuggestionCache(col);
           _refreshOpenColumnAfterDataMutation(col);
-          _manualEditsCount++;
-          _showCellsEditedBanner();
           await updateUndoRedoButtons();
         }
       } catch (_) { /* non-bloquant */ }
@@ -4349,15 +5049,22 @@ function startCellEdit(td) {
 
 /** Affiche le bandeau "Des cellules ont été modifiées". */
 function _showCellsEditedBanner() {
-  const banner = document.getElementById('cells-edited-banner');
-  if (banner) banner.hidden = false;
+  _renderHistoryStatus();
 }
 
 /** Masque le bandeau de modification. */
 function _hideCellsEditedBanner() {
+  state.historyState = {
+    ...(state.historyState || {}),
+    has_manual_edits: false,
+    manual_edit_actions: 0,
+    manual_edit_cells: 0,
+    manual_edit_rows: [],
+    last_manual_edit_description: '',
+  };
+  _renderHistoryStatus();
   const banner = document.getElementById('cells-edited-banner');
   if (banner) banner.hidden = true;
-  _manualEditsCount = 0;
 }
 
 /** Activer le double-clic sur les cellules du tableau d'aperçu. */
@@ -4394,7 +5101,7 @@ async function revalidate() {
     _applyRuleFailAndExportWarnings(data);
 
     state.validationDone = true;
-    _hideCellsEditedBanner();
+    await updateUndoRedoButtons();
 
     // Update summary counters if present
     const sumErrors = document.getElementById('sum-errors');

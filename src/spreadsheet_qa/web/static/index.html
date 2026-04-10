@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Tablerreur · Mapala — Contrôle qualité et mapping</title>
-  <link rel="stylesheet" href="/static/style.css?v=20260422" />
+  <link rel="stylesheet" href="/static/style.css?v=20260423" />
 </head>
 <body>
   <header class="app-header app-header--tablerreur" id="app-header">
@@ -154,8 +154,14 @@
       <h2>Configuration des colonnes</h2>
 
       <div id="cells-edited-banner" class="cells-edited-banner" hidden>
-        Des cellules ont été modifiées manuellement.
-        <button onclick="revalidate()">Re-valider →</button>
+        <div class="cells-edited-banner-copy">
+          <strong id="cells-edited-summary">Des cellules ont été modifiées manuellement.</strong>
+          <span id="cells-edited-rows" class="cells-edited-banner-meta"></span>
+          <span id="cells-edited-last-action" class="cells-edited-banner-meta"></span>
+        </div>
+        <div class="cells-edited-banner-actions">
+          <button onclick="revalidate()">Re-valider →</button>
+        </div>
       </div>
 
       <div class="card preview-table-wrapper">
@@ -193,6 +199,25 @@
                   <option value="generic_default" data-overlay="nakala_baseline">NAKALA — Référence</option>
                   <option value="generic_default" data-overlay="nakala_extended">NAKALA — Étendu</option>
                 </select>
+              </div>
+              <div id="template-column-suggestions" class="template-column-suggestions" hidden>
+                <div class="template-column-suggestions-copy">
+                  <p class="template-column-suggestions-kicker">Correspondances suggérées</p>
+                  <p id="template-column-suggestions-message" class="template-column-suggestions-message"></p>
+                  <p id="template-column-suggestions-note" class="format-hint template-column-suggestions-note" hidden></p>
+                </div>
+                <div id="template-column-suggestions-actions" class="template-column-suggestions-actions" hidden>
+                  <button
+                    type="button"
+                    id="btn-apply-all-template-suggestions"
+                    class="btn btn-secondary btn-sm"
+                    onclick="applyAllTemplateSuggestions()"
+                    hidden
+                  >
+                    Appliquer toutes les suggestions
+                  </button>
+                </div>
+                <div id="template-column-suggestions-list" class="template-column-suggestions-list" hidden></div>
               </div>
               <div class="template-actions">
                 <button class="btn btn-secondary" id="btn-import-template" onclick="triggerImportTemplate()">
@@ -321,6 +346,7 @@
                 <option value="letters_only">Lettres uniquement</option>
                 <option value="integer">Nombre entier</option>
                 <option value="decimal">Nombre décimal</option>
+                <option value="integer_or_decimal">Nombre entier ou décimal</option>
                 <option value="positive_int">Nombre entier positif</option>
               </optgroup>
               <optgroup label="Identifiants et liens">
@@ -328,6 +354,8 @@
                 <option value="orcid">ORCID</option>
                 <option value="ark">ARK</option>
                 <option value="issn">ISSN</option>
+                <option value="handle">Handle</option>
+                <option value="isbn">ISBN (10 ou 13)</option>
                 <option value="isbn13">ISBN-13</option>
                 <option value="isbn10">ISBN-10</option>
                 <option value="email_preset">Adresse e-mail</option>
@@ -337,6 +365,8 @@
                 <option value="w3cdtf">Date W3C-DTF (YYYY, YYYY-MM ou YYYY-MM-DD)</option>
                 <option value="iso_date">Date ISO stricte (YYYY-MM-DD)</option>
                 <option value="date_fr">Date française (JJ/MM/AAAA)</option>
+                <option value="month_year">Mois / année (MM/AAAA)</option>
+                <option value="date_month_words">Mois (libellé) et année</option>
               </optgroup>
               <optgroup label="Codes et référentiels">
                 <option value="lang_iso639">Langue ISO 639 (fr, en, de…)</option>
@@ -543,6 +573,7 @@
                 <button id="btn-undo-configure" class="btn btn-secondary btn-sm" onclick="undoFix()" disabled title="Annuler la dernière modification des valeurs — pas la configuration colonnes (Ctrl+Z)">↩ Annuler</button>
                 <button id="btn-redo-configure" class="btn btn-secondary btn-sm" onclick="redoFix()" disabled title="Rétablir la dernière modification des valeurs (Ctrl+Shift+Z)">↪ Rétablir</button>
               </div>
+              <div id="history-status-configure" class="history-status" hidden></div>
               <button class="btn btn-secondary btn-sm btn-toggle-special-chars" onclick="toggleSpecialChars()" title="Rendre visibles les espaces et caractères invisibles">¶ Caractères spéciaux</button>
             </div>
           </div>
@@ -1005,7 +1036,11 @@
     <p>Tablerreur — Contrôle qualité tableurs · <a href="https://github.com/anthropics/claude-code" target="_blank">Open source</a></p>
   </footer>
 
-  <script src="/static/app.js?v=20260409a"></script>
+  <script src="/static/curation_helpers.js?v=20260410a"></script>
+  <script src="/static/format_compat_helpers.js?v=20260410a"></script>
+  <script src="/static/nakala_vocab_helpers.js?v=20260410c"></script>
+  <script src="/static/nakala_template_match_helpers.js?v=20260410b"></script>
+  <script src="/static/app.js?v=20260410f"></script>
   <script src="/static/mapala.js?v=20260408b"></script>
 </body>
 </html>
